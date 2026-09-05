@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>톤먼저 — 색 조합 추천</title>
+<meta name="description" content="배색사전 16쌍을 전문 검색으로 뒤지는 색 조합 추천. 임베딩도 벡터DB도 쓰지 않는다.">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar__left">
+    <div class="wordmark">
+      <span class="wordmark__ko">톤먼저</span>
+      <span class="wordmark__en">TONEFIRST</span>
+    </div>
+    <nav class="nav" aria-label="주요 메뉴">
+      <a class="nav__item" href="/" aria-current="page">홈</a>
+      <a class="nav__item" href="/history">대화 내역</a>
+      <a class="nav__item" href="/saved">추천 받은 조합</a>
+    </nav>
+  </div>
+  <div class="runtime" id="runtime" aria-live="polite">
+    <span class="runtime__dot" id="runtime-dot" data-state="unknown" aria-hidden="true"></span>
+    <span class="runtime__name">BM25</span>
+    <span class="runtime__where" id="runtime-where">로컬</span>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <p class="eyebrow">
+      <span>명도</span><span aria-hidden="true">-&gt;</span><span>채도</span><span aria-hidden="true">-&gt;</span><span>색상</span>
+    </p>
+    <h1 class="hero__title">찾는 색을 문장으로 쓰세요</h1>
+    <p class="hero__lead">
+      배색사전 16쌍을 전문 검색으로 뒤집니다. 임베딩도 벡터DB도 쓰지 않습니다.
+      전문 검색이 잡으면 거기서 끝나고, 못 잡을 때만 로컬 LLM 이 질문을 검색어로 바꿉니다.
+    </p>
+
+    <form class="searchbar" id="search-form" role="search">
+      <label class="searchbar__field" for="q">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" style="color: var(--ink-faint)">
+          <circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5 L21 21"></path>
+        </svg>
+        <input class="searchbar__input" id="q" name="q" type="search" autocomplete="off"
+               placeholder="따뜻한데 촌스럽지 않은, 오래된 목조 부엌 같은 색"
+               aria-label="찾는 색을 문장으로 입력">
+      </label>
+      <button class="searchbar__submit" type="submit">추천 받기</button>
+    </form>
+
+    <div class="examples">
+      <span class="examples__label">예시</span>
+      <button class="chip" type="button" data-example="따뜻한데 촌스럽지 않은, 오래된 목조 부엌 같은 색">오래된 목조 부엌</button>
+      <button class="chip" type="button" data-example="병원 앱인데 차갑지 않게">병원 앱, 차갑지 않게</button>
+      <button class="chip" type="button" data-example="느와르 포스터 만들건데 고급스러운 빨강">느와르 포스터</button>
+      <button class="chip" type="button" data-example="대시보드가 탁해 보여요">대시보드가 탁해 보여요</button>
+      <button class="chip" type="button" data-example="만든 화면이 자꾸 답답해 보이는데 왜 그럴까요">답답해 보이는데 왜 그럴까요</button>
+    </div>
+  </section>
+
+  <section class="thread" id="thread" hidden>
+    <div class="thread__body">
+      <span class="thread__badge">이어 쓰는 중</span>
+      <span class="thread__title" id="thread-title"></span>
+      <span class="thread__meta" id="thread-meta"></span>
+    </div>
+    <div class="thread__actions">
+      <a class="action" id="thread-open" href="/history">내역에서 보기</a>
+      <button class="action" id="thread-new" type="button">새 대화로</button>
+    </div>
+  </section>
+
+  <section class="status" id="status" hidden aria-live="polite"></section>
+
+  <section aria-labelledby="results-title">
+    <div class="results__head" id="results-head" hidden>
+      <h2 class="results__title" id="results-title">추천 조합</h2>
+      <span class="results__note" id="results-note">색상각과 톤 좌표를 따로 찍어 정렬했습니다</span>
+    </div>
+    <div class="results__featured" id="results-featured"></div>
+    <div class="results__diagnosis" id="results-diagnosis"></div>
+    <div class="results__rest" id="results-rest"></div>
+  </section>
+
+  <section class="ladder" aria-labelledby="ladder-title">
+    <div class="ladder__head">
+      <span class="ladder__title" id="ladder-title">검색 구조 · 지금은 <span id="stage-label">1</span>단계</span>
+      <span class="ladder__note">코퍼스 16쌍. 실측이 요구하기 전까지 올리지 않습니다.</span>
+    </div>
+    <ol class="ladder__steps" id="ladder">
+      <li class="ladder__step" data-step="1">1 전문검색</li>
+      <li class="ladder__step" data-step="2">2 질의재작성</li>
+      <li class="ladder__step" data-step="3">3 하이브리드</li>
+      <li class="ladder__step" data-step="4">4 온디맨드</li>
+      <li class="ladder__step" data-step="5">5 핫·콜드</li>
+      <li class="ladder__step" data-step="6">6 전체 사전임베딩</li>
+    </ol>
+  </section>
+
+  <div class="page-foot"></div>
+</main>
+
+<script src="/app.js" type="module"></script>
+</body>
+</html>

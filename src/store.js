@@ -1,0 +1,242 @@
+// 대화 내역과 저장된 조합. 의존성 0 이므로 JSON 파일 두 개로 둔다.
+//
+// 규칙 넷:
+//   1. **원자적 쓰기.** 임시 파일에 쓰고 rename 한다. 중간에 죽어도 반쪽 파일이 남지 않는다.
+//   2. **직렬화.** 쓰기를 프로미스 체인으로 이어 붙여 동시 쓰기가 서로를 덮지 않게 한다.
+//   3. **상한.** 무한히 자라지 않는다. 오래된 것부터 버린다.
+//   4. **클라이언트를 믿지 않는다.** 저장 요청에서 받는 것은 id·메모·면적 비율뿐이고,
+//      색·헥스·유형은 서버가 코퍼스에서 찾아 채운다. 화면이 보낸 색을 그대로 저장하면
+//      저장소가 코퍼스와 어긋나기 시작한다.
+//
+//      면적 비율만 예외인 이유: 색은 코퍼스가 아는 사실이지만 **비율은 사용자의 판단**이다.
+//      같은 두 헥스도 비율이 바뀌면 다른 색이 되므로, 그 결정을 사용자에게서 받는 것이 이 도구의 요점이다.
+//      대신 형태는 강제한다 — 정수, 10~90. 0 이나 100 은 한 색을 없애는 것이라 2색 조합이 아니게 된다.
+
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+
+// 저장 위치. 검사가 사용자 데이터를 오염시키지 않도록 환경변수로 갈아끼울 수 있게 둔다.
+const DATA_DIR = process.env.TONEFIRST_DATA_DIR || fileURLToPath(new URL("../var/", import.meta.url));
+
+// 한쪽이 가질 수 있는 최소·최대 지분. 이 밖으로 나가면 사실상 단색이 된다.
+export const RATIO_MIN = 10;
+export const RATIO_MAX = 90;
+
+export function normalizeRatio(value) {
+  if (!Number.isInteger(value)) return null;
+  if (value < RATIO_MIN || value > RATIO_MAX) return null;
+  return [value, 100 - value];
+}
+
+export const LIMITS = {
+  ratioMin: RATIO_MIN,
+  ratioMax: RATIO_MAX,
+  conversations: 50,
+  turnsPerConversation: 100,
+  saved: 200,
+  queryChars: 500,
+  noteChars: 200,
+};
+
+let chain = Promise.resolve();
+
+function readJson(file, fallback) {
+  const target = join(DATA_DIR, file);
+  if (!existsSync(target)) return fallback; // 아직 아무것도 저장하지 않은 상태. 정상이다.
+
+  let raw;
+  try {
+    raw = readFileSync(target, "utf8");
+  } catch {
+    return fallback;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+    throw new Error("배열이 아니다");
+  } catch (err) {
+    // 파일이 깨졌는데 그대로 빈 배열로 시작하면, 다음 쓰기가 원본을 덮어써 기록이 통째로 사라진다.
+    // 옆으로 치워 두고 이유를 남긴다 — 조용한 데이터 소실이 이 저장소에서 가장 나쁜 실패다.
+    const aside = `${target}.corrupt-${Date.now()}`;
+    try {
+      renameSync(target, aside);
+      process.stderr.write(Buffer.from(`저장 파일이 깨져 있어 옆으로 옮겼다: ${aside} (${err.message})
+`, "utf8"));
+    } catch {
+      process.stderr.write(Buffer.from(`저장 파일이 깨졌는데 옮기지도 못했다: ${target}
+`, "utf8"));
+    }
+    return fallback;
+  }
+}
+
+function writeJson(file, value) {
+  mkdirSync(DATA_DIR, { recursive: true });
+  const target = join(DATA_DIR, file);
+  const temp = `${target}.tmp`;
+  writeFileSync(temp, JSON.stringify(value, null, 2), "utf8");
+  renameSync(temp, target);
+}
+
+/** 쓰기를 한 줄로 세운다. 동시 요청이 서로의 결과를 덮어쓰지 않게. */
+function serialize(work) {
+  const next = chain.then(work, work);
+  chain = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
+
+const now = () => new Date().toISOString();
+const newId = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+// 코드포인트 단위로 자른다. slice 는 UTF-16 단위라 이모지 같은 서로게이트 쌍을 반으로 쪼갠다.
+const clip = (value, max) => [...String(value ?? "").trim()].slice(0, max).join("");
+
+const ID_SHAPE = /^[a-z]+-[a-z0-9]+-[a-z0-9]+$/;
+const VALID_ROUTES = new Set(["palette", "diagnosis", "none"]);
+
+/* ── 대화 내역 ───────────────────────────────────────────── */
+
+export function listConversations() {
+  return readJson("conversations.json", []);
+}
+
+/**
+ * 턴 하나를 기록한다. conversationId 가 없거나 모르는 값이면 새 대화를 연다.
+ * 화면이 보낸 값은 전부 형태를 강제해서 넣는다 — 문자열 길이, 열거값, 숫자 범위.
+ */
+export function recordTurn(input) {
+  const query = clip(input.query, LIMITS.queryChars);
+  if (!query) return Promise.reject(new Error("query 가 비어 있다"));
+
+  const turn = {
+    at: now(),
+    query,
+    stage: input.stage === 2 ? 2 : 1,
+    route: VALID_ROUTES.has(input.route) ? input.route : "none",
+    confident: input.confident === true,
+    topKind: input.topKind === "diagnosis" ? "diagnosis" : input.topKind === "palette" ? "palette" : null,
+    topId: clip(input.topId, 40) || null,
+    topLabel: clip(input.topLabel, 80) || null,
+  };
+
+  return serialize(() => {
+    const all = listConversations();
+    const wanted = typeof input.conversationId === "string" ? input.conversationId : null;
+    let conversation = wanted ? all.find((c) => c.id === wanted) : null;
+
+    if (!conversation) {
+      conversation = { id: newId("conv"), startedAt: turn.at, updatedAt: turn.at, turns: [] };
+      all.unshift(conversation);
+    }
+
+    conversation.turns.push(turn);
+    if (conversation.turns.length > LIMITS.turnsPerConversation) {
+      conversation.turns = conversation.turns.slice(-LIMITS.turnsPerConversation);
+    }
+    conversation.updatedAt = turn.at;
+
+    // 최근 대화가 앞에 오게 정렬하고 상한을 넘으면 오래된 것부터 버린다.
+    all.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+    writeJson("conversations.json", all.slice(0, LIMITS.conversations));
+    return { conversationId: conversation.id, turn };
+  });
+}
+
+/* ── 저장된 조합 ─────────────────────────────────────────── */
+
+export function listSaved() {
+  return readJson("saved.json", []);
+}
+
+/**
+ * @param lookup (paletteId) => 코퍼스의 팔레트 또는 undefined
+ * 색과 비율은 lookup 이 준 것만 쓴다. 요청 본문의 색은 쳐다보지도 않는다.
+ */
+export function savePalette(input, lookup, ratioFor) {
+  const palette = lookup(clip(input.paletteId, 40));
+  if (!palette) return Promise.reject(new Error("모르는 조합이다"));
+
+  // 비율만 사용자가 정할 수 있다.
+  const adjusted = input.ratio === undefined ? null : normalizeRatio(input.ratio);
+  if (input.ratio !== undefined && !adjusted) {
+    return Promise.reject(new Error(`면적 비율은 ${RATIO_MIN}~${RATIO_MAX} 의 정수여야 한다`));
+  }
+
+  // 비율을 안 보냈는데 같은 조합을 이미 저장해 뒀다면, **그때 맞춰 둔 비율을 이어받는다.**
+  // 규칙의 기본값으로 되돌리면 사용자가 저장 화면에서 명시적으로 한 조정이 경고 없이 사라진다.
+  const previous = adjusted ? null : listSaved().find((s) => s.paletteId === palette.id);
+  const inherited = previous?.ratioAdjusted ? previous.colors.map((c) => c.ratio) : null;
+
+  const defaults = ratioFor(palette);
+  const ratio = adjusted ?? inherited ?? defaults;
+  const entry = {
+    id: newId("save"),
+    savedAt: now(),
+    paletteId: palette.id,
+    name: palette.name,
+    type: palette.type,
+    hueRelation: palette.hueRelation,
+    toneRelation: palette.toneRelation,
+    summary: palette.summary,
+    colors: palette.colors.map((c, i) => ({ name: c.name, hex: c.hex, ratio: ratio[i] })),
+    // 기본값 그대로인지 사용자가 손댄 것인지 구분해 둔다. 화면이 "기본값으로" 를 제안할 수 있다.
+    ratioAdjusted: JSON.stringify(ratio) !== JSON.stringify(defaults),
+    defaultRatio: defaults,
+    note: clip(input.note, LIMITS.noteChars),
+    fromQuery: clip(input.fromQuery, LIMITS.queryChars) || null,
+  };
+
+  return serialize(() => {
+    const all = listSaved();
+    // 같은 조합을 두 번 저장하지 않는다. 다시 저장하면 최신 것으로 갱신한다.
+    const rest = all.filter((s) => s.paletteId !== entry.paletteId);
+    rest.unshift(entry);
+    writeJson("saved.json", rest.slice(0, LIMITS.saved));
+    return entry;
+  });
+}
+
+/**
+ * 저장된 조합의 면적 비율만 바꾼다. 색은 건드리지 않는다.
+ * @param defaultsFor (entry) => [a, b] — 옛 항목에 defaultRatio 가 없을 때 코퍼스에서 채우기 위한 것.
+ */
+export function updateSavedRatio(id, value, defaultsFor = null) {
+  const wanted = clip(id, 60);
+  if (!ID_SHAPE.test(wanted)) return Promise.reject(new Error("잘못된 id"));
+  const ratio = normalizeRatio(value);
+  if (!ratio) return Promise.reject(new Error(`면적 비율은 ${RATIO_MIN}~${RATIO_MAX} 의 정수여야 한다`));
+
+  return serialize(() => {
+    const all = listSaved();
+    const entry = all.find((s) => s.id === wanted);
+    if (!entry) throw new Error("없는 항목이다");
+    // 스테이지5 이전에 저장된 항목에는 defaultRatio 가 없다. 없으면 코퍼스에서 채운다 —
+    // 안 채우면 기본값으로 되돌려도 ratioAdjusted 가 영원히 true 로 남는다.
+    if (!Array.isArray(entry.defaultRatio) && defaultsFor) {
+      const filled = defaultsFor(entry);
+      if (Array.isArray(filled)) entry.defaultRatio = filled;
+    }
+    entry.colors = entry.colors.map((c, i) => ({ ...c, ratio: ratio[i] }));
+    entry.ratioAdjusted = Array.isArray(entry.defaultRatio)
+      ? JSON.stringify(ratio) !== JSON.stringify(entry.defaultRatio)
+      : true;
+    writeJson("saved.json", all);
+    return entry;
+  });
+}
+
+export function deleteSaved(id) {
+  const wanted = clip(id, 60);
+  if (!ID_SHAPE.test(wanted)) return Promise.reject(new Error("잘못된 id"));
+  return serialize(() => {
+    const all = listSaved();
+    const rest = all.filter((s) => s.id !== wanted);
+    if (rest.length === all.length) throw new Error("없는 항목이다");
+    writeJson("saved.json", rest);
+    return { deleted: wanted };
+  });
+}

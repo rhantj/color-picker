@@ -1,0 +1,1095 @@
+/* 토큰은 톤 축으로 먼저 짠다 — 명도 스케일을 확보하고, 채도 폭을 정하고, 마지막에 색상을 끼운다.
+   이 사이트는 색을 보여주는 도구라 UI 가 색을 오염시키면 안 된다. 그래서 화면 전체를
+   고명도·저채도 따뜻한 뉴트럴로 눌러서, 채도가 가장 높은 면이 항상 "추천된 스와치"가 되게 한다. */
+
+:root {
+  /* 1. 명도 스케일 (따뜻한 뉴트럴, 채도는 거의 0) */
+  --bg: #fbf7f2;
+  --surface: #ffffff;
+  --surface-sunken: #f5efe7;
+  --line: #e7ded2;
+  --line-strong: #d5c9b9;
+  --ink: #241f1a;
+  --ink-muted: #5c534a;
+  --ink-faint: #6e6459; /* 4.5:1 하한을 지키는 가장 옅은 텍스트. 이보다 옅게 쓰지 않는다 */
+
+  /* 2. 채도 — 고채도는 강조 1색뿐. 나머지를 눌러야 이 하나가 산다 */
+  --accent: #006eb8;
+  --accent-ink: #00548d;
+  --accent-soft: #e4eff7;
+
+  /* 3. 타이포 — 전부 이 기계에 설치된 폰트다. 외부 요청이 없다.
+     로컬 우선 도구인데 폰트만 CDN 에 의존하는 것이 어색했고, 오프라인에서 폴백으로 떨어졌다. */
+  /* 이름을 정확히 써야 한다. 설치 목록에는 "HYSinMyeongJo-Medium" 으로 보이지만 CSS 에서는
+     **"HYSinMyeongJo"** 로만 잡힌다 — "-Medium" 을 붙이거나 "HY신명조" 로 쓰면 조용히 폴백한다.
+     캔버스 픽셀 비교로 확인했다: HYSinMyeongJo 는 Batang 과 2,382px, 폴백과 4,554px 다르다. */
+  --font-display: "HYSinMyeongJo", "Batang", Georgia, serif;
+  --font-ui: "Noto Sans KR", "Malgun Gothic", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+  --gutter: 64px;
+  --radius: 4px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--accent-ink);
+  text-decoration: underline;
+}
+
+:where(a, button, input):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── 상단 바 ─────────────────────────────────────────────── */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 var(--gutter);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar__left {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+
+.wordmark {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.wordmark__ko {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.wordmark__en {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+  letter-spacing: 0.08em;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  font-size: 14px;
+}
+.nav__item[aria-current="page"] {
+  font-weight: 600;
+  color: var(--ink);
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 21px;
+  margin-bottom: -22px;
+}
+.nav__item[aria-disabled="true"] {
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+.runtime {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.runtime__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+.runtime__dot[data-state="ready"] {
+  background: var(--accent);
+}
+.runtime__dot[data-state="starting"] {
+  background: var(--ink-faint);
+  animation: runtime-pulse 1.2s ease-in-out infinite;
+}
+@keyframes runtime-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .runtime__dot {
+    animation: none;
+  }
+}
+.runtime__name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.runtime__where {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* ── 히어로 ──────────────────────────────────────────────── */
+
+.hero {
+  padding: 76px var(--gutter) 0;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-muted);
+  letter-spacing: 0.06em;
+}
+.eyebrow span[aria-hidden] {
+  color: var(--ink-faint);
+}
+
+.hero__title {
+  font-family: var(--font-display);
+  font-size: 54px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  margin: 18px 0 0;
+  max-width: 760px;
+  text-wrap: pretty;
+}
+
+.hero__lead {
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--ink-muted);
+  margin: 16px 0 0;
+  max-width: 620px;
+  font-weight: 300;
+}
+
+.searchbar {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  margin-top: 36px;
+  max-width: 1000px;
+}
+.searchbar__field {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 68px;
+  padding: 0 22px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+.searchbar__field:focus-within {
+  border-color: var(--accent);
+}
+.searchbar__input {
+  flex-grow: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 17px;
+  color: var(--ink);
+  min-width: 0;
+}
+.searchbar__input::placeholder {
+  color: var(--ink-faint);
+}
+.searchbar__submit {
+  width: 132px;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.searchbar__submit:hover {
+  background: var(--accent-ink);
+}
+.searchbar__submit[disabled] {
+  background: var(--line-strong);
+  /* 배경만 바꾸면 흰 글자가 1.63:1 로 떨어진다. 로딩 중에도 글자는 읽혀야 한다. */
+  color: var(--ink-muted);
+  cursor: progress;
+}
+
+.examples {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.examples__label {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-right: 4px;
+}
+.chip {
+  min-height: 32px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chip:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+/* ── 검색 상태 ───────────────────────────────────────────── */
+
+.status {
+  margin: 44px var(--gutter) 0;
+  padding: 20px 24px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.status[hidden] {
+  display: none;
+}
+.status__badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #fff;
+  background: var(--accent);
+  padding: 3px 7px;
+  border-radius: 3px;
+}
+.status__badge--warn {
+  background: var(--ink);
+}
+.status__text {
+  font-size: 13px;
+  color: var(--ink-muted);
+  flex-grow: 1;
+  line-height: 1.7;
+}
+.status__timing {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+/* ── 결과 ────────────────────────────────────────────────── */
+
+.results__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 52px var(--gutter) 20px;
+  gap: 16px;
+}
+.results__head[hidden] {
+  display: none;
+}
+.results__title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+}
+.results__note {
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.results__featured {
+  margin: 0 var(--gutter);
+}
+.results__rest {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin: 24px var(--gutter) 0;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.card--featured {
+  display: flex;
+  align-items: stretch;
+}
+
+/* 스와치는 언제나 면적 비율을 반영한다. 같은 두 헥스도 비율이 바뀌면 다른 색이 되므로,
+   비율을 임의로 5:5 에 맞춰 보여주지 않는다. */
+.swatch {
+  display: flex;
+}
+.card--featured .swatch {
+  width: 460px;
+  flex-shrink: 0;
+}
+.card:not(.card--featured) .swatch {
+  height: 128px;
+}
+.swatch__part {
+  display: flex;
+  align-items: flex-end;
+  padding: 14px;
+}
+.swatch__label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.card__body {
+  flex-grow: 1;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.card--featured .card__body {
+  padding: 28px 32px;
+  gap: 14px;
+}
+
+.card__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.card__rank {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.card__name {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+.card--featured .card__name {
+  font-size: 22px;
+}
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 3px;
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+}
+.badge--rank {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.card__coords {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.card__coords b {
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.card__text {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--ink-muted);
+  margin: 0;
+  max-width: 620px;
+  font-weight: 300;
+}
+
+.card__terms {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-top: auto;
+}
+.card__terms b {
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+/* ── 검색 단계 사다리 ────────────────────────────────────── */
+
+.ladder {
+  margin: 56px var(--gutter) 0;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+.ladder__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  gap: 16px;
+}
+.ladder__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.ladder__note {
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+.ladder__steps {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.ladder__step {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.ladder__step::before {
+  content: "";
+  height: 5px;
+  border-radius: 999px;
+  background: var(--line);
+}
+.ladder__step[data-active="true"] {
+  color: var(--ink);
+}
+.ladder__step[data-active="true"]::before {
+  background: var(--accent);
+}
+
+.page-foot {
+  padding: 56px var(--gutter) 72px;
+}
+
+/* 터치 기기에서는 히트 영역을 44px 로 올린다. 마우스에서는 초안대로 32px 를 유지한다 —
+   화면 폭이 아니라 포인터 종류로 가르는 게 맞다(태블릿 가로, 터치 노트북). */
+@media (pointer: coarse) {
+  .chip {
+    min-height: 44px;
+    padding-inline: 16px;
+  }
+  .nav__item {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 1100px) {
+  :root {
+    --gutter: 32px;
+  }
+  .card--featured {
+    display: block;
+  }
+  .card--featured .swatch {
+    width: auto;
+    height: 148px;
+  }
+  .results__rest {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .hero__title {
+    font-size: 36px;
+  }
+  .searchbar {
+    display: block;
+  }
+  .searchbar__submit {
+    width: 100%;
+    height: 48px;
+    margin-top: 12px;
+  }
+  .ladder__steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ── 진단 답변 ───────────────────────────────────────────────
+   팔레트가 아니라 처방이다. 스와치가 없으므로 위계를 타이포로 만든다 —
+   처방 문장을 본문보다 크게 세워, 카드 그리드와 섞여도 다른 종류의 답이라는 게 먼저 읽히게 한다. */
+
+.results__diagnosis {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0 var(--gutter);
+}
+
+.dx {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dx__head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.dx__symptom {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.dx__axis {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.dx__prescription {
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  margin: 0;
+  max-width: 34ch;
+  text-wrap: pretty;
+}
+
+.dx__detail {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--ink-muted);
+  margin: 0;
+  max-width: 60ch;
+  font-weight: 300;
+}
+
+/* ── 재작성 칩 ───────────────────────────────────────────── */
+
+.rewrite {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+  padding-top: 14px;
+  margin-top: 2px;
+  border-top: 1px solid var(--line-strong);
+}
+.rewrite__label {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.rewrite__term {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 4px 9px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.rewrite__meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+  margin-left: auto;
+}
+
+@media (max-width: 620px) {
+  .dx {
+    padding: 22px;
+  }
+  .dx__prescription {
+    font-size: 21px;
+  }
+}
+
+/* ── 목록 화면 (대화 내역 · 추천 받은 조합) ────────────────── */
+
+.page-head {
+  padding: 56px var(--gutter) 0;
+}
+.page-head__title {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.page-head__lead {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--ink-muted);
+  margin: 12px 0 0;
+  max-width: 62ch;
+  font-weight: 300;
+}
+.page-head__lead strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.page-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 32px var(--gutter) 0;
+}
+.page-body--grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+.empty {
+  font-size: 14px;
+  color: var(--ink-muted);
+  margin: 0;
+  grid-column: 1 / -1;
+}
+
+/* 대화 한 덩어리 */
+.conv {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.conv__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-sunken);
+  flex-wrap: wrap;
+}
+.conv__title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.conv__meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.conv__turns {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.turn {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 16px;
+  padding: 14px 24px;
+  border-top: 1px solid var(--line);
+}
+.turn:first-child {
+  border-top: 0;
+}
+
+/* 단계는 이 화면의 핵심 정보다 — 1단계는 조용히, 2단계(LLM 개입)는 눈에 띄게. */
+.turn__stage {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  justify-self: start;
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+}
+.turn__stage--2 {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.turn__query {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.turn__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.turn__route {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.turn__route--none {
+  color: var(--ink-faint);
+}
+.turn__top {
+  color: var(--ink);
+}
+.turn__weak {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: var(--ink);
+  color: var(--bg);
+}
+.turn__at {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+/* 저장 카드의 부가 정보 */
+.card__note {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink);
+  margin: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--line-strong);
+}
+.card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.card__from {
+  color: var(--ink-muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+/* 동작 버튼 */
+.card__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.action {
+  min-height: 36px;
+  padding: 8px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.action:hover {
+  border-color: var(--ink);
+}
+.action--primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+  font-weight: 600;
+}
+.action--primary:hover {
+  background: #000;
+}
+.action[disabled] {
+  cursor: default;
+  opacity: 0.7;
+}
+.action__feedback {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+@media (pointer: coarse) {
+  .action {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .page-body--grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .page-body--grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .turn {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .turn__meta {
+    justify-content: flex-start;
+  }
+}
+
+/* ── 면적 비율 조정 ───────────────────────────────────────────
+   이 사이트는 "같은 두 헥스도 비율이 바뀌면 다른 색" 이라고 말한다.
+   그렇다면 만져볼 수 있어야 한다 — 이 컨트롤이 그 주장을 검증 가능하게 만드는 자리다. */
+
+.ratio {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.ratio__label {
+  font-size: 12px;
+  color: var(--ink-muted);
+  flex-shrink: 0;
+}
+.ratio__slider {
+  flex-grow: 1;
+  min-width: 140px;
+  accent-color: var(--accent);
+  height: 24px;
+  cursor: pointer;
+}
+.ratio__readout {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  min-width: 56px;
+  text-align: right;
+}
+.ratio__reset {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ratio__reset:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.ratio__reset[hidden] {
+  display: none;
+}
+.ratio__status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+  min-height: 15px;
+}
+
+@media (pointer: coarse) {
+  .ratio__slider {
+    height: 44px;
+  }
+  .ratio__reset {
+    min-height: 44px;
+  }
+}
+
+/* ── 내보내기 패널 ───────────────────────────────────────────
+   결과를 먼저 보여주고 그다음에 건네준다. 버튼만 있고 내용이 안 보이면
+   무엇을 가져가는지 모른 채 붙여넣게 된다. */
+
+.page-head__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+.export {
+  margin: 28px var(--gutter) 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.export[hidden] {
+  display: none;
+}
+.export__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-sunken);
+}
+.export__title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+}
+.export__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.export__code {
+  margin: 0;
+  padding: 20px;
+  max-height: 420px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--ink);
+  white-space: pre;
+  tab-size: 2;
+}
+.export__code:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.export__note {
+  margin: 0;
+  padding: 0 20px 16px;
+  font-size: 12px;
+  color: var(--ink-muted);
+  min-height: 16px;
+}
+
+/* ── 이어 쓰는 중 배너 ───────────────────────────────────────
+   어느 대화에 쓰고 있는지 화면이 말한다. 이게 없으면 사용자는 자기 질문이
+   어디에 쌓이는지 모른 채 계속 묻게 된다. */
+
+.thread {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 32px var(--gutter) 0;
+  padding: 14px 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.thread[hidden] {
+  display: none;
+}
+.thread__body {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.thread__badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.thread__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.thread__meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+.thread__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* a 로 만든 버튼도 button 과 같은 모양·높이를 갖게 한다 */
+a.action {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+a.action:hover {
+  text-decoration: none;
+  color: var(--ink);
+}
+a.action--primary:hover {
+  color: var(--bg);
+}
+
+.turn__again {
+  font-size: 11px;
+  color: var(--accent);
+}
+.turn__again:hover {
+  color: var(--accent-ink);
+}
+
+@media (max-width: 620px) {
+  .thread {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

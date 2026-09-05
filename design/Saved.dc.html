@@ -1,0 +1,190 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #006EB8; text-decoration: none; }
+    a:hover { color: #00548D; text-decoration: underline; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; background: #FBF7F2; color: #241F1A; padding-bottom: 72px">
+
+  <div style="display: flex; align-items: center; justify-content: space-between; height: 64px; padding: 0 64px; border-bottom: 1px solid #E7DED2">
+    <div style="display: flex; align-items: center; gap: 40px">
+      <div style="display: flex; align-items: baseline; gap: 8px">
+        <span style="font-family: 'Gowun Batang', serif; font-size: 21px; font-weight: 700; letter-spacing: -0.01em">톤먼저</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C534A; letter-spacing: 0.08em">TONEFIRST</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 26px; font-size: 14px">
+        <span style="color: #5C534A">홈</span>
+        <span style="color: #5C534A">대화 내역</span>
+        <span style="font-weight: 600; color: #241F1A; border-bottom: 2px solid #006EB8; padding-bottom: 21px; margin-bottom: -22px">추천 받은 조합</span>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 12px; border: 1px solid #E7DED2; border-radius: 999px; background: #FFFFFF">
+      <span style="width: 7px; height: 7px; border-radius: 999px; background: #006EB8; display: block"></span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #241F1A">exaone3.5:7.8b</span>
+      <span style="font-size: 12px; color: #5C534A">로컬 실행</span>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; padding: 48px 64px 0 64px">
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <h1 style="font-family: 'Gowun Batang', serif; font-size: 34px; font-weight: 700; margin: 0; letter-spacing: -0.02em">추천 받은 조합</h1>
+      <p style="font-size: 14px; line-height: 1.7; color: #5C534A; margin: 0; max-width: 620px; font-weight: 300">스와치는 저장할 때의 면적 비율을 그대로 유지합니다. 같은 두 헥스도 비율이 바뀌면 다른 색이 되므로, 비율을 임의로 5:5에 맞춰 보여주지 않습니다.</p>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px">
+      <span style="font-size: 13px; padding: 9px 15px; border-radius: 3px; border: 1px solid #E7DED2; background: #FFFFFF">CSS 변수로 내보내기</span>
+      <span style="font-size: 13px; padding: 9px 15px; border-radius: 3px; border: 1px solid #E7DED2; background: #FFFFFF">JSON</span>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 10px; padding: 28px 64px 0 64px; flex-wrap: wrap">
+    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6E6459; letter-spacing: 0.06em; margin-right: 4px">유형</span>
+    <span style="font-size: 13px; padding: 6px 13px; border-radius: 999px; background: #241F1A; color: #FBF7F2">전체 12</span>
+    <span style="font-size: 13px; padding: 6px 13px; border-radius: 999px; border: 1px solid #E7DED2; color: #5C534A; background: #FFFFFF">A 보색·톤통일 3</span>
+    <span style="font-size: 13px; padding: 6px 13px; border-radius: 999px; border: 1px solid #E7DED2; color: #5C534A; background: #FFFFFF">B 보색·강렬 1</span>
+    <span style="font-size: 13px; padding: 6px 13px; border-radius: 999px; border: 1px solid #E7DED2; color: #5C534A; background: #FFFFFF">C 유사색 2</span>
+    <span style="font-size: 13px; padding: 6px 13px; border-radius: 999px; border: 1px solid #E7DED2; color: #5C534A; background: #FFFFFF">D 톤 비대칭 6</span>
+    <span style="width: 1px; height: 20px; background: #E7DED2; margin: 0 8px; display: block"></span>
+    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6E6459; letter-spacing: 0.06em; margin-right: 4px">정렬</span>
+    <span style="font-size: 13px; padding: 6px 13px; border-radius: 999px; border: 1px solid #D5C9B9; color: #241F1A; background: #FFFFFF">최근 저장순</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; padding: 28px 64px 0 64px">
+
+    <div style="background: #FFFFFF; border: 1px solid #E7DED2; border-radius: 4px; overflow: hidden">
+      <div style="display: flex; height: 148px; position: relative">
+        <div style="width: 70%; background: #FDD4BD; display: flex; align-items: flex-end; padding: 14px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #7A4728">#FDD4BD · 70%</span>
+        </div>
+        <div style="width: 30%; background: #006EB8; display: flex; align-items: flex-end; padding: 14px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #FFFFFF">#006EB8 · 30%</span>
+        </div>
+      </div>
+      <div style="padding: 20px; display: flex; flex-direction: column; gap: 11px">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
+          <span style="font-size: 16px; font-weight: 600">살구 × 파랑</span>
+          <span style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 3px; background: #E4EFF7; color: #00548D">D형</span>
+        </div>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C534A">#FDD4BD / #006EB8</span>
+        <p style="font-size: 13px; line-height: 1.7; color: #5C534A; margin: 0; font-weight: 300">예약 확정 버튼에만 파랑. 나머지는 채도 한 단계 아래로.</p>
+        <a href="#" style="font-size: 12px">병원 앱인데 차갑지 않게</a>
+      </div>
+    </div>
+
+    <div style="background: #FFFFFF; border: 1px solid #E7DED2; border-radius: 4px; overflow: hidden">
+      <div style="display: flex; height: 148px">
+        <div style="width: 30%; background: #CC1236; display: flex; align-items: flex-end; padding: 14px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #FFFFFF">#CC1236 · 30%</span>
+        </div>
+        <div style="width: 70%; background: #0F1A14; display: flex; align-items: flex-end; padding: 14px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #C7D2CB">#0F1A14 · 70%</span>
+        </div>
+      </div>
+      <div style="padding: 20px; display: flex; flex-direction: column; gap: 11px">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
+          <span style="font-size: 16px; font-weight: 600">빨강 × 흑록</span>
+          <span style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 3px; background: #E4EFF7; color: #00548D">D형</span>
+        </div>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C534A">#CC1236 / #0F1A14</span>
+        <p style="font-size: 13px; line-height: 1.7; color: #5C534A; margin: 0; font-weight: 300">검정에 녹색을 태워서 빨강이 더 붉게 읽힌다. 타이틀에만.</p>
+        <a href="#" style="font-size: 12px">느와르 포스터, 고급스러운 빨강</a>
+      </div>
+    </div>
+
+    <div style="background: #FFFFFF; border: 1px solid #E7DED2; border-radius: 4px; overflow: hidden">
+      <div style="display: flex; height: 148px">
+        <div style="width: 50%; background: #F5ECC2; display: flex; align-items: flex-end; padding: 14px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #6B6132">#F5ECC2 · 50%</span>
+        </div>
+        <div style="width: 50%; background: #A7D4E4; display: flex; align-items: flex-end; padding: 14px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2C5361">#A7D4E4 · 50%</span>
+        </div>
+      </div>
+      <div style="padding: 20px; display: flex; flex-direction: column; gap: 11px">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
+          <span style="font-size: 16px; font-weight: 600">아이보리 × 연하늘</span>
+          <span style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 3px; background: #F5EFE7; color: #5C534A">A형</span>
+        </div>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C534A">#F5ECC2 / #A7D4E4</span>
+        <p style="font-size: 13px; line-height: 1.7; color: #5C534A; margin: 0; font-weight: 300">보색인데 둘 다 고명도·저채도라 부딪히지 않음. 여름 캠페인용.</p>
+        <a href="#" style="font-size: 12px">여름 뷰티 브랜드, 유치하지 않게</a>
+      </div>
+    </div>
+
+    <div style="background: #FFFFFF; border: 1px solid #E7DED2; border-radius: 4px; overflow: hidden">
+      <div style="display: flex; height: 148px">
+        <div style="width: 30%; background: #F3A257; display: flex; align-items: flex-end; padding: 14px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #4A2E10">#F3A257 · 30%</span>
+        </div>
+        <div style="width: 70%; background: #71502F; display: flex; align-items: flex-end; padding: 14px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #F0E2D3">#71502F · 70%</span>
+        </div>
+      </div>
+      <div style="padding: 20px; display: flex; flex-direction: column; gap: 11px">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
+          <span style="font-size: 16px; font-weight: 600">앰버 × 커피브라운</span>
+          <span style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 3px; background: #E4EFF7; color: #00548D">D형</span>
+        </div>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C534A">#F3A257 / #71502F</span>
+        <p style="font-size: 13px; line-height: 1.7; color: #5C534A; margin: 0; font-weight: 300">같은 색상 안에서 명도·채도만으로 위계를 만든 톤 배색.</p>
+        <a href="#" style="font-size: 12px">오래된 목조 부엌 같은 색</a>
+      </div>
+    </div>
+
+    <div style="background: #FFFFFF; border: 1px solid #E7DED2; border-radius: 4px; overflow: hidden">
+      <div style="display: flex; height: 148px">
+        <div style="width: 30%; background: #F48067; display: flex; align-items: flex-end; padding: 14px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #55190C">#F48067 · 30%</span>
+        </div>
+        <div style="width: 70%; background: #051230; display: flex; align-items: flex-end; padding: 14px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #C3CBDC">#051230 · 70%</span>
+        </div>
+      </div>
+      <div style="padding: 20px; display: flex; flex-direction: column; gap: 11px">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
+          <span style="font-size: 16px; font-weight: 600">코럴 × 미드나잇블루</span>
+          <span style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 3px; background: #E4EFF7; color: #00548D">D형</span>
+        </div>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C534A">#F48067 / #051230</span>
+        <p style="font-size: 13px; line-height: 1.7; color: #5C534A; margin: 0; font-weight: 300">다크 모드 후보. 코럴 면적을 30% 넘기면 금세 유치해진다.</p>
+        <a href="#" style="font-size: 12px">병원 앱인데 차갑지 않게</a>
+      </div>
+    </div>
+
+    <div style="background: #FFFFFF; border: 1px solid #E7DED2; border-radius: 4px; overflow: hidden">
+      <div style="display: flex; height: 148px">
+        <div style="width: 50%; background: #719470; display: flex; align-items: flex-end; padding: 14px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #131C11">#719470 · 50%</span>
+        </div>
+        <div style="width: 50%; background: #E0B3B6; display: flex; align-items: flex-end; padding: 14px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5E3A3D">50% · 의도한 5:5</span>
+        </div>
+      </div>
+      <div style="padding: 20px; display: flex; flex-direction: column; gap: 11px">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
+          <span style="font-size: 16px; font-weight: 600">세이지그린 × 연분홍</span>
+          <span style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 3px; background: #F5EFE7; color: #5C534A">A형</span>
+        </div>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C534A">#719470 / #E0B3B6</span>
+        <p style="font-size: 13px; line-height: 1.7; color: #5C534A; margin: 0; font-weight: 300">대등하게 맞서는 5:5. 서열을 안 만드는 게 이 조합의 의도.</p>
+        <a href="#" style="font-size: 12px">레트로 패키지 톤 찾기</a>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

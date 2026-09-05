@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>대화 내역 — 톤먼저</title>
+<meta name="description" content="이 기계에서 물어본 질문과, 각 질문이 몇 단계에서 끝났는지의 기록.">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar__left">
+    <div class="wordmark">
+      <span class="wordmark__ko">톤먼저</span>
+      <span class="wordmark__en">TONEFIRST</span>
+    </div>
+    <nav class="nav" aria-label="주요 메뉴">
+      <a class="nav__item" href="/">홈</a>
+      <a class="nav__item" href="/history" aria-current="page">대화 내역</a>
+      <a class="nav__item" href="/saved">추천 받은 조합</a>
+    </nav>
+  </div>
+  <div class="runtime" id="runtime" aria-live="polite">
+    <span class="runtime__dot" id="runtime-dot" data-state="unknown" aria-hidden="true"></span>
+    <span class="runtime__name">BM25</span>
+    <span class="runtime__where" id="runtime-where">로컬</span>
+  </div>
+</header>
+
+<main>
+  <section class="page-head">
+    <h1 class="page-head__title">대화 내역</h1>
+    <p class="page-head__lead">
+      물어본 질문과, 각 질문이 <strong>몇 단계에서 끝났는지</strong>의 기록입니다.
+      1단계는 전문 검색만으로 끝난 것이고, 2단계는 로컬 LLM 이 끼어든 것입니다.
+    </p>
+  </section>
+
+  <section class="page-body" id="list" aria-live="polite">
+    <p class="empty">불러오는 중…</p>
+  </section>
+
+  <div class="page-foot"></div>
+</main>
+
+<script src="/history.js" type="module"></script>
+</body>
+</html>

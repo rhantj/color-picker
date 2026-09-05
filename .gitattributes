@@ -1,0 +1,2 @@
+# 저장소와 작업 트리 모두 LF 로 통일한다. Windows 에서 받아도 CRLF 로 바뀌지 않는다.
+* text=auto eol=lf

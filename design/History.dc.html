@@ -1,0 +1,226 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #006EB8; text-decoration: none; }
+    a:hover { color: #00548D; text-decoration: underline; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 1040px; background: #FBF7F2; color: #241F1A; display: flex; flex-direction: column">
+
+  <div style="display: flex; align-items: center; justify-content: space-between; height: 64px; padding: 0 64px; border-bottom: 1px solid #E7DED2; flex-shrink: 0">
+    <div style="display: flex; align-items: center; gap: 40px">
+      <div style="display: flex; align-items: baseline; gap: 8px">
+        <span style="font-family: 'Gowun Batang', serif; font-size: 21px; font-weight: 700; letter-spacing: -0.01em">톤먼저</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C534A; letter-spacing: 0.08em">TONEFIRST</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 26px; font-size: 14px">
+        <span style="color: #5C534A">홈</span>
+        <span style="font-weight: 600; color: #241F1A; border-bottom: 2px solid #006EB8; padding-bottom: 21px; margin-bottom: -22px">대화 내역</span>
+        <span style="color: #5C534A">추천 받은 조합</span>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 12px; border: 1px solid #E7DED2; border-radius: 999px; background: #FFFFFF">
+      <span style="width: 7px; height: 7px; border-radius: 999px; background: #006EB8; display: block"></span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #241F1A">exaone3.5:7.8b</span>
+      <span style="font-size: 12px; color: #5C534A">로컬 실행</span>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-grow: 1; min-height: 0">
+
+    <div style="width: 316px; flex-shrink: 0; border-right: 1px solid #E7DED2; display: flex; flex-direction: column; background: #F8F3EC">
+      <div style="padding: 22px 20px 14px 20px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border: 1px solid #D5C9B9; border-radius: 4px; background: #FFFFFF; font-size: 14px; font-weight: 500">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#241F1A" stroke-width="1.8" stroke-linecap="round"><path d="M12 5 L12 19"></path><path d="M5 12 L19 12"></path></svg>
+          <span>새 대화</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px; height: 36px; padding: 0 12px; border: 1px solid #E7DED2; border-radius: 4px; background: #FFFFFF">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6E6459" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5 L21 21"></path></svg>
+          <span style="font-size: 13px; color: #6E6459">대화·헥스·조합 이름으로 검색</span>
+        </div>
+      </div>
+
+      <div style="padding: 6px 12px 20px 12px; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6E6459; padding: 12px 8px 6px 8px; letter-spacing: 0.06em">오늘</span>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 4px; background: #FFFFFF; border: 1px solid #D5C9B9">
+          <span style="font-size: 14px; font-weight: 600; line-height: 1.45">병원 앱인데 차갑지 않게</span>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="display: flex; height: 8px; width: 40px; border-radius: 2px; overflow: hidden">
+              <span style="width: 70%; background: #FDD4BD; display: block"></span>
+              <span style="width: 30%; background: #006EB8; display: block"></span>
+            </span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C534A">6턴 · 조합 2개 저장</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 4px">
+          <span style="font-size: 14px; font-weight: 400; line-height: 1.45; color: #241F1A">느와르 포스터, 고급스러운 빨강</span>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="display: flex; height: 8px; width: 40px; border-radius: 2px; overflow: hidden">
+              <span style="width: 30%; background: #CC1236; display: block"></span>
+              <span style="width: 70%; background: #0F1A14; display: block"></span>
+            </span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6E6459">4턴</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 4px">
+          <span style="font-size: 14px; line-height: 1.45">오래된 목조 부엌 같은 색</span>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="display: flex; height: 8px; width: 40px; border-radius: 2px; overflow: hidden">
+              <span style="width: 30%; background: #F3A257; display: block"></span>
+              <span style="width: 70%; background: #71502F; display: block"></span>
+            </span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6E6459">2턴 · 조합 1개 저장</span>
+          </div>
+        </div>
+
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6E6459; padding: 16px 8px 6px 8px; letter-spacing: 0.06em">지난 7일</span>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 4px">
+          <span style="font-size: 14px; line-height: 1.45">여름 뷰티 브랜드, 유치하지 않게</span>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="display: flex; height: 8px; width: 40px; border-radius: 2px; overflow: hidden">
+              <span style="width: 50%; background: #F5ECC2; display: block"></span>
+              <span style="width: 50%; background: #A7D4E4; display: block"></span>
+            </span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6E6459">9턴 · 조합 1개 저장</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 4px">
+          <span style="font-size: 14px; line-height: 1.45">사람 없는 숲, 축축한 느낌</span>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="display: flex; height: 8px; width: 40px; border-radius: 2px; overflow: hidden">
+              <span style="width: 50%; background: #437742; display: block"></span>
+              <span style="width: 50%; background: #064F6E; display: block"></span>
+            </span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6E6459">3턴</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 4px">
+          <span style="font-size: 14px; line-height: 1.45">대시보드가 탁해 보이는 이유</span>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="display: flex; height: 8px; width: 40px; border-radius: 2px; overflow: hidden">
+              <span style="width: 70%; background: #C0A9B3; display: block"></span>
+              <span style="width: 30%; background: #C55347; display: block"></span>
+            </span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6E6459">7턴</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 4px">
+          <span style="font-size: 14px; line-height: 1.45">레트로 패키지 톤 찾기</span>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="display: flex; height: 8px; width: 40px; border-radius: 2px; overflow: hidden">
+              <span style="width: 50%; background: #719470; display: block"></span>
+              <span style="width: 50%; background: #E0B3B6; display: block"></span>
+            </span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6E6459">5턴 · 조합 1개 저장</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; display: flex; flex-direction: column; min-width: 0">
+
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 22px 48px; border-bottom: 1px solid #E7DED2; flex-shrink: 0">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <h2 style="font-family: 'Gowun Batang', serif; font-size: 22px; font-weight: 700; margin: 0">병원 앱인데 차갑지 않게</h2>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C534A">2026-09-01 10:22 · 6턴 · 전문검색 2단계 · 로컬</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span style="font-size: 13px; padding: 8px 14px; border-radius: 3px; border: 1px solid #E7DED2; background: #FFFFFF">이어서 묻기</span>
+          <span style="font-size: 13px; padding: 8px 14px; border-radius: 3px; border: 1px solid #E7DED2; background: #FFFFFF">내보내기</span>
+        </div>
+      </div>
+
+      <div style="flex-grow: 1; padding: 32px 48px; display: flex; flex-direction: column; gap: 26px; min-height: 0">
+
+        <div style="display: flex; justify-content: flex-end">
+          <div style="max-width: 560px; padding: 16px 20px; background: #241F1A; color: #FBF7F2; border-radius: 4px; font-size: 14px; line-height: 1.8; font-weight: 300">병원 예약 앱을 만드는데 파랑 + 흰색은 너무 차갑고 임상적으로 보여요. 신뢰감은 유지하면서 사람 냄새가 났으면 좋겠습니다.</div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #FFFFFF; background: #006EB8; padding: 3px 7px; border-radius: 3px">재작성</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 4px 9px; background: #F5EFE7; border: 1px solid #E7DED2; border-radius: 3px">따뜻한 뉴트럴</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 4px 9px; background: #F5EFE7; border: 1px solid #E7DED2; border-radius: 3px">살구</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 4px 9px; background: #F5EFE7; border: 1px solid #E7DED2; border-radius: 3px">신뢰</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 4px 9px; background: #F5EFE7; border: 1px solid #E7DED2; border-radius: 3px">보색</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 4px 9px; background: #F5EFE7; border: 1px solid #E7DED2; border-radius: 3px">톤 비대칭</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6E6459">BM25 상위 8건 → 1건 채택</span>
+          </div>
+
+          <div style="max-width: 720px; font-size: 14px; line-height: 1.9; color: #241F1A; font-weight: 300">차가운 인상은 파랑 때문이 아니라 <span style="font-weight: 500">옆에 놓인 흰색</span> 때문입니다. 파랑은 그대로 두고 뉴트럴만 따뜻한 쪽으로 바꾸면, 색상각은 여전히 보색인데 톤이 비대칭이라 충돌 없이 정리됩니다.</div>
+
+          <div style="max-width: 720px; background: #FFFFFF; border: 1px solid #E7DED2; border-radius: 4px; overflow: hidden">
+            <div style="display: flex; height: 108px">
+              <div style="width: 70%; background: #FDD4BD; display: flex; align-items: flex-end; padding: 14px">
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #7A4728">#FDD4BD · 70%</span>
+              </div>
+              <div style="width: 30%; background: #006EB8; display: flex; align-items: flex-end; padding: 14px">
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #FFFFFF">#006EB8 · 30%</span>
+              </div>
+            </div>
+            <div style="padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px">
+              <div style="display: flex; flex-direction: column; gap: 6px">
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <span style="font-size: 16px; font-weight: 600">살구 × 파랑</span>
+                  <span style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 3px; background: #E4EFF7; color: #00548D">D형 · 서열</span>
+                </div>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C534A">배색사전 10 · Seashell Pink + Blue</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span style="font-size: 13px; font-weight: 600; padding: 9px 16px; border-radius: 3px; background: #241F1A; color: #FBF7F2">조합 저장</span>
+                <span style="font-size: 13px; padding: 9px 14px; border-radius: 3px; border: 1px solid #E7DED2">근거</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end">
+          <div style="max-width: 560px; padding: 16px 20px; background: #241F1A; color: #FBF7F2; border-radius: 4px; font-size: 14px; line-height: 1.8; font-weight: 300">그럼 예약 확정 버튼은 어느 색으로 둬야 하나요? 살구를 배경에 깔면 버튼이 묻힐 것 같은데요.</div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px">
+          <div style="max-width: 720px; font-size: 14px; line-height: 1.9; color: #241F1A; font-weight: 300">파랑을 더 쨍하게 만들지 말고 <span style="font-weight: 500">나머지를 눌러야</span> 버튼이 삽니다. 살구는 채도를 한 단계 내려 배경으로 보내고, 화면에서 채도가 가장 높은 면은 확정 버튼 하나만 남기세요. 면적이 작을수록 같은 헥스가 더 진하게 읽힙니다.</div>
+          <div style="display: flex; align-items: center; gap: 10px">
+            <span style="display: flex; align-items: center; gap: 7px; font-size: 12px; color: #5C534A; padding: 6px 11px; border: 1px solid #E7DED2; border-radius: 999px; background: #FFFFFF">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#006EB8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 L9.5 18 L20 6.5"></path></svg>
+              조합 2개가 &lsquo;추천 받은 조합&rsquo;에 저장됨
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="flex-shrink: 0; padding: 20px 48px 26px 48px; border-top: 1px solid #E7DED2">
+        <div style="display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 18px; background: #FFFFFF; border: 1px solid #D5C9B9; border-radius: 4px">
+          <span style="flex-grow: 1; font-size: 14px; color: #6E6459">이어서 물어보기 &mdash; 예: 이 조합으로 다크 모드도 되나요?</span>
+          <span style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 3px; background: #006EB8">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19 L12 5"></path><path d="M5.5 11.5 L12 5 L18.5 11.5"></path></svg>
+          </span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
