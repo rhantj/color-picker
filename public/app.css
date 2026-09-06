@@ -1255,3 +1255,230 @@ a.action--primary:hover {
     flex-direction: column;
   }
 }
+
+/* ── 배색 구조 펼치기 (13단계) ─────────────────────────────
+   결과 카드 하나가 여덟 장을 품으므로 접힌 상태가 기본이다. 늘 펼쳐 두면 결과 하나가
+   화면을 통째로 먹는다. 색상 토큰은 위에서 정의한 것만 쓴다 — 여기서 새 색을 만들지 않는다. */
+.expand {
+  width: 100%;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+/* 이 버튼은 카드 맨 끝, 접힌 화면 아래에 있다(실측: 뷰포트 724px 인데 문서 Y=1203).
+   앞에 이미 2색 "면적 비율" 슬라이더가 있어서, 평범한 회색 버튼으로 두면 사용자가 그 슬라이더를
+   보고 "면적 조절은 이게 전부" 라고 읽는다 — 실제로 그렇게 보고됐다. 그래서 강조한다.
+
+   **주 동작(.action--primary, 조합 저장)과 겹치지 않게 다른 축으로 강조한다.** 그쪽은 --ink
+   바탕의 검정 버튼이고, 이쪽은 강조색 계열 면이다. 둘이 같은 무게면 어느 것이 주 동작인지 흐려진다.
+
+   색은 --accent-ink on --accent-soft 다. 새 색을 만들지 않았고, 이 조합은 S2-G6 이 이미
+   대비 4.5:1 로 검사하는 쌍이다. */
+.expand__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+/* 화살표는 CSS 로만 만든다. 버튼 글자는 JS 가 "펼치기"/"접기" 로 바꾸므로, 문자로 넣으면
+   두 곳이 갈려 접힌 상태에 아래 화살표가 남는다. 방향은 aria-expanded 를 따라간다 —
+   화면에 보이는 것과 보조기술이 읽는 것이 같은 값에서 나오게 하려는 것이다. */
+.expand__toggle::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 150ms ease;
+}
+.expand__toggle[aria-expanded="true"]::after {
+  transform: translateY(1px) rotate(-135deg);
+}
+
+.expand__toggle:hover {
+  background: var(--surface);
+  border-color: var(--accent-ink);
+}
+
+/* 펼친 뒤에는 물러선다. 내용이 이미 화면에 있으므로 이 버튼은 "접기" 일 뿐이고,
+   여덟 장 위에서 계속 강조돼 있으면 그 자체가 소음이 된다. */
+.expand__toggle[aria-expanded="true"] {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+.expand__toggle[aria-expanded="true"]:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .expand__toggle,
+  .expand__toggle::after {
+    transition: none;
+  }
+}
+.expand__body {
+  padding-top: 12px;
+}
+.expand__note {
+  /* 한 곳에만 둔다. 14단계에서 배지·타이밍이 붙어 flex 가 됐고, 이 규칙이 두 군데로 갈렸던 것을
+     합쳤다 — 겹치는 속성이 생기면 소스 순서에 좌우되는 버그가 된다(리뷰 지적). */
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-faint);
+}
+.expand__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.struct {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 12px;
+}
+.struct__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.struct__name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+}
+.struct__source {
+  font-size: 11px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+.struct__principle {
+  margin: 6px 0 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+/* 색마다 한 줄. 2색 슬라이더(.ratio)와 달리 색이 셋 이상이라 세로로 쌓는다. */
+.shares {
+  padding-top: 10px;
+}
+.shares__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+.shares__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid var(--line-strong);
+  flex-shrink: 0;
+}
+.shares__name {
+  font-size: 12px;
+  color: var(--ink-muted);
+  min-width: 56px;
+  flex-shrink: 0;
+}
+.shares__slider {
+  flex-grow: 1;
+  min-width: 80px;
+  accent-color: var(--accent);
+  height: 22px;
+  cursor: pointer;
+}
+.shares__readout {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  min-width: 36px;
+  text-align: right;
+}
+.shares__reset {
+  margin-top: 8px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.shares__reset:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ── 고른 다섯 / 나머지 셋 (14단계) ────────────────────────
+   무엇이 골랐는지(LLM / 기본 순서)를 배지로 밝힌다. 안 적으면 사용자는 다섯이 늘 자기 질문에
+   맞춰 뽑힌 것이라고 믿게 된다 — Ollama 가 죽어 있어도 화면은 똑같이 다섯 장이기 때문이다. */
+.expand__note-text {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.expand__more {
+  padding-top: 16px;
+}
+/* 주 자리는 고른 다섯이다. 이 버튼은 그보다 물러서 있어야 한다 —
+   펼치기 버튼(.expand__toggle)과 같은 무게로 두면 어느 쪽이 본 내용인지 흐려진다. */
+.expand__more-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.expand__more-toggle::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+.expand__more-toggle[aria-expanded="true"]::after {
+  transform: translateY(1px) rotate(-135deg);
+}
+.expand__more-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.expand__more .expand__grid {
+  padding-top: 12px;
+}
