@@ -1,0 +1,1729 @@
+{
+ "_why": "12-A0(명도 방향) 이전의 기본 모드 출력. S15-G1 이 이 파일과 대조해 회귀를 잡는다.",
+ "_generatedAt": "12-A0 착수 전, src/expand.js 를 한 글자도 고치기 전에 생성했다.",
+ "_doNotRegenerate": "게이트가 실패할 때 이 파일을 다시 만들면 게이트가 아무것도 검사하지 않게 된다. 기본 모드 출력이 바뀌어야 할 이유가 생겼다면 그 이유를 커밋 메시지에 적고 사람이 판단한다.",
+ "seeds": 40,
+ "structures": 8,
+ "baseline": {
+  "pair-01": {
+   "tone-on-tone": [
+    "바탕 #f0ebeb",
+    "본문 #b54a51",
+    "강조 #33191b"
+   ],
+   "tone-in-tone": [
+    "바탕 #90bc8f",
+    "본문 #bcba8f",
+    "강조 #bc8f92"
+   ],
+   "complementary": [
+    "바탕 #efecec",
+    "본문 #643f41",
+    "강조 #b3e0dd"
+   ],
+   "analogous": [
+    "바탕 #efebed",
+    "본문 #742f34",
+    "강조 #e0c3b3"
+   ],
+   "value-scale": [
+    "바탕 #f0eaea",
+    "면 #d19fa2",
+    "본문 #6e3539",
+    "강조 #34191b"
+   ],
+   "accent-by-chroma": [
+    "바탕 #edeeed",
+    "본문 #4e554e",
+    "강조 #e0b3b6"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ebe8",
+    "본문 #2f221e",
+    "강조 #e0b3b6"
+   ],
+   "aerial": [
+    "먼 쪽 #efebed",
+    "중간 #a05f64",
+    "가까운 쪽 #744d2f"
+   ]
+  },
+  "pair-02": {
+   "tone-on-tone": [
+    "바탕 #eaeff0",
+    "본문 #3ca0c3",
+    "강조 #162e36"
+   ],
+   "tone-in-tone": [
+    "바탕 #eee3b3",
+    "본문 #b3eeb6",
+    "강조 #b3deee"
+   ],
+   "complementary": [
+    "바탕 #ebeeef",
+    "본문 #3a5d69",
+    "강조 #e4b7a7"
+   ],
+   "analogous": [
+    "바탕 #eaf0ef",
+    "본문 #26667d",
+    "강조 #a7bbe4"
+   ],
+   "value-scale": [
+    "바탕 #eaeff0",
+    "면 #9fc3d1",
+    "본문 #355f6e",
+    "강조 #192d34"
+   ],
+   "accent-by-chroma": [
+    "바탕 #f0efeb",
+    "본문 #635d40",
+    "강조 #a7d4e4"
+   ],
+   "warm-neutral": [
+    "바탕 #f2f0e8",
+    "본문 #2f2c1e",
+    "강조 #a7d4e4"
+   ],
+   "aerial": [
+    "먼 쪽 #ebedf0",
+    "중간 #5793a8",
+    "가까운 쪽 #267d68"
+   ]
+  },
+  "pair-03": {
+   "tone-on-tone": [
+    "바탕 #f2ece9",
+    "본문 #cc6833",
+    "강조 #3c2011"
+   ],
+   "tone-in-tone": [
+    "바탕 #12afc2",
+    "본문 #42c212",
+    "강조 #c24f12"
+   ],
+   "complementary": [
+    "바탕 #f0eceb",
+    "본문 #714832",
+    "강조 #299cd9"
+   ],
+   "analogous": [
+    "바탕 #f1e9ea",
+    "본문 #8b4019",
+    "강조 #d9af29"
+   ],
+   "value-scale": [
+    "바탕 #f0ecea",
+    "면 #d1b09f",
+    "본문 #6e4935",
+    "강조 #342219"
+   ],
+   "accent-by-chroma": [
+    "바탕 #eaf0f1",
+    "본문 #39656a",
+    "강조 #d96629"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ece8",
+    "본문 #2f241e",
+    "강조 #d96629"
+   ],
+   "aerial": [
+    "먼 쪽 #f0eaeb",
+    "중간 #b56f4a",
+    "가까운 쪽 #8b5519"
+   ]
+  },
+  "pair-04": {
+   "tone-on-tone": [
+    "바탕 #e8f3f1",
+    "본문 #33ccb7",
+    "강조 #08453c"
+   ],
+   "tone-in-tone": [
+    "바탕 #d21e2d",
+    "본문 #8cd21e",
+    "강조 #1ed2b9"
+   ],
+   "complementary": [
+    "바탕 #eaf1f0",
+    "본문 #257e72",
+    "강조 #b40019"
+   ],
+   "analogous": [
+    "바탕 #e8f3ed",
+    "본문 #129180",
+    "강조 #0082b4"
+   ],
+   "value-scale": [
+    "바탕 #eaf0ef",
+    "면 #9fd1ca",
+    "본문 #356e66",
+    "강조 #193430"
+   ],
+   "accent-by-chroma": [
+    "바탕 #efebeb",
+    "본문 #614244",
+    "강조 #00b49b"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ebe8",
+    "본문 #2f221e",
+    "강조 #00b49b"
+   ],
+   "aerial": [
+    "먼 쪽 #e9eef2",
+    "중간 #33ccb7",
+    "가까운 쪽 #129140"
+   ]
+  },
+  "pair-05": {
+   "tone-on-tone": [
+    "바탕 #efedeb",
+    "본문 #ac8153",
+    "강조 #31271c"
+   ],
+   "tone-in-tone": [
+    "바탕 #6a7b4a",
+    "본문 #7b784a",
+    "강조 #7b644a"
+   ],
+   "complementary": [
+    "바탕 #eeedec",
+    "본문 #615242",
+    "강조 #344f6c"
+   ],
+   "analogous": [
+    "바탕 #efeceb",
+    "본문 #6e5335",
+    "강조 #6c6834"
+   ],
+   "value-scale": [
+    "바탕 #f0edea",
+    "면 #d1b89f",
+    "본문 #6e5335",
+    "강조 #342719"
+   ],
+   "accent-by-chroma": [
+    "바탕 #edeeed",
+    "본문 #53554e",
+    "강조 #6c5134"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ede8",
+    "본문 #2f271e",
+    "강조 #6c5134"
+   ],
+   "aerial": [
+    "먼 쪽 #efefec",
+    "중간 #9a8065",
+    "가까운 쪽 #6e5435"
+   ]
+  },
+  "pair-06": {
+   "tone-on-tone": [
+    "바탕 #e8eff3",
+    "본문 #3396cc",
+    "강조 #082f45"
+   ],
+   "tone-in-tone": [
+    "바탕 #a71a59",
+    "본문 #5b1aa7",
+    "강조 #1a75a7"
+   ],
+   "complementary": [
+    "바탕 #eaeef1",
+    "본문 #255f7e",
+    "강조 #8d3200"
+   ],
+   "analogous": [
+    "바탕 #e8f3f2",
+    "본문 #126491",
+    "강조 #00208d"
+   ],
+   "value-scale": [
+    "바탕 #eaeef0",
+    "면 #9fbfd1",
+    "본문 #355a6e",
+    "강조 #192a34"
+   ],
+   "accent-by-chroma": [
+    "바탕 #efebed",
+    "본문 #5e4650",
+    "강조 #005b8d"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ebe8",
+    "본문 #2f221e",
+    "강조 #005b8d"
+   ],
+   "aerial": [
+    "먼 쪽 #e9edf2",
+    "중간 #3396cc",
+    "가까운 쪽 #12917f"
+   ]
+  },
+  "pair-07": {
+   "tone-on-tone": [
+    "바탕 #f0f1e9",
+    "본문 #bfca35",
+    "강조 #353814"
+   ],
+   "tone-in-tone": [
+    "바탕 #9b2786",
+    "본문 #9b3627",
+    "강조 #929b27"
+   ],
+   "complementary": [
+    "바탕 #efefeb",
+    "본문 #686c37",
+    "강조 #594fd1"
+   ],
+   "analogous": [
+    "바탕 #f0eeea",
+    "본문 #7a8122",
+    "강조 #91d14f"
+   ],
+   "value-scale": [
+    "바탕 #f0f0ea",
+    "면 #cdd19f",
+    "본문 #6a6e35",
+    "강조 #323419"
+   ],
+   "accent-by-chroma": [
+    "바탕 #efebef",
+    "본문 #61435b",
+    "강조 #c7d14f"
+   ],
+   "warm-neutral": [
+    "바탕 #f2f1e8",
+    "본문 #2f2d1e",
+    "강조 #c7d14f"
+   ],
+   "aerial": [
+    "먼 쪽 #edf0eb",
+    "중간 #a5ac53",
+    "가까운 쪽 #815922"
+   ]
+  },
+  "pair-08": {
+   "tone-on-tone": [
+    "바탕 #f3f0e8",
+    "본문 #ccae33",
+    "강조 #453908"
+   ],
+   "tone-in-tone": [
+    "바탕 #76b867",
+    "본문 #9fb867",
+    "강조 #b8a867"
+   ],
+   "complementary": [
+    "바탕 #f1efea",
+    "본문 #7e6d25",
+    "강조 #aebeff"
+   ],
+   "analogous": [
+    "바탕 #f3ece8",
+    "본문 #917812",
+    "강조 #edffae"
+   ],
+   "value-scale": [
+    "바탕 #f0efea",
+    "면 #d1c79f",
+    "본문 #6e6335",
+    "강조 #342e19"
+   ],
+   "accent-by-chroma": [
+    "바탕 #edeeed",
+    "본문 #4f554e",
+    "강조 #ffefae"
+   ],
+   "warm-neutral": [
+    "바탕 #f2f0e8",
+    "본문 #2f2b1e",
+    "강조 #ffefae"
+   ],
+   "aerial": [
+    "먼 쪽 #eff2e9",
+    "중간 #ccae33",
+    "가까운 쪽 #915612"
+   ]
+  },
+  "pair-09": {
+   "tone-on-tone": [
+    "바탕 #f3ede8",
+    "본문 #cc7d33",
+    "강조 #41250c"
+   ],
+   "tone-in-tone": [
+    "바탕 #c82d4a",
+    "본문 #c8782d",
+    "강조 #b1c82d"
+   ],
+   "complementary": [
+    "바탕 #f0edea",
+    "본문 #78502b",
+    "강조 #57a8f3"
+   ],
+   "analogous": [
+    "바탕 #f2e9e9",
+    "본문 #914f12",
+    "강조 #f3e357"
+   ],
+   "value-scale": [
+    "바탕 #f0edea",
+    "면 #d1b79f",
+    "본문 #6e5135",
+    "강조 #342619"
+   ],
+   "accent-by-chroma": [
+    "바탕 #efedec",
+    "본문 #5c5248",
+    "강조 #f3a257"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ede8",
+    "본문 #2f261e",
+    "강조 #f3a257"
+   ],
+   "aerial": [
+    "먼 쪽 #f1e9e9",
+    "중간 #c27d3d",
+    "가까운 쪽 #915612"
+   ]
+  },
+  "pair-10": {
+   "tone-on-tone": [
+    "바탕 #e8eef3",
+    "본문 #338ecc",
+    "강조 #082c45"
+   ],
+   "tone-in-tone": [
+    "바탕 #f98341",
+    "본문 #e341f9",
+    "강조 #41aef9"
+   ],
+   "complementary": [
+    "바탕 #eaeef1",
+    "본문 #255a7e",
+    "강조 #b84a00"
+   ],
+   "analogous": [
+    "바탕 #e8f3f2",
+    "본문 #125e91",
+    "강조 #0021b8"
+   ],
+   "value-scale": [
+    "바탕 #eaeef0",
+    "면 #9fbcd1",
+    "본문 #35576e",
+    "강조 #192934"
+   ],
+   "accent-by-chroma": [
+    "바탕 #f1ecea",
+    "본문 #694b3b",
+    "강조 #006eb8"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ece8",
+    "본문 #2f241e",
+    "강조 #006eb8"
+   ],
+   "aerial": [
+    "먼 쪽 #e9edf2",
+    "중간 #338ecc",
+    "가까운 쪽 #129185"
+   ]
+  },
+  "pair-11": {
+   "tone-on-tone": [
+    "바탕 #f0ecea",
+    "본문 #c0713f",
+    "강조 #362317"
+   ],
+   "tone-in-tone": [
+    "바탕 #857dca",
+    "본문 #ca7db7",
+    "강조 #ca9b7d"
+   ],
+   "complementary": [
+    "바탕 #efedeb",
+    "본문 #684d3b",
+    "강조 #4491c2"
+   ],
+   "analogous": [
+    "바탕 #f0eaeb",
+    "본문 #7b4828",
+    "강조 #c2a944"
+   ],
+   "value-scale": [
+    "바탕 #f0ecea",
+    "면 #d1b29f",
+    "본문 #6e4b35",
+    "강조 #342319"
+   ],
+   "accent-by-chroma": [
+    "바탕 #ececee",
+    "본문 #4b495a",
+    "강조 #c27544"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ece8",
+    "본문 #2f241e",
+    "강조 #c27544"
+   ],
+   "aerial": [
+    "먼 쪽 #efebeb",
+    "중간 #a67759",
+    "가까운 쪽 #7b5428"
+   ]
+  },
+  "pair-12": {
+   "tone-on-tone": [
+    "바탕 #f0ebea",
+    "본문 #c24a3d",
+    "강조 #361916"
+   ],
+   "tone-in-tone": [
+    "바탕 #be7ca2",
+    "본문 #be837c",
+    "강조 #beaf7c"
+   ],
+   "complementary": [
+    "바탕 #efeceb",
+    "본문 #693f3a",
+    "강조 #47b9c5"
+   ],
+   "analogous": [
+    "바탕 #f0eaec",
+    "본문 #7c2f27",
+    "강조 #c58847"
+   ],
+   "value-scale": [
+    "바탕 #f0ebea",
+    "면 #d1a39f",
+    "본문 #6e3a35",
+    "강조 #341b19"
+   ],
+   "accent-by-chroma": [
+    "바탕 #eeeded",
+    "본문 #554e51",
+    "강조 #c55347"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ebe8",
+    "본문 #2f221e",
+    "강조 #c55347"
+   ],
+   "aerial": [
+    "먼 쪽 #efebed",
+    "중간 #a75f58",
+    "가까운 쪽 #7c5427"
+   ]
+  },
+  "pair-13": {
+   "tone-on-tone": [
+    "바탕 #e8eff3",
+    "본문 #339ecc",
+    "강조 #0b3142"
+   ],
+   "tone-in-tone": [
+    "바탕 #20781f",
+    "본문 #1f7858",
+    "강조 #1f5d78"
+   ],
+   "complementary": [
+    "바탕 #eaeef0",
+    "본문 #29627a",
+    "강조 #6e2506"
+   ],
+   "analogous": [
+    "바탕 #e8f2f1",
+    "본문 #126b91",
+    "강조 #06246e"
+   ],
+   "value-scale": [
+    "바탕 #eaeef0",
+    "면 #9fc2d1",
+    "본문 #355d6e",
+    "강조 #192c34"
+   ],
+   "accent-by-chroma": [
+    "바탕 #eceeec",
+    "본문 #4b594b",
+    "강조 #064f6e"
+   ],
+   "warm-neutral": [
+    "바탕 #f2f1e8",
+    "본문 #2f2d1e",
+    "강조 #064f6e"
+   ],
+   "aerial": [
+    "먼 쪽 #e9edf1",
+    "중간 #3b9bc4",
+    "가까운 쪽 #129178"
+   ]
+  },
+  "pair-14": {
+   "tone-on-tone": [
+    "바탕 #e8f3f2",
+    "본문 #33ccc2",
+    "강조 #084541"
+   ],
+   "tone-in-tone": [
+    "바탕 #4c3dd3",
+    "본문 #3d85d3",
+    "강조 #3dd3ca"
+   ],
+   "complementary": [
+    "바탕 #eaf1f0",
+    "본문 #257e79",
+    "강조 #97000a"
+   ],
+   "analogous": [
+    "바탕 #e8f3ed",
+    "본문 #129189",
+    "강조 #006297"
+   ],
+   "value-scale": [
+    "바탕 #eaf0f0",
+    "면 #9fd1cd",
+    "본문 #356e6a",
+    "강조 #193432"
+   ],
+   "accent-by-chroma": [
+    "바탕 #ececee",
+    "본문 #4b495a",
+    "강조 #00978d"
+   ],
+   "warm-neutral": [
+    "바탕 #f2f1e8",
+    "본문 #2f2d1e",
+    "강조 #00978d"
+   ],
+   "aerial": [
+    "먼 쪽 #e9eef2",
+    "중간 #33ccc2",
+    "가까운 쪽 #129149"
+   ]
+  },
+  "pair-15": {
+   "tone-on-tone": [
+    "바탕 #f2e8ea",
+    "본문 #cc3351",
+    "강조 #400d17"
+   ],
+   "tone-in-tone": [
+    "바탕 #1d663e",
+    "본문 #5d661d",
+    "강조 #661d2b"
+   ],
+   "complementary": [
+    "바탕 #f0eaeb",
+    "본문 #772c3b",
+    "강조 #12cca8"
+   ],
+   "analogous": [
+    "바탕 #f2e9ee",
+    "본문 #91122b",
+    "강조 #cc3b12"
+   ],
+   "value-scale": [
+    "바탕 #f0eaeb",
+    "면 #d19fa8",
+    "본문 #6e3540",
+    "강조 #34191e"
+   ],
+   "accent-by-chroma": [
+    "바탕 #eceeed",
+    "본문 #4b5851",
+    "강조 #cc1236"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ebe8",
+    "본문 #2f221e",
+    "강조 #cc1236"
+   ],
+   "aerial": [
+    "먼 쪽 #f1e9ef",
+    "중간 #c03f58",
+    "가까운 쪽 #913912"
+   ]
+  },
+  "pair-16": {
+   "tone-on-tone": [
+    "바탕 #f3eae8",
+    "본문 #cc4e33",
+    "강조 #41150c"
+   ],
+   "tone-in-tone": [
+    "바탕 #1d48ab",
+    "본문 #a21dab",
+    "강조 #ab371d"
+   ],
+   "complementary": [
+    "바탕 #f0ebea",
+    "본문 #78392b",
+    "강조 #67dbf4"
+   ],
+   "analogous": [
+    "바탕 #f2e9eb",
+    "본문 #912912",
+    "강조 #f4bb67"
+   ],
+   "value-scale": [
+    "바탕 #f0ebea",
+    "면 #d1a79f",
+    "본문 #6e3f35",
+    "강조 #341e19"
+   ],
+   "accent-by-chroma": [
+    "바탕 #eaecf0",
+    "본문 #3e4a65",
+    "강조 #f48067"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ebe8",
+    "본문 #2f221e",
+    "강조 #f48067"
+   ],
+   "aerial": [
+    "먼 쪽 #f1e9ec",
+    "중간 #c2553d",
+    "가까운 쪽 #915612"
+   ]
+  },
+  "wada-002": {
+   "tone-on-tone": [
+    "바탕 #f3eee8",
+    "본문 #cc8d33",
+    "강조 #432b09"
+   ],
+   "tone-in-tone": [
+    "바탕 #1469a6",
+    "본문 #14a614",
+    "강조 #a66a14"
+   ],
+   "complementary": [
+    "바탕 #f1eeea",
+    "본문 #7c5927",
+    "강조 #1b77f9"
+   ],
+   "analogous": [
+    "바탕 #f2eae8",
+    "본문 #915c12",
+    "강조 #f8f91b"
+   ],
+   "value-scale": [
+    "바탕 #f0eeea",
+    "면 #d1bc9f",
+    "본문 #6e5635",
+    "강조 #342919"
+   ],
+   "accent-by-chroma": [
+    "바탕 #ebeeef",
+    "본문 #425461",
+    "강조 #f99d1b"
+   ],
+   "warm-neutral": [
+    "바탕 #f2eee8",
+    "본문 #2f281e",
+    "강조 #f99d1b"
+   ],
+   "aerial": [
+    "먼 쪽 #f1f1e9",
+    "중간 #c88c37",
+    "가까운 쪽 #915612"
+   ]
+  },
+  "wada-004": {
+   "tone-on-tone": [
+    "바탕 #f0eeea",
+    "본문 #b68e49",
+    "강조 #332a19"
+   ],
+   "tone-in-tone": [
+    "바탕 #87459c",
+    "본문 #9c4560",
+    "강조 #9c7c45"
+   ],
+   "complementary": [
+    "바탕 #efeeec",
+    "본문 #65573e",
+    "강조 #6e8ec5"
+   ],
+   "analogous": [
+    "바탕 #efeceb",
+    "본문 #755b2f",
+    "강조 #c1c56e"
+   ],
+   "value-scale": [
+    "바탕 #f0eeea",
+    "면 #d1be9f",
+    "본문 #6e5935",
+    "강조 #342a19"
+   ],
+   "accent-by-chroma": [
+    "바탕 #eeebef",
+    "본문 #58465d",
+    "강조 #c5a56e"
+   ],
+   "warm-neutral": [
+    "바탕 #f2eee8",
+    "본문 #2f281e",
+    "강조 #c5a56e"
+   ],
+   "aerial": [
+    "먼 쪽 #efefeb",
+    "중간 #a0885f",
+    "가까운 쪽 #75542f"
+   ]
+  },
+  "wada-007": {
+   "tone-on-tone": [
+    "바탕 #f3ece8",
+    "본문 #cc7033",
+    "강조 #42210b"
+   ],
+   "tone-in-tone": [
+    "바탕 #74d6ab",
+    "본문 #a7d674",
+    "강조 #d69b74"
+   ],
+   "complementary": [
+    "바탕 #f0ecea",
+    "본문 #7a4929",
+    "강조 #209ff3"
+   ],
+   "analogous": [
+    "바탕 #f2e8e9",
+    "본문 #914512",
+    "강조 #f3cc20"
+   ],
+   "value-scale": [
+    "바탕 #f0edea",
+    "면 #d1b39f",
+    "본문 #6e4c35",
+    "강조 #342419"
+   ],
+   "accent-by-chroma": [
+    "바탕 #eceeed",
+    "본문 #4d5652",
+    "강조 #f37420"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ece8",
+    "본문 #2f251e",
+    "강조 #f37420"
+   ],
+   "aerial": [
+    "먼 쪽 #f1e9ea",
+    "중간 #c4723b",
+    "가까운 쪽 #915612"
+   ]
+  },
+  "wada-009": {
+   "tone-on-tone": [
+    "바탕 #f0ebef",
+    "본문 #b04fa5",
+    "강조 #321b2f"
+   ],
+   "tone-in-tone": [
+    "바탕 #5f4d84",
+    "본문 #744d84",
+    "강조 #844d7e"
+   ],
+   "complementary": [
+    "바탕 #efecee",
+    "본문 #63415f",
+    "강조 #2d6433"
+   ],
+   "analogous": [
+    "바탕 #eeebef",
+    "본문 #71336a",
+    "강조 #642d47"
+   ],
+   "value-scale": [
+    "바탕 #f0eaf0",
+    "면 #d19fcb",
+    "본문 #6e3568",
+    "강조 #341931"
+   ],
+   "accent-by-chroma": [
+    "바탕 #edecee",
+    "본문 #504d56",
+    "강조 #642d5e"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ebe8",
+    "본문 #2f221e",
+    "강조 #642d5e"
+   ],
+   "aerial": [
+    "먼 쪽 #eeebef",
+    "중간 #9d6296",
+    "가까운 쪽 #71334b"
+   ]
+  },
+  "wada-011": {
+   "tone-on-tone": [
+    "바탕 #f1efe9",
+    "본문 #cc9a33",
+    "강조 #3a2d12"
+   ],
+   "tone-in-tone": [
+    "바탕 #9ed2c7",
+    "본문 #acd29e",
+    "강조 #d2c19e"
+   ],
+   "complementary": [
+    "바탕 #efeeeb",
+    "본문 #6f5c35",
+    "강조 #a2baeb"
+   ],
+   "analogous": [
+    "바탕 #f1ebea",
+    "본문 #86641d",
+    "강조 #e5eba2"
+   ],
+   "value-scale": [
+    "바탕 #f0eeea",
+    "면 #d1c09f",
+    "본문 #6e5b35",
+    "강조 #342b19"
+   ],
+   "accent-by-chroma": [
+    "바탕 #ededed",
+    "본문 #505453",
+    "강조 #ebd3a2"
+   ],
+   "warm-neutral": [
+    "바탕 #f2efe8",
+    "본문 #2f291e",
+    "강조 #ebd3a2"
+   ],
+   "aerial": [
+    "먼 쪽 #eff0ea",
+    "중간 #b1904e",
+    "가까운 쪽 #86551d"
+   ]
+  },
+  "wada-012": {
+   "tone-on-tone": [
+    "바탕 #e8f2f3",
+    "본문 #33c6cc",
+    "강조 #0b3f41"
+   ],
+   "tone-in-tone": [
+    "바탕 #bc882e",
+    "본문 #45bc2e",
+    "강조 #2eb6bc"
+   ],
+   "complementary": [
+    "바탕 #eaf0f0",
+    "본문 #2a7679",
+    "강조 #970f09"
+   ],
+   "analogous": [
+    "바탕 #e8f2ee",
+    "본문 #128c91",
+    "강조 #095697"
+   ],
+   "value-scale": [
+    "바탕 #eaf0f0",
+    "면 #9fced1",
+    "본문 #356c6e",
+    "강조 #193334"
+   ],
+   "accent-by-chroma": [
+    "바탕 #efeeec",
+    "본문 #5c5447",
+    "강조 #099197"
+   ],
+   "warm-neutral": [
+    "바탕 #f2eee8",
+    "본문 #2f281e",
+    "강조 #099197"
+   ],
+   "aerial": [
+    "먼 쪽 #e9edf1",
+    "중간 #3cbec3",
+    "가까운 쪽 #129157"
+   ]
+  },
+  "wada-014": {
+   "tone-on-tone": [
+    "바탕 #f2e8ea",
+    "본문 #cc3358",
+    "강조 #400d19"
+   ],
+   "tone-in-tone": [
+    "바탕 #f7de88",
+    "본문 #f7a688",
+    "강조 #f788a3"
+   ],
+   "complementary": [
+    "바탕 #f0eaec",
+    "본문 #772c3e",
+    "강조 #72f2d3"
+   ],
+   "analogous": [
+    "바탕 #f2e9ef",
+    "본문 #911231",
+    "강조 #f28872"
+   ],
+   "value-scale": [
+    "바탕 #f0eaec",
+    "면 #d19fab",
+    "본문 #6e3543",
+    "강조 #34191f"
+   ],
+   "accent-by-chroma": [
+    "바탕 #f0efea",
+    "본문 #685e3b",
+    "강조 #f27291"
+   ],
+   "warm-neutral": [
+    "바탕 #f2f0e8",
+    "본문 #2f2b1e",
+    "강조 #f27291"
+   ],
+   "aerial": [
+    "먼 쪽 #f1e9ef",
+    "중간 #bf405f",
+    "가까운 쪽 #913312"
+   ]
+  },
+  "wada-018": {
+   "tone-on-tone": [
+    "바탕 #f0eaf0",
+    "본문 #ba45b5",
+    "강조 #341833"
+   ],
+   "tone-in-tone": [
+    "바탕 #916b60",
+    "본문 #916072",
+    "강조 #91608f"
+   ],
+   "complementary": [
+    "바탕 #efecef",
+    "본문 #663d64",
+    "강조 #1d4e1f"
+   ],
+   "analogous": [
+    "바탕 #eeebf0",
+    "본문 #772c74",
+    "강조 #4e1d38"
+   ],
+   "value-scale": [
+    "바탕 #f0eaf0",
+    "면 #d19fcf",
+    "본문 #6e356c",
+    "강조 #341933"
+   ],
+   "accent-by-chroma": [
+    "바탕 #eeedec",
+    "본문 #594d4a",
+    "강조 #4e1d4c"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ebe8",
+    "본문 #2f221e",
+    "강조 #4e1d4c"
+   ],
+   "aerial": [
+    "먼 쪽 #edebef",
+    "중간 #a35ca0",
+    "가까운 쪽 #772c4f"
+   ]
+  },
+  "wada-019": {
+   "tone-on-tone": [
+    "바탕 #edf0ea",
+    "본문 #84c43b",
+    "강조 #273716"
+   ],
+   "tone-in-tone": [
+    "바탕 #995526",
+    "본문 #999226",
+    "강조 #639926"
+   ],
+   "complementary": [
+    "바탕 #edefeb",
+    "본문 #536a3a",
+    "강조 #7e40c5"
+   ],
+   "analogous": [
+    "바탕 #f0f0ea",
+    "본문 #557d26",
+    "강조 #50c540"
+   ],
+   "value-scale": [
+    "바탕 #edf0ea",
+    "면 #b9d19f",
+    "본문 #546e35",
+    "강조 #273419"
+   ],
+   "accent-by-chroma": [
+    "바탕 #f0edeb",
+    "본문 #624f41",
+    "강조 #87c540"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ece8",
+    "본문 #2f251e",
+    "강조 #87c540"
+   ],
+   "aerial": [
+    "먼 쪽 #ebf0eb",
+    "중간 #82a857",
+    "가까운 쪽 #7d7a26"
+   ]
+  },
+  "wada-020": {
+   "tone-on-tone": [
+    "바탕 #eaf0f0",
+    "본문 #42b9bd",
+    "강조 #173435"
+   ],
+   "tone-in-tone": [
+    "바탕 #cd85a1",
+    "본문 #9c85cd",
+    "강조 #85cacd"
+   ],
+   "complementary": [
+    "바탕 #ebefef",
+    "본문 #3c6667",
+    "강조 #d07b78"
+   ],
+   "analogous": [
+    "바탕 #ebf0ee",
+    "본문 #2a7679",
+    "강조 #78a8d0"
+   ],
+   "value-scale": [
+    "바탕 #eaf0f0",
+    "면 #9fcfd1",
+    "본문 #356c6e",
+    "강조 #193334"
+   ],
+   "accent-by-chroma": [
+    "바탕 #eeeced",
+    "본문 #5a4950",
+    "강조 #78cdd0"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ebe8",
+    "본문 #2f221e",
+    "강조 #78cdd0"
+   ],
+   "aerial": [
+    "먼 쪽 #ebedef",
+    "중간 #5ba2a4",
+    "가까운 쪽 #2a7954"
+   ]
+  },
+  "wada-027": {
+   "tone-on-tone": [
+    "바탕 #f2e8e9",
+    "본문 #cc333c",
+    "강조 #3f0d10"
+   ],
+   "tone-in-tone": [
+    "바탕 #6b99ad",
+    "본문 #936bad",
+    "강조 #ad6b6f"
+   ],
+   "complementary": [
+    "바탕 #f0eaeb",
+    "본문 #772d31",
+    "강조 #b6f8f4"
+   ],
+   "analogous": [
+    "바탕 #f2e9ed",
+    "본문 #91121a",
+    "강조 #f8ceb6"
+   ],
+   "value-scale": [
+    "바탕 #f0eaea",
+    "면 #d19fa2",
+    "본문 #6e3539",
+    "강조 #34191a"
+   ],
+   "accent-by-chroma": [
+    "바탕 #ecedee",
+    "본문 #4d5456",
+    "강조 #f8b6ba"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ebe8",
+    "본문 #2f221e",
+    "강조 #f8b6ba"
+   ],
+   "aerial": [
+    "먼 쪽 #f1e9ee",
+    "중간 #bf4048",
+    "가까운 쪽 #914a12"
+   ]
+  },
+  "wada-029": {
+   "tone-on-tone": [
+    "바탕 #ebedef",
+    "본문 #587aa7",
+    "강조 #1d2530"
+   ],
+   "tone-in-tone": [
+    "바탕 #a6aa79",
+    "본문 #79aa88",
+    "강조 #798eaa"
+   ],
+   "complementary": [
+    "바탕 #ecedee",
+    "본문 #44505f",
+    "강조 #c8b397"
+   ],
+   "analogous": [
+    "바탕 #ebeeef",
+    "본문 #384e6b",
+    "강조 #9798c8"
+   ],
+   "value-scale": [
+    "바탕 #eaedf0",
+    "면 #a2b4ce",
+    "본문 #384e6b",
+    "강조 #1a2532"
+   ],
+   "accent-by-chroma": [
+    "바탕 #eeeeed",
+    "본문 #55564d",
+    "강조 #97acc8"
+   ],
+   "warm-neutral": [
+    "바탕 #f2f1e8",
+    "본문 #2f2d1e",
+    "강조 #97acc8"
+   ],
+   "aerial": [
+    "먼 쪽 #ecedef",
+    "중간 #687c97",
+    "가까운 쪽 #3c386b"
+   ]
+  },
+  "wada-030": {
+   "tone-on-tone": [
+    "바탕 #f1e9ea",
+    "본문 #cc334b",
+    "강조 #3a1219"
+   ],
+   "tone-in-tone": [
+    "바탕 #5db4a1",
+    "본문 #98b45d",
+    "강조 #b45d6a"
+   ],
+   "complementary": [
+    "바탕 #efebec",
+    "본문 #6f343d",
+    "강조 #24ab96"
+   ],
+   "analogous": [
+    "바탕 #f1eaee",
+    "본문 #871c2d",
+    "강조 #ab4724"
+   ],
+   "value-scale": [
+    "바탕 #f0eaeb",
+    "면 #d19fa6",
+    "본문 #6e353e",
+    "강조 #34191d"
+   ],
+   "accent-by-chroma": [
+    "바탕 #ededed",
+    "본문 #505453",
+    "강조 #ab2439"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ebe8",
+    "본문 #2f221e",
+    "강조 #ab2439"
+   ],
+   "aerial": [
+    "먼 쪽 #f0eaee",
+    "중간 #b14e5d",
+    "가까운 쪽 #87411c"
+   ]
+  },
+  "wada-032": {
+   "tone-on-tone": [
+    "바탕 #edf0ea",
+    "본문 #84c43b",
+    "강조 #273716"
+   ],
+   "tone-in-tone": [
+    "바탕 #cf8e5d",
+    "본문 #cfc95d",
+    "강조 #9acf5d"
+   ],
+   "complementary": [
+    "바탕 #edefeb",
+    "본문 #536a3a",
+    "강조 #7e40c5"
+   ],
+   "analogous": [
+    "바탕 #f0f0ea",
+    "본문 #557d26",
+    "강조 #50c540"
+   ],
+   "value-scale": [
+    "바탕 #edf0ea",
+    "면 #b9d19f",
+    "본문 #546e35",
+    "강조 #273419"
+   ],
+   "accent-by-chroma": [
+    "바탕 #efedeb",
+    "본문 #5f5044",
+    "강조 #87c540"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ece8",
+    "본문 #2f251e",
+    "강조 #87c540"
+   ],
+   "aerial": [
+    "먼 쪽 #ebf0eb",
+    "중간 #82a857",
+    "가까운 쪽 #7d7a26"
+   ]
+  },
+  "wada-037": {
+   "tone-on-tone": [
+    "바탕 #f1ebe9",
+    "본문 #cc5833",
+    "강조 #3b1c12"
+   ],
+   "tone-in-tone": [
+    "바탕 #6f2588",
+    "본문 #882557",
+    "강조 #883c25"
+   ],
+   "complementary": [
+    "바탕 #f0eceb",
+    "본문 #6f4234",
+    "강조 #2288a8"
+   ],
+   "analogous": [
+    "바탕 #f1eaeb",
+    "본문 #88351b",
+    "강조 #a87a22"
+   ],
+   "value-scale": [
+    "바탕 #f0ecea",
+    "면 #d1ab9f",
+    "본문 #6e4335",
+    "강조 #341f19"
+   ],
+   "accent-by-chroma": [
+    "바탕 #eeebef",
+    "본문 #58465d",
+    "강조 #a84222"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ebe8",
+    "본문 #2f221e",
+    "강조 #a84222"
+   ],
+   "aerial": [
+    "먼 쪽 #f0eaec",
+    "중간 #b2654d",
+    "가까운 쪽 #88551b"
+   ]
+  },
+  "wada-038": {
+   "tone-on-tone": [
+    "바탕 #e9ecf1",
+    "본문 #336acc",
+    "강조 #12213a"
+   ],
+   "tone-in-tone": [
+    "바탕 #1b7d49",
+    "본문 #1b787d",
+    "강조 #1b3e7d"
+   ],
+   "complementary": [
+    "바탕 #ebecef",
+    "본문 #34496f",
+    "강조 #86601c"
+   ],
+   "analogous": [
+    "바탕 #eaeff1",
+    "본문 #1c4287",
+    "강조 #221c86"
+   ],
+   "value-scale": [
+    "바탕 #eaecf0",
+    "면 #9fb1d1",
+    "본문 #354a6e",
+    "강조 #192234"
+   ],
+   "accent-by-chroma": [
+    "바탕 #ebefed",
+    "본문 #426151",
+    "강조 #1c4286"
+   ],
+   "warm-neutral": [
+    "바탕 #f2f1e8",
+    "본문 #2f2d1e",
+    "강조 #1c4286"
+   ],
+   "aerial": [
+    "먼 쪽 #eaedf0",
+    "중간 #4d71b2",
+    "가까운 쪽 #2b1c87"
+   ]
+  },
+  "wada-040": {
+   "tone-on-tone": [
+    "바탕 #f1ece9",
+    "본문 #cc6b33",
+    "강조 #3b2112"
+   ],
+   "tone-in-tone": [
+    "바탕 #b8be32",
+    "본문 #be9532",
+    "강조 #be6632"
+   ],
+   "complementary": [
+    "바탕 #f0edeb",
+    "본문 #704a34",
+    "강조 #278bc5"
+   ],
+   "analogous": [
+    "바탕 #f1eaea",
+    "본문 #88431b",
+    "강조 #c5a327"
+   ],
+   "value-scale": [
+    "바탕 #f0ecea",
+    "면 #d1b19f",
+    "본문 #6e4a35",
+    "강조 #342319"
+   ],
+   "accent-by-chroma": [
+    "바탕 #efefeb",
+    "본문 #5d5e46",
+    "강조 #c56127"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ece8",
+    "본문 #2f241e",
+    "강조 #c56127"
+   ],
+   "aerial": [
+    "먼 쪽 #f0eaeb",
+    "중간 #b3724c",
+    "가까운 쪽 #88551b"
+   ]
+  },
+  "wada-041": {
+   "tone-on-tone": [
+    "바탕 #eaf0f0",
+    "본문 #42b9bd",
+    "강조 #173435"
+   ],
+   "tone-in-tone": [
+    "바탕 #b3a664",
+    "본문 #69b364",
+    "강조 #64b1b3"
+   ],
+   "complementary": [
+    "바탕 #ebefef",
+    "본문 #3c6667",
+    "강조 #d07b78"
+   ],
+   "analogous": [
+    "바탕 #ebf0ee",
+    "본문 #2a7679",
+    "강조 #78a8d0"
+   ],
+   "value-scale": [
+    "바탕 #eaf0f0",
+    "면 #9fcfd1",
+    "본문 #356c6e",
+    "강조 #193334"
+   ],
+   "accent-by-chroma": [
+    "바탕 #eeeeec",
+    "본문 #57554c",
+    "강조 #78cdd0"
+   ],
+   "warm-neutral": [
+    "바탕 #f2f0e8",
+    "본문 #2f2c1e",
+    "강조 #78cdd0"
+   ],
+   "aerial": [
+    "먼 쪽 #ebedef",
+    "중간 #5ba2a4",
+    "가까운 쪽 #2a7954"
+   ]
+  },
+  "wada-044": {
+   "tone-on-tone": [
+    "바탕 #e8f3f2",
+    "본문 #33ccc6",
+    "강조 #084542"
+   ],
+   "tone-in-tone": [
+    "바탕 #21ae4a",
+    "본문 #21aea8",
+    "강조 #2156ae"
+   ],
+   "complementary": [
+    "바탕 #eaf1f0",
+    "본문 #257e7b",
+    "강조 #900006"
+   ],
+   "analogous": [
+    "바탕 #e8f3ee",
+    "본문 #12918c",
+    "강조 #005a90"
+   ],
+   "value-scale": [
+    "바탕 #eaf0f0",
+    "면 #9fd1cf",
+    "본문 #356e6c",
+    "강조 #193433"
+   ],
+   "accent-by-chroma": [
+    "바탕 #ecedee",
+    "본문 #49515b",
+    "강조 #00908a"
+   ],
+   "warm-neutral": [
+    "바탕 #f2f1e8",
+    "본문 #2f2d1e",
+    "강조 #00908a"
+   ],
+   "aerial": [
+    "먼 쪽 #e9eef2",
+    "중간 #33ccc6",
+    "가까운 쪽 #12914c"
+   ]
+  },
+  "wada-046": {
+   "tone-on-tone": [
+    "바탕 #f3ece8",
+    "본문 #cc7033",
+    "강조 #42210b"
+   ],
+   "tone-in-tone": [
+    "바탕 #285b74",
+    "본문 #327428",
+    "강조 #744628"
+   ],
+   "complementary": [
+    "바탕 #f0ecea",
+    "본문 #7a4929",
+    "강조 #209ff3"
+   ],
+   "analogous": [
+    "바탕 #f2e8e9",
+    "본문 #914512",
+    "강조 #f3cc20"
+   ],
+   "value-scale": [
+    "바탕 #f0edea",
+    "면 #d1b39f",
+    "본문 #6e4c35",
+    "강조 #342419"
+   ],
+   "accent-by-chroma": [
+    "바탕 #ededed",
+    "본문 #505254",
+    "강조 #f37420"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ece8",
+    "본문 #2f251e",
+    "강조 #f37420"
+   ],
+   "aerial": [
+    "먼 쪽 #f1e9ea",
+    "중간 #c4723b",
+    "가까운 쪽 #915612"
+   ]
+  },
+  "wada-064": {
+   "tone-on-tone": [
+    "바탕 #efecef",
+    "본문 #9d609f",
+    "강조 #2d1f2e"
+   ],
+   "tone-in-tone": [
+    "바탕 #6a66a1",
+    "본문 #8466a1",
+    "강조 #9f66a1"
+   ],
+   "complementary": [
+    "바탕 #eeecee",
+    "본문 #5c475d",
+    "강조 #6ca56a"
+   ],
+   "analogous": [
+    "바탕 #edecee",
+    "본문 #643d66",
+    "강조 #a56a8e"
+   ],
+   "value-scale": [
+    "바탕 #efebef",
+    "면 #c8a6c9",
+    "본문 #643d66",
+    "강조 #2f1d30"
+   ],
+   "accent-by-chroma": [
+    "바탕 #ececee",
+    "본문 #4d4c57",
+    "강조 #a36aa5"
+   ],
+   "warm-neutral": [
+    "바탕 #f2ebe8",
+    "본문 #2f221e",
+    "강조 #a36aa5"
+   ],
+   "aerial": [
+    "먼 쪽 #edecee",
+    "중간 #916d92",
+    "가까운 쪽 #663d53"
+   ]
+  },
+  "wada-067": {
+   "tone-on-tone": [
+    "바탕 #ebedef",
+    "본문 #507baf",
+    "강조 #1b2532"
+   ],
+   "tone-in-tone": [
+    "바탕 #2f887d",
+    "본문 #2f5788",
+    "강조 #422f88"
+   ],
+   "complementary": [
+    "바탕 #ecedee",
+    "본문 #415062",
+    "강조 #b38b5a"
+   ],
+   "analogous": [
+    "바탕 #ebefef",
+    "본문 #334f70",
+    "강조 #5a5db3"
+   ],
+   "value-scale": [
+    "바탕 #eaedf0",
+    "면 #9fb5d1",
+    "본문 #354f6e",
+    "강조 #192534"
+   ],
+   "accent-by-chroma": [
+    "바탕 #ebeeef",
+    "본문 #425461",
+    "강조 #5a82b3"
+   ],
+   "warm-neutral": [
+    "바탕 #f2f1e8",
+    "본문 #2f2d1e",
+    "강조 #5a82b3"
+   ],
+   "aerial": [
+    "먼 쪽 #ecedef",
+    "중간 #637d9c",
+    "가까운 쪽 #373370"
+   ]
+  },
+  "wada-083": {
+   "tone-on-tone": [
+    "바탕 #efefeb",
+    "본문 #a0a45b",
+    "강조 #2e2f1d"
+   ],
+   "tone-in-tone": [
+    "바탕 #696e99",
+    "본문 #69997f",
+    "강조 #959969"
+   ],
+   "complementary": [
+    "바탕 #eeeeec",
+    "본문 #5d5f45",
+    "강조 #9794c4"
+   ],
+   "analogous": [
+    "바탕 #efeeec",
+    "본문 #66693a",
+    "강조 #adc494"
+   ],
+   "value-scale": [
+    "바탕 #eff0eb",
+    "면 #cacca3",
+    "본문 #66693a",
+    "강조 #30311b"
+   ],
+   "accent-by-chroma": [
+    "바탕 #ececee",
+    "본문 #4c4d58",
+    "강조 #c1c494"
+   ],
+   "warm-neutral": [
+    "바탕 #f2f1e8",
+    "본문 #2f2d1e",
+    "강조 #c1c494"
+   ],
+   "aerial": [
+    "먼 쪽 #edeeec",
+    "중간 #939669",
+    "가까운 쪽 #69553a"
+   ]
+  },
+  "wada-094": {
+   "tone-on-tone": [
+    "바탕 #e8f3f1",
+    "본문 #33ccbb",
+    "강조 #08453e"
+   ],
+   "tone-in-tone": [
+    "바탕 #9f854f",
+    "본문 #619f4f",
+    "강조 #4f9f96"
+   ],
+   "complementary": [
+    "바탕 #eaf1f0",
+    "본문 #257e74",
+    "강조 #4f0009"
+   ],
+   "analogous": [
+    "바탕 #e8f3ed",
+    "본문 #129183",
+    "강조 #00374f"
+   ],
+   "value-scale": [
+    "바탕 #eaf0f0",
+    "면 #9fd1cb",
+    "본문 #356e68",
+    "강조 #193431"
+   ],
+   "accent-by-chroma": [
+    "바탕 #efeeeb",
+    "본문 #615742",
+    "강조 #004f46"
+   ],
+   "warm-neutral": [
+    "바탕 #f2efe8",
+    "본문 #2f291e",
+    "강조 #004f46"
+   ],
+   "aerial": [
+    "먼 쪽 #e9eef2",
+    "중간 #33ccbb",
+    "가까운 쪽 #129143"
+   ]
+  }
+ }
+}

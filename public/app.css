@@ -363,11 +363,17 @@ a:hover {
 .swatch {
   display: flex;
 }
-.card--featured .swatch {
+/* **직속 자식만 겨냥한다.** 자손 선택자로 두면 카드 안의 파생 스와치(.expand__grid > .struct)까지
+   함께 걸린다 - 13단계에서 파생 팔레트가 카드 안으로 들어오면서 실제로 그렇게 됐다.
+   featured 카드 안 8장의 폭이 460px 로 고정되어 카드(298px) 밖으로 176px 넘쳤다(실측).
+   S15-G9 가 자손 선택자로 되돌아가는 것을 막는다. */
+.card--featured > .swatch {
   width: 460px;
   flex-shrink: 0;
 }
-.card:not(.card--featured) .swatch {
+/* 위와 같은 이유로 직속 자식만. 자손이면 normal 카드 안의 파생 스와치 높이가
+   42px -> 128px 로 고정된다(실측). */
+.card:not(.card--featured) > .swatch {
   height: 128px;
 }
 .swatch__part {
@@ -533,7 +539,8 @@ a:hover {
   .card--featured {
     display: block;
   }
-  .card--featured .swatch {
+  /* 위 두 규칙과 같은 이유로 직속 자식만 (S15-G9). */
+  .card--featured > .swatch {
     width: auto;
     height: 148px;
   }

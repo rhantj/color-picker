@@ -11,8 +11,16 @@
 | 종류 | 위치 | 언제 쓰나 |
 |---|---|---|
 | 일반 문서 | `docs/com/` | 설계·명세·조사·가이드 등 상시 참조 문서 |
+| 브레인스토밍 스펙 | `docs/superpowers/specs/` | `brainstorming` 스킬로 합의한 설계를 구현 착수 **전에** 고정할 때 |
 | 세션 재개 문서 | `docs/session-resume/` | **하나의 작업이 끝날 때마다** 반드시 작성 |
 | 트러블슈팅 | `docs/troubleshootings/` | 작업 중 문제가 생겼을 때 그 즉시 작성 |
+
+### 브레인스토밍 스펙 (`docs/superpowers/specs/`)
+
+- 파일명: `YYYY-MM-DD-<주제>-design.md` (`superpowers:brainstorming` 스킬의 기본 규약을 그대로 쓴다)
+- `docs/com/` 과 나누는 기준은 **시점**이다. 여기 있는 문서는 코드가 아직 없는 상태에서 합의된
+  것이고, 구현이 끝나 상시 참조 대상이 되면 `docs/com/` 으로 옮기거나 그쪽에서 새로 쓴다.
+- 스펙을 쓴 뒤 구현 계획은 `writing-plans` 스킬로 이어 간다.
 
 ### 세션 재개 문서 (`docs/session-resume/`)
 

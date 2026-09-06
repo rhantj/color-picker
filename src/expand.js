@@ -113,6 +113,26 @@ function midHue(a, b) {
    S11-G7 이 이 간격을 검사한다 — 앵커를 좁히면 게이트가 먼저 운다. */
 const L = { light: 0.93, upper: 0.72, mid: 0.5, lower: 0.32, dark: 0.15 };
 
+/** 앵커 값을 밖에서 읽는다. 검사기가 "이 명도가 앵커인가" 를 물으려면 필요하다. */
+export const ANCHORS = { ...L };
+
+/* ── 명도 방향 ────────────────────────────────────────────
+   여덟 구조는 원전의 **웹·앱 UI 색 결정** 절에서 왔고, 거기서 바탕이 밝은 것은 기본값이다.
+   그래서 파생 결과의 바탕이 거의 전부 흰색에 가깝다 — 16쌍 × 8구조 128장 중 112장(87.5%)의
+   바탕 명도가 l >= 0.90 이다(실측). 게임 씬처럼 어둠이 지배하는 화면은 전제가 다르다.
+
+   **앵커를 거울로 뒤집어 방향만 바꾼다.** 근거는 원전의 명도 그루핑 —
+   "명부·중간톤·암부 중 어느 덩어리가 가장 넓은 면적을 차지하는지 파악한다."
+
+   반사이지 압축이 아니므로 앵커 사이 간격이 그대로 보존된다. 그래서 S11-G7(명도 단계 최소
+   0.15)이 어두운 모드에서도 성립한다 — S15-G3 이 그것을 따로 검사한다. */
+export const MIRROR = { light: "dark", upper: "lower", mid: "mid", lower: "upper", dark: "light" };
+
+/** 명도 앵커만 뒤집는다. 채도 상한은 따라가지 않는다 — 아래 S_CAP 주석 참조. */
+const anchorFor = (key, mode) => (mode === "dark" ? MIRROR[key] : key);
+
+const isDark = (mode) => mode === "dark";
+
 /* 앵커별 채도 상한.
    HSL 의 s 는 지각 채도가 아니다. 실제로 눈에 보이는 채도는 C = (1-|2l-1|)·s 라 **명도가
    0.5 에 가까울수록 같은 s 가 더 쨍해진다.** 옥색(#00978D, s=1.0)을 명도만 0.5 로 올렸더니
@@ -131,9 +151,24 @@ const S_CAP = { light: 0.3, upper: 0.5, mid: 0.6, lower: 0.78, dark: 0.85 };
 /** 지각 채도. 눈에 보이는 쨍함은 s 가 아니라 이 값이다. */
 export const perceivedChroma = ({ s, l }) => (1 - Math.abs(2 * l - 1)) * s;
 
-/** 앵커 하나로 색을 옮긴다. 채도는 씨앗보다 올라가지 않고 앵커 상한도 넘지 않는다. */
-const step = (c, key, { h = c.h, k = 1 } = {}) =>
-  at(c, { h, l: L[key], s: Math.min(c.s * k, S_CAP[key]) });
+/**
+ * 앵커 하나로 색을 옮긴다. 채도는 씨앗보다 올라가지 않고 앵커 상한도 넘지 않는다.
+ *
+ * **명도만 거울을 타고 채도 상한은 안 탄다.** S_CAP 은 위 주석대로 "앵커가 맡는 **역할**에
+ * 맞춘 값" 이다 — `light` 가 가장 낮은 것은 그 자리가 언제나 바탕이라 조용해야 하기 때문이다.
+ * 바탕이 어느 명도로 가든 바탕은 조용해야 하므로, 상한은 규칙이 요청한 원래 키를 따른다.
+ * 거울을 채도에도 먹이면 어두운 모드의 바탕이 S_CAP.dark(0.85)를 쓰게 되어, 바탕을 조용하게
+ * 두려던 이유가 통째로 사라진다.
+ *
+ * 규칙은 이것을 **인자로 받는다.** 모듈 레벨에 기본 모드용 `step` 을 따로 두었다가 뺐다 —
+ * 모든 규칙이 인자를 구조 분해하므로 그 이름이 가려져 **아무도 쓰지 않는 죽은 코드**가 됐고,
+ * 뮤테이션(`makeStep("light")` → `makeStep("dark")`)으로 바꿔도 결과가 안 변해 게이트 여섯이
+ * 전부 조용했다. 죽은 갈래는 다음 사람에게 "여기를 고치면 기본 모드가 바뀐다"고 거짓말을 한다.
+ */
+const makeStep =
+  (mode) =>
+  (c, key, { h = c.h, k = 1 } = {}) =>
+    at(c, { h, l: L[anchorFor(key, mode)], s: Math.min(c.s * k, S_CAP[key]) });
 
 // 한난의 기준 색상각. 원전은 "따뜻한 뉴트럴(살구·아이보리)" 과 "먼 쪽은 한색" 이라고만 말하고
 // 각도를 말하지 않는다. 살구·아이보리가 앉는 자리와 하늘·그림자가 앉는 자리를 각으로 옮긴 값이다.
@@ -166,7 +201,7 @@ function splitSeed(colors) {
 
 const RULES = {
   // 색상 고정, 명도만 세로로. 세 색의 h 가 모두 같아야 이름값을 한다(S11-G6).
-  "tone-on-tone": ({ accent }) => [
+  "tone-on-tone": ({ accent, step }) => [
     { role: "바탕", hsl: step(accent, "light", { k: 0.35 }) },
     { role: "본문", hsl: step(accent, "mid") },
     { role: "강조", hsl: step(accent, "dark", { k: 0.8 }) },
@@ -179,8 +214,14 @@ const RULES = {
   // C = (1-|2l-1|)·s 가 둘 다를 넘는다 — 로즈핑크(C=0.533)×민트그린(C=0.706)에서 0.776 이
   // 나왔다(실측). 코퍼스 32색의 최대치(0.729)까지 넘는 값이라, 원전에 없는 강도의 색을 만든 것이다.
   // 그래서 평균 뒤에 **씨앗 중 높은 쪽의 지각 채도까지 s 를 되돌린다.**
-  "tone-in-tone": ({ ground, accent }) => {
-    const l = (ground.l + accent.l) / 2;
+  //
+  // **어두운 모드에서만 거울이 아니라 접기다.** 이 구조는 톤을 씨앗 명도의 평균에서 가져오므로
+  // 앵커가 없고, 그대로 반사(1-l)하면 **어두운 씨앗이 오히려 밝아진다** — pair-06 의 톤인톤은
+  // l=0.38 이라 반사하면 0.62 다. 그래서 어두운 쪽으로 접는다(min(l, 1-l)). 이미 어두우면
+  // 그대로 두는 것이 이 구조의 정의를 지키는 쪽이다 — 톤은 씨앗이 정한다.
+  "tone-in-tone": ({ ground, accent, mode }) => {
+    const mean = (ground.l + accent.l) / 2;
+    const l = isDark(mode) ? Math.min(mean, 1 - mean) : mean;
     const ceiling = Math.max(perceivedChroma(ground), perceivedChroma(accent));
     const span = 1 - Math.abs(2 * l - 1); // 이 명도에서 s=1 이 내는 지각 채도
     const s = Math.min((ground.s + accent.s) / 2, span === 0 ? 0 : ceiling / span);
@@ -198,21 +239,21 @@ const RULES = {
   // 정확히 180 을 연다. **씨앗의 관계를 이어받지 않는다** — 배색사전이 `보색` 이라 적은 7쌍의
   // 실제 색상환 간격은 113.8~177.4 도로 180 이 아니다(실측). `보색에 가까움` 1쌍(158.9)을
   // 더해 8쌍으로 봐도 범위는 같다. 이어받으면 이름과 결과가 어긋난다.
-  complementary: ({ accent }) => [
+  complementary: ({ accent, step }) => [
     { role: "바탕", hsl: step(accent, "light", { k: 0.2 }) },
     { role: "본문", hsl: step(accent, "lower", { k: 0.55 }) },
     { role: "강조", hsl: at(accent, { h: accent.h + 180 }) },
   ],
 
   // 인접한 각도만. 셋의 최대 간격이 50 이라 "이완" 쪽에 남는다.
-  analogous: ({ accent }) => [
+  analogous: ({ accent, step }) => [
     { role: "바탕", hsl: step(accent, "light", { h: accent.h - 25, k: 0.3 }) },
     { role: "본문", hsl: step(accent, "lower") },
     { role: "강조", hsl: at(accent, { h: accent.h + 25 }) },
   ],
 
   // 색상을 끝까지 미루고 명도 네 단계만 확보한다. 디자인 토큰을 짜는 순서 그대로다.
-  "value-scale": ({ accent }) => {
+  "value-scale": ({ accent, step }) => {
     // 스케일은 채도를 낮게 묶어야 단계가 명도로만 읽힌다. 앵커 상한보다 더 조인다.
     const base = { ...accent, s: Math.min(accent.s, 0.35) };
     return [
@@ -224,7 +265,7 @@ const RULES = {
   },
 
   // "나머지를 탁하게 눌러야 하나가 산다." 강조만 씨앗 원본이고 나머지는 채도를 뺀다.
-  "accent-by-chroma": ({ ground, accent }) => [
+  "accent-by-chroma": ({ ground, accent, step }) => [
     { role: "바탕", hsl: step(ground, "light", { k: 0.2 }) },
     { role: "본문", hsl: step(ground, "lower", { k: 0.3 }) },
     { role: "강조", hsl: accent },
@@ -233,19 +274,20 @@ const RULES = {
   // 흰색 대신 따뜻한 뉴트럴. 씨앗 중 난색에 **가까운 쪽**을 골라 그 색상각을 난색 구간으로 민다.
   // 회전량에 상한을 뒀다가 뺐다 — 옥색(175)·라벤더(246) 씨앗에서 40 만 돌리면 135(연두)에 멎어
   // "따뜻한 뉴트럴" 이라는 이름이 거짓말이 됐다(실측). 어느 씨앗을 쓸지만 씨앗이 정한다.
-  "warm-neutral": ({ ground, accent }) => {
+  // 이 구조만 step 을 안 쓰고 앵커를 직접 부른다. 그래서 거울도 직접 태운다.
+  "warm-neutral": ({ ground, accent, mode }) => {
     const warmer = hueGap(ground.h, WARM) <= hueGap(accent.h, WARM) ? ground : accent;
     // 뉴트럴은 씨앗 채도를 따라가지 않는다. 따라가면 고채도 씨앗에서 바탕이 살구가 아니라 주황이 된다.
     const neutral = { ...warmer, h: clampToWarm(warmer.h), s: 0.28 };
     return [
-      { role: "바탕", hsl: at(neutral, { l: L.light }) },
-      { role: "본문", hsl: at(neutral, { l: L.dark, s: 0.22 }) },
+      { role: "바탕", hsl: at(neutral, { l: L[anchorFor("light", mode)] }) },
+      { role: "본문", hsl: at(neutral, { l: L[anchorFor("dark", mode)], s: 0.22 }) },
       { role: "강조", hsl: accent },
     ];
   },
 
   // 먼 쪽은 대비·채도를 낮추고 한색으로, 가까운 쪽은 난색으로.
-  aerial: ({ accent }) => [
+  aerial: ({ accent, step }) => [
     { role: "먼 쪽", hsl: step(accent, "light", { h: rotateToward(accent.h, COOL, 30), k: 0.25 }) },
     { role: "중간", hsl: step(accent, "mid", { k: 0.6 }) },
     { role: "가까운 쪽", hsl: step(accent, "lower", { h: rotateToward(accent.h, WARM, 30) }) },
@@ -277,9 +319,15 @@ const validSeed = (palette) => {
  * **던지지 않는다.** 씨앗이 2색이 아니거나 헥스가 깨졌거나 없는 구조를 물으면 null 이다.
  * 코퍼스 오타 하나가 화면 전체를 내리면 안 된다 — src/bridge.js 가 같은 이유로 같은 선택을 했다.
  *
- * @returns {{id,name,principle,detail,source,colors:[{role,hex}]}|null}
+ * **`mode` 는 명도 방향이다.** 기본값 `"light"` 는 이 함수가 처음부터 내던 것과 **한 글자도
+ * 같은 결과**를 낸다 — S15-G1 이 변경 전 기준선과 대조해 그것을 검사한다. `"dark"` 는 명도
+ * 앵커를 거울로 뒤집는다. 알 수 없는 값은 밝은 쪽으로 읽는다: 이 함수는 던지지 않는 것이 계약이고,
+ * 오타 하나로 화면이 통째로 어두워지는 것보다 기본값으로 도는 편이 낫다.
+ *
+ * @param {{mode?: "light"|"dark"}} [options]
+ * @returns {{id,name,principle,detail,source,mode,colors:[{role,hex}]}|null}
  */
-export function expandSeed(palette, structureId, catalog = loadStructures()) {
+export function expandSeed(palette, structureId, catalog = loadStructures(), options) {
   const colors = validSeed(palette);
   if (!colors) return null;
 
@@ -287,8 +335,17 @@ export function expandSeed(palette, structureId, catalog = loadStructures()) {
   const rule = Object.hasOwn(RULES, String(structureId)) ? RULES[structureId] : null;
   if (!meta || !rule) return null;
 
+  // `{ mode = "light" } = {}` 로 받지 않는다. 구조 분해 기본값은 undefined 만 막고 **null 은 못 막아**
+  // `expandSeed(p, id, cat, null)` 이 던진다 — 이 함수의 계약("던지지 않는다")을 정면으로 깬다.
+  // 호출부가 `opts ?? null` 같은 흔한 형태를 쓰면 바로 닿는다. S15-G6 이 이 경로를 검사한다.
+  const direction = isDark(options?.mode) ? "dark" : "light";
   const { ground, accent } = splitSeed(colors);
-  const derived = rule({ ground: hexToHsl(ground.hex), accent: hexToHsl(accent.hex) });
+  const derived = rule({
+    ground: hexToHsl(ground.hex),
+    accent: hexToHsl(accent.hex),
+    step: makeStep(direction),
+    mode: direction,
+  });
 
   return {
     id: meta.id,
@@ -296,12 +353,13 @@ export function expandSeed(palette, structureId, catalog = loadStructures()) {
     principle: meta.principle,
     detail: meta.detail,
     source: meta.source,
+    mode: direction,
     seed: { id: palette.id ?? null, ground: ground.hex, accent: accent.hex },
     colors: derived.map(({ role, hsl }) => ({ role, hex: hslToHex(hsl) })),
   };
 }
 
 /** 씨앗 하나를 카탈로그 전부로 불린다. 무엇을 보여줄지 고르는 것은 이 파일의 일이 아니다. */
-export function expandAll(palette, catalog = loadStructures()) {
-  return catalog.map((s) => expandSeed(palette, s.id, catalog)).filter(Boolean);
+export function expandAll(palette, catalog = loadStructures(), options) {
+  return catalog.map((s) => expandSeed(palette, s.id, catalog, options)).filter(Boolean);
 }
