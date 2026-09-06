@@ -167,6 +167,53 @@ export function paletteCard(result, rank, { featured = false, actions = null, on
   return root;
 }
 
+/**
+ * 진단에서 조합으로 넘어가는 자리.
+ *
+ * 연결된 조합은 진단의 축이 팔레트 관계어를 그대로 써서 **코퍼스가 직접 가리키는 것**이다
+ * (18개 중 2개). 나머지는 아무것도 붙이지 않고 왜 없는지만 적는다.
+ *
+ * **처방을 검색어로 넣는 버튼을 뒀다가 뺐다 `[실측]`.** 처방 문장은 진단 코퍼스에서 온 텍스트라
+ * 진단 색인에 가장 잘 맞는다 — 18개를 전부 돌려 보니 팔레트 0건, 진단 18건이었고 그것도 모두
+ * 출발한 그 진단이 1위였다. 제자리로 돌아오는 고리다. 팔레트만 검색하도록 강제하는 변형도
+ * 답이 아니다. 그 경로는 `면적·순서` 가 `테라코타 × 회분홍` 을 무는 식의 낱말 겹침을 "확신" 으로
+ * 내놓는다. **없는 연결은 없다고 말하는 것이 화면이 할 수 있는 가장 정직한 일이다.**
+ */
+function bridgeSection(dx) {
+  const bridge = dx.bridge;
+  const box = el("div", "dx__bridge");
+
+  if (bridge?.palettes?.length) {
+    const axis = [bridge.hue, bridge.tone].filter(Boolean).join(" + ");
+    box.append(el("h4", "dx__bridge-title", `이 축에 맞는 조합 — ${axis}`));
+    const list = el("ul", "dx__bridge-list");
+    for (const p of bridge.palettes) {
+      const item = el("li", "dx__bridge-item");
+      const view = swatchView(p.colors, ratioFor(p));
+      view.node.classList.add("swatch--mini");
+      const text = el("div", "dx__bridge-text");
+      text.append(
+        el("b", "dx__bridge-name", p.name),
+        el("span", "dx__bridge-rel", `${p.hueRelation} · ${p.toneRelation}`),
+      );
+      item.append(view.node, text);
+      list.append(item);
+    }
+    box.append(list);
+    return box;
+  }
+
+  // 연결이 없다. **없다고 말하고 끝낸다.** 위 주석의 이유로 검색으로 때우지 않는다.
+  box.append(
+    el(
+      "p",
+      "dx__bridge-none",
+      "이 축은 조합의 관계(색상각·톤)를 말하지 않습니다. 코퍼스가 가리킬 조합이 없어 넘겨줄 것도 없습니다.",
+    ),
+  );
+  return box;
+}
+
 export function diagnosisCard(dx, rank) {
   const root = el("article", "dx");
   const head = el("div", "dx__head");
@@ -179,6 +226,7 @@ export function diagnosisCard(dx, rank) {
     head,
     el("p", "dx__prescription", dx.prescription),
     el("p", "dx__detail", dx.detail),
+    bridgeSection(dx),
     matchedTerms(dx.matched),
   );
   return root;

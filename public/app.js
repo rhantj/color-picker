@@ -198,6 +198,7 @@ function render(data) {
 
   if (isDiagnosis) {
     // 진단은 팔레트를 주지 않는다. 색 조합이 아니라 어느 축을 의심할지가 답이기 때문이다.
+    // 다만 축이 조합의 관계를 그대로 말하는 진단은 코퍼스가 조합을 가리킬 수 있다 — 그때만 잇는다.
     resultsTitle.textContent = "진단";
     resultsNote.textContent = "색 조합이 아니라 어느 축을 의심할지가 답입니다";
     data.diagnostics.forEach((dx, i) => diagnosisBox.append(diagnosisCard(dx, i + 1)));

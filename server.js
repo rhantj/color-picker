@@ -9,6 +9,7 @@ import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CorpusError } from "./src/palettes.js";
+import { palettesForAxis, relationVocabulary } from "./src/bridge.js";
 import { createPipeline } from "./src/pipeline.js";
 import { ensureRunning, refresh as refreshOllama } from "./src/ollama.js";
 import { warmUp } from "./src/rewrite.js";
@@ -130,15 +131,35 @@ const shapePalette = ({ doc, score, matched, wholeMatches }) => ({
   matched: shapeMatched(matched),
 });
 
-const shapeDiagnostic = ({ doc, score, matched, wholeMatches }) => ({
-  id: doc.id,
-  symptom: doc.symptom,
-  axis: doc.axis,
-  prescription: doc.prescription,
-  detail: doc.detail,
-  score: Number(score.toFixed(3)),
-  wholeMatches,
-  matched: shapeMatched(matched),
+// 관계 어휘는 팔레트 코퍼스에서 한 번만 읽는다. 코퍼스는 기동 때 고정된다.
+const relationVocab = relationVocabulary(pipeline.palettes);
+
+const shapeDiagnostic = ({ doc, score, matched, wholeMatches }) => {
+  const { hue, tone, matches } = palettesForAxis(doc.axis, pipeline.palettes, relationVocab);
+  return {
+    id: doc.id,
+    symptom: doc.symptom,
+    axis: doc.axis,
+    prescription: doc.prescription,
+    detail: doc.detail,
+    // **연결이 없어도 필드를 낸다.** 빼 버리면 화면이 "연결이 없다" 와 "서버가 아직 모른다" 를
+    // 구분하지 못해, 없는 것을 로딩 중으로 그리거나 그 반대를 하게 된다.
+    bridge: { hue, tone, palettes: matches.map(shapeBridgePalette) },
+    score: Number(score.toFixed(3)),
+    wholeMatches,
+    matched: shapeMatched(matched),
+  };
+};
+
+// 이어 붙인 조합은 목록에 얹는 것이라 검색 점수가 없다. 스와치를 그릴 만큼만 낸다.
+const shapeBridgePalette = (p) => ({
+  id: p.id,
+  name: p.name,
+  type: p.type,
+  hueRelation: p.hueRelation,
+  toneRelation: p.toneRelation,
+  summary: p.summary,
+  colors: p.colors,
 });
 
 async function handleSearch(res, params) {
