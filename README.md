@@ -19,7 +19,7 @@ Ollama 는 있으면 쓰고 없으면 안 쓴다. 죽어 있어도 검색은 그
 
 | 경로 | 무엇 |
 |---|---|
-| `/` | 자연어로 묻고 팔레트 또는 진단을 받는다. 면적 비율 슬라이더, 메모와 함께 조합 저장. 진단의 축이 조합의 관계를 말하면 그 조합을 이어 보여준다 |
+| `/` | 자연어로 묻고 팔레트 또는 진단을 받는다. 조합을 배색 구조로 펼치면 **로컬 LLM 이 여덟 중 다섯을 골라** 보여주고, 면적을 슬라이더로 맞춰 본다. 면적 비율 슬라이더, 메모와 함께 조합 저장. 진단의 축이 조합의 관계를 말하면 그 조합을 이어 보여준다 |
 | `/history` | 질문과 각 질문이 몇 단계에서 끝났는지. 이어서·다시 묻기 |
 | `/saved` | 저장한 조합. 비율 재조정, 메모 편집·삭제, CSS 변수·JSON 내보내기 |
 
@@ -33,6 +33,9 @@ Ollama 는 있으면 쓰고 없으면 안 쓴다. 죽어 있어도 검색은 그
                               └ 기타   → 못 잡음
 ```
 
+조합을 펼치면 그 씨앗이 배색 구조 8가지로 불어나고, **질의가 있을 때만** LLM 이 그중 다섯을 고른다.
+고르는 것은 구조 id 뿐이고 **헥스는 LLM 이 만들지 않는다** — 씨앗 색의 HSL 연산으로만 나온다.
+
 **대부분의 질의가 1단계에서 끝난다.** 문서가 말한 "60% 는 전문 검색 + 재작성에서 종료" 와 같은 방향.
 
 ## 코퍼스
@@ -41,9 +44,16 @@ Ollama 는 있으면 쓰고 없으면 안 쓴다. 죽어 있어도 검색은 그
 |---|---|---|
 | `data/palettes.json` | 배색 16쌍 | 와다 산조 『배색사전』 |
 | `data/diagnostics.json` | 진단 18건 (증상 → 축 → 처방) | color-design 스킬 본문. 항목마다 `source` 표기 |
+| `data/structures.json` | 배색 구조 8가지 (이름 · 원리 · 출처) | color-design 스킬 본문. 항목마다 `source` 표기 |
+| `data/seeds.json` | 씨앗 24쌍 (헥스 · 원명만) | 배색사전 원서의 공개 전사본. **해설이 없어 검색 색인에 넣지 않는다** — 씨앗 전용 |
+
+씨앗은 **40쌍**이다 — 해설까지 달린 코퍼스 16쌍과, 헥스만 있는 씨앗 풀 24쌍. 검색은 16쌍만 하고,
+배색 구조 확장은 40쌍 전부에 한다.
 
 **원전에 없는 것은 코퍼스에 넣지 않는다.** 면적 비율이 그래서 `public/ratio.js` 의 규칙으로 빠져
-있다 — 배색사전은 헥스와 인상만 적고 면적은 말하지 않는다.
+있다 — 배색사전은 헥스와 인상만 적고 면적은 말하지 않는다. 배색 구조의 파생 규칙(몇 도 벌리고
+채도를 몇 % 누르는지)도 같은 이유로 `src/expand.js` 에 있다. `data/structures.json` 에는
+**문자열만** 들어간다.
 
 ## 파일 지도
 
@@ -51,21 +61,23 @@ Ollama 는 있으면 쓰고 없으면 안 쓴다. 죽어 있어도 검색은 그
 |---|---|
 | 검색 | `src/tokenize.js`(어절+2-gram) · `src/bm25.js` · `src/stopwords.js` · `src/vocabulary.js` |
 | 코퍼스 | `src/palettes.js` · `src/diagnostics.js` · `data/*.json` |
-| LLM | `src/ollama.js`(수명주기) · `src/rewrite.js`(의도+재작성) |
+| LLM | `src/ollama.js`(수명주기) · `src/rewrite.js`(의도+재작성) · `src/structure.js`(구조 선택) |
+| 색 파생 | `src/expand.js`(씨앗 2색 → 배색 구조 8가지. HSL 연산만, LLM 안 닿음) · `src/seeds.js`(씨앗 풀 적재) |
 | 흐름 | `src/pipeline.js`(단계 승급) |
 | 저장 | `src/store.js` → `var/*.json` |
 | 내보내기 | `src/export.js` |
 | 서버 | `server.js` |
+| 면적 | `public/ratio.js`(2색 규칙 · 3색 이상 균등 · 슬라이더 재배분) |
 | 화면 | `public/` |
-| 게이트 | `GATES.md` + `scripts/check-stage{1..10}.mjs` |
+| 게이트 | `GATES.md` + `scripts/check-stage{1..14}.mjs` |
 
-## 게이트 67개
+## 게이트 99개
 
 ```bash
 node scripts/check-stage1.mjs S1-G1
 ```
 
-`GATES.md` 에 67개가 전부 있고 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
+`GATES.md` 에 99개가 전부 있고 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
 **게이트는 만들 때마다 일부러 망가뜨려 확인했다** — 통과하는 게이트보다 고장을 잡는 게이트가 목적이다.
 
 | 단계 | 수 | 무엇을 지키나 |
@@ -80,11 +92,15 @@ node scripts/check-stage1.mjs S1-G1
 | S8 | 7 | 저장 메모 입력 · 재저장 시 메모 보존 · 겹친 저장 · 전송 중 재오픈 차단 |
 | S9 | 6 | 저장 화면 메모 편집·삭제 · 다른 필드 불변 · 출처 검사 · id 가 조회 밖으로 안 샘 |
 | S10 | 7 | 진단→조합 연결 · **연결 안 될 것이 안 되는가** · 어휘를 코퍼스에서 읽는가 |
+| S11 | 10 | 씨앗 → 배색 구조 확장 · 헥스↔HSL 왕복 · **색을 지어내지 않는가** · 명도 위계 · 결정성 |
+| S12 | 6 | 씨앗 풀 무결성 · **없는 해설이 생기지 않는가** · 검색 색인 유입 차단 · 파일이 없어도 돎 |
+| S13 | 7 | 다색 면적 균등·합 100 · 슬라이더 재배분 불변식 · `/api/expand` · 파생색 대비 |
+| S14 | 9 | LLM 구조 선택 · **모델 출력 검증** · 질의 없으면 미호출 · 폴백 · 시간 초과 |
 
 ## 환경변수
 
 `PORT` `HOST` `OLLAMA_HOST` `OLLAMA_BIN` `OLLAMA_AUTOSTART=0` `OLLAMA_WARMUP=0`
-`OLLAMA_MODEL` `REWRITE_TIMEOUT_MS` `TONEFIRST_DATA_DIR`
+`OLLAMA_MODEL` `REWRITE_TIMEOUT_MS` `STRUCTURE_TIMEOUT_MS` `TONEFIRST_DATA_DIR`
 
 ## 알려진 한계 (의도적)
 

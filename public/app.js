@@ -1,6 +1,6 @@
 // 홈 화면. 렌더 조각은 ui.js 가 세 화면과 공유한다.
 
-import { api, diagnosisCard, el, paletteCard, refreshRuntime } from "./ui.js";
+import { api, diagnosisCard, el, paletteCard, refreshRuntime, structureCard } from "./ui.js";
 
 const form = document.getElementById("search-form");
 const input = document.getElementById("q");
@@ -108,7 +108,7 @@ function resultCard(result, rank, featured) {
   });
 
   button.addEventListener("click", save);
-  box.append(memo, button, feedback);
+  box.append(memo, button, feedback, expansionSection(result.id, lastQuery));
 
   return paletteCard(result, rank, {
     featured,
@@ -121,6 +121,114 @@ function resultCard(result, rank, featured) {
       reopen("이 비율로 저장");
     },
   });
+}
+
+/**
+ * 조합 하나를 배색 구조 여덟으로 펼치는 자리.
+ *
+ * **색을 보내지 않고 씨앗 id 만 보낸다.** 서버가 코퍼스·씨앗 풀에서 찾아 계산한다 —
+ * 화면이 준 색을 서버가 믿지 않는 규칙(S4)과 같은 자리다.
+ *
+ * 접힌 상태로 시작한다. 여덟 장을 늘 펼쳐 두면 결과 하나가 화면을 통째로 먹는다.
+ * 한 번 받아 온 것은 다시 받지 않는다 — 파생은 결정적이라(S11-G3) 같은 씨앗은 늘 같은 답이다.
+ */
+function expansionSection(seedId, query) {
+  const box = el("div", "expand");
+  const toggle = el("button", "expand__toggle", "배색 구조로 펼치기");
+  toggle.type = "button";
+  toggle.setAttribute("aria-expanded", "false");
+
+  const body = el("div", "expand__body");
+  body.hidden = true;
+
+  const note = el("p", "expand__note");
+  let loaded = false;
+  let pending = false;
+
+  toggle.addEventListener("click", async () => {
+    if (!body.hidden) {
+      body.hidden = true;
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.textContent = "배색 구조로 펼치기";
+      return;
+    }
+
+    body.hidden = false;
+    toggle.setAttribute("aria-expanded", "true");
+    toggle.textContent = "접기";
+    if (loaded || pending) return;
+
+    pending = true;
+    note.textContent = "펼치는 중…";
+    body.replaceChildren(note);
+    try {
+      const q = (query ?? "").trim();
+      const data = await api(
+        `/api/expand?seed=${encodeURIComponent(seedId)}${q ? `&q=${encodeURIComponent(q)}` : ""}`,
+      );
+      const byId = new Map(data.structures.map((st) => [st.id, st]));
+      const chosen = (data.selection?.ids ?? []).map((id) => byId.get(id)).filter(Boolean);
+      const rest = data.structures.filter((st) => !data.selection?.ids?.includes(st.id));
+
+      // **무엇이 골랐는지 밝힌다.** LLM 이 골랐는지 카탈로그 순서로 물러섰는지를 안 적으면,
+      // 사용자는 다섯이 자기 질문에 맞춰 뽑힌 것이라고 늘 믿게 된다.
+      note.replaceChildren();
+      const picked = data.selection?.from === "llm";
+      const matched = data.selection?.matched ?? 0;
+      note.append(
+        el("span", "status__badge", picked ? "LLM 이 고름" : "기본 순서"),
+        el(
+          "span",
+          "expand__note-text",
+          picked
+            ? // 문장을 조각내 잇지 않는다. 조건마다 온전한 문장을 쓴다 —
+              // 잇다가 "골랐고" + "습니다" 가 붙어 "골랐고습니다" 가 나갔다.
+              (matched < chosen.length
+                ? `로컬 LLM 이 ${matched}가지를 골랐고, 나머지 ${chosen.length - matched}가지는 기본 순서로 채웠습니다.`
+                : `질문에 맞는 ${matched}가지를 로컬 LLM 이 골랐습니다.`) +
+              " 색은 씨앗의 HSL 연산으로만 나왔고 LLM 은 색에 닿지 않습니다."
+            : `${data.selection?.error ? `${data.selection.error} — ` : ""}카탈로그 순서로 ${chosen.length}가지를 보여줍니다. 색은 씨앗의 HSL 연산으로만 나왔습니다.`,
+        ),
+      );
+      if (picked && data.selection?.elapsedMs != null) {
+        note.append(el("span", "status__timing", `${data.selection.model} · ${data.selection.elapsedMs}ms`));
+      }
+
+      const grid = el("div", "expand__grid");
+      for (const st of chosen) grid.append(structureCard(st));
+
+      body.replaceChildren(note, grid);
+
+      // 나머지는 지우지 않고 접어 둔다. 서버가 이미 계산해 둔 것이고, 고른 다섯이 마음에 안 들 때
+      // 사용자가 볼 자리가 있어야 한다.
+      if (rest.length) {
+        const moreBox = el("div", "expand__more");
+        const more = el("button", "expand__more-toggle", `나머지 ${rest.length}가지 보기`);
+        more.type = "button";
+        more.setAttribute("aria-expanded", "false");
+        const restGrid = el("div", "expand__grid");
+        restGrid.hidden = true;
+        for (const st of rest) restGrid.append(structureCard(st));
+        more.addEventListener("click", () => {
+          restGrid.hidden = !restGrid.hidden;
+          more.setAttribute("aria-expanded", String(!restGrid.hidden));
+          more.textContent = restGrid.hidden ? `나머지 ${rest.length}가지 보기` : "나머지 접기";
+        });
+        moreBox.append(more, restGrid);
+        body.append(moreBox);
+      }
+      loaded = true;
+    } catch (err) {
+      // 실패를 삼키면 사용자는 빈 칸을 보고 구조가 없다고 읽는다.
+      note.textContent = `펼치지 못했습니다 — ${err.message}`;
+      body.replaceChildren(note);
+    } finally {
+      pending = false;
+    }
+  });
+
+  box.append(toggle, body);
+  return box;
 }
 
 function renderStatus(data, error) {

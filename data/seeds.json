@@ -1,0 +1,347 @@
+{
+  "_source": "와다 산조(和田三造) 『배색사전』 원서의 공개 전사본에서 2색 조합만 추린 24쌍. 데이터 출처는 GitHub mattdesl/dictionary-of-colour-combinations (colors.json, 159색 · 348조합) 이고, 그 저장소가 원서를 전사한 것이다.",
+  "_whySeparate": "data/palettes.json 과 별개 파일이다. 그쪽 16쌍은 유형(A~D)·색상각/톤 관계·인상 설명까지 달린 큐레이션이고, 이 파일은 헥스와 원명뿐이다. 원전 해설이 없는 것을 있는 척 섞으면 검색과 진단 연결이 조용히 틀린 근거 위에서 돈다.",
+  "_notIndexed": "**이 파일은 BM25 색인에 들어가지 않는다.** 해설이 없어 자연어 질의로 잡힐 근거가 없고, 억지로 넣으면 색 이름 하나로 걸려 16쌍의 정답을 밀어낸다. 쓰임은 씨앗 하나뿐이다 — src/expand.js 가 배색 구조로 불릴 출발점. S12-G2 가 색인 유입을 막는다.",
+  "_noProse": "summary·impression·type·hueRelation·toneRelation·tags 를 넣지 않는다. 전사본이 주는 것은 헥스와 원명뿐이고, 나머지는 큐레이터의 판단이라 계산으로 재현되지 않는다 — 원전이 `보색` 이라 적은 7쌍의 색상각(113.8~177.4)과 `유사색` 6쌍(31.8~132.2)이 겹치고 뒤집힌다(실측). 지어내면 S10 의 진단→조합 연결이 틀린 문자열을 대조하게 된다.",
+  "_howPicked": "120개 2색 조합 중 (1) 코퍼스 16쌍과 쌍이 같거나 색을 하나라도 공유하는 것, (2) 강조색의 지각 채도가 코퍼스 하한에 못 미치는 것을 뺀 68개가 후보다. 색을 공유하면 파생 결과가 겹치고, 무채색에 가까우면 색상각이 정의되지 않아 보색대비·유사색대비가 이름값을 못 한다. 하한은 상수로 적지 않고 코퍼스 16쌍의 강조 채도 최솟값(0.176)을 계산해 읽는다 — 원전 큐레이션이 이미 그은 선이다. 거기서 강조색의 색상각을 30도 구획으로 나눠 조합 번호가 작은 것부터 돌아가며 24개를 뽑았다. 번호순으로 앞에서 자르면 12구획 중 5개가 비고 한 구획에 9개가 몰린다 — 라운드로빈은 빈 구획이 3개이고, 그 3개는 후보 자체에 없는 구간이다(실측).",
+  "_hexNote": "코퍼스와 겹치는 조합에서 두 전사본의 헥스가 정확히 일치한다 — 조합 #1 English Red #D96629 + Cerulian Blue #0093A5 가 pair-03 과 같고, #5 가 pair-13 과 같다. 120개 중 14개가 코퍼스 16쌍과 헥스까지 일치했다.",
+  "seeds": [
+    {
+      "id": "wada-002",
+      "no": 2,
+      "colors": [
+        {
+          "origName": "Yellow Orange",
+          "hex": "#F99D1B"
+        },
+        {
+          "origName": "Dark Tyrian Blue",
+          "hex": "#12354E"
+        }
+      ]
+    },
+    {
+      "id": "wada-004",
+      "no": 4,
+      "colors": [
+        {
+          "origName": "Isabella Color",
+          "hex": "#C5A56E"
+        },
+        {
+          "origName": "Red Violet",
+          "hex": "#59256A"
+        }
+      ]
+    },
+    {
+      "id": "wada-007",
+      "no": 7,
+      "colors": [
+        {
+          "origName": "Orange",
+          "hex": "#F37420"
+        },
+        {
+          "origName": "Glaucous Green",
+          "hex": "#B4CDC2"
+        }
+      ]
+    },
+    {
+      "id": "wada-009",
+      "no": 9,
+      "colors": [
+        {
+          "origName": "Violet Red",
+          "hex": "#642D5E"
+        },
+        {
+          "origName": "Dull Blue Violet",
+          "hex": "#80719E"
+        }
+      ]
+    },
+    {
+      "id": "wada-011",
+      "no": 11,
+      "colors": [
+        {
+          "origName": "Ivory Buff",
+          "hex": "#EBD3A2"
+        },
+        {
+          "origName": "Mineral Gray",
+          "hex": "#A2B0AD"
+        }
+      ]
+    },
+    {
+      "id": "wada-012",
+      "no": 12,
+      "colors": [
+        {
+          "origName": "Isabella Color",
+          "hex": "#C5A56E"
+        },
+        {
+          "origName": "Green Blue",
+          "hex": "#099197"
+        }
+      ]
+    },
+    {
+      "id": "wada-014",
+      "no": 14,
+      "colors": [
+        {
+          "origName": "Spinel Red",
+          "hex": "#F27291"
+        },
+        {
+          "origName": "Naples Yellow",
+          "hex": "#FBE6A0"
+        }
+      ]
+    },
+    {
+      "id": "wada-018",
+      "no": 18,
+      "colors": [
+        {
+          "origName": "Fawn",
+          "hex": "#D1B0A7"
+        },
+        {
+          "origName": "Dusky Madder Violet",
+          "hex": "#4E1D4C"
+        }
+      ]
+    },
+    {
+      "id": "wada-019",
+      "no": 19,
+      "colors": [
+        {
+          "origName": "Mars Brown Tobacco",
+          "hex": "#653514"
+        },
+        {
+          "origName": "Night Green",
+          "hex": "#87C540"
+        }
+      ]
+    },
+    {
+      "id": "wada-020",
+      "no": 20,
+      "colors": [
+        {
+          "origName": "Calamine BLue",
+          "hex": "#78CDD0"
+        },
+        {
+          "origName": "Laelia Pink",
+          "hex": "#CA92A8"
+        }
+      ]
+    },
+    {
+      "id": "wada-027",
+      "no": 27,
+      "colors": [
+        {
+          "origName": "Corinthian Pink",
+          "hex": "#F8B6BA"
+        },
+        {
+          "origName": "Slate Color",
+          "hex": "#34454C"
+        }
+      ]
+    },
+    {
+      "id": "wada-029",
+      "no": 29,
+      "colors": [
+        {
+          "origName": "Krongbergs Green",
+          "hex": "#84875E"
+        },
+        {
+          "origName": "Salvia Blue",
+          "hex": "#97ACC8"
+        }
+      ]
+    },
+    {
+      "id": "wada-030",
+      "no": 30,
+      "colors": [
+        {
+          "origName": "Pompeian Red",
+          "hex": "#AB2439"
+        },
+        {
+          "origName": "Mineral Gray",
+          "hex": "#A2B0AD"
+        }
+      ]
+    },
+    {
+      "id": "wada-032",
+      "no": 32,
+      "colors": [
+        {
+          "origName": "Ochraceous Salmon",
+          "hex": "#D8A37B"
+        },
+        {
+          "origName": "Night Green",
+          "hex": "#87C540"
+        }
+      ]
+    },
+    {
+      "id": "wada-037",
+      "no": 37,
+      "colors": [
+        {
+          "origName": "Brick Red",
+          "hex": "#A84222"
+        },
+        {
+          "origName": "Red Violet",
+          "hex": "#59256A"
+        }
+      ]
+    },
+    {
+      "id": "wada-038",
+      "no": 38,
+      "colors": [
+        {
+          "origName": "Diamine Green",
+          "hex": "#1A7444"
+        },
+        {
+          "origName": "Deep Lyons Blue",
+          "hex": "#1C4286"
+        }
+      ]
+    },
+    {
+      "id": "wada-040",
+      "no": 40,
+      "colors": [
+        {
+          "origName": "Vinaceous Tawny",
+          "hex": "#C56127"
+        },
+        {
+          "origName": "Citron Yellow",
+          "hex": "#B2B73E"
+        }
+      ]
+    },
+    {
+      "id": "wada-041",
+      "no": 41,
+      "colors": [
+        {
+          "origName": "Dark Citrine",
+          "hex": "#8B835B"
+        },
+        {
+          "origName": "Calamine BLue",
+          "hex": "#78CDD0"
+        }
+      ]
+    },
+    {
+      "id": "wada-044",
+      "no": 44,
+      "colors": [
+        {
+          "origName": "Light Porcelain Green",
+          "hex": "#00908A"
+        },
+        {
+          "origName": "Olympic Blue",
+          "hex": "#5A82B3"
+        }
+      ]
+    },
+    {
+      "id": "wada-046",
+      "no": 46,
+      "colors": [
+        {
+          "origName": "Orange",
+          "hex": "#F37420"
+        },
+        {
+          "origName": "Black",
+          "hex": "#111314"
+        }
+      ]
+    },
+    {
+      "id": "wada-064",
+      "no": 64,
+      "colors": [
+        {
+          "origName": "Aconite Violet",
+          "hex": "#A36AA5"
+        },
+        {
+          "origName": "Dark Soft Violet",
+          "hex": "#66629C"
+        }
+      ]
+    },
+    {
+      "id": "wada-067",
+      "no": 67,
+      "colors": [
+        {
+          "origName": "Olympic Blue",
+          "hex": "#5A82B3"
+        },
+        {
+          "origName": "Dark Tyrian Blue",
+          "hex": "#12354E"
+        }
+      ]
+    },
+    {
+      "id": "wada-083",
+      "no": 83,
+      "colors": [
+        {
+          "origName": "Olive Buff",
+          "hex": "#C1C494"
+        },
+        {
+          "origName": "Violet Blue",
+          "hex": "#40456A"
+        }
+      ]
+    },
+    {
+      "id": "wada-094",
+      "no": 94,
+      "colors": [
+        {
+          "origName": "Ivory Buff",
+          "hex": "#EBD3A2"
+        },
+        {
+          "origName": "Dusky Green",
+          "hex": "#004F46"
+        }
+      ]
+    }
+  ],
+  "_achromaticNote": "무채색 배제는 나중에 붙였다. 처음 뽑은 24쌍에 조합 #69(Warm Gray #A1A39A + Black #111314, 강조 채도 0.035)가 들어 있었고 S11-G6 이 잡았다 — 톤온톤이 색상을 80도 움직였다는 것이었는데, 실제로는 파생된 밝은 바탕이 순회색으로 반올림되며 색상각이 0으로 읽힌 것이다. 색상이 없는 색에서 색상각을 재면 그런 값이 나온다. 게이트를 느슨하게 하는 대신 씨앗을 뺐다 — 회색의 보색대비는 결과가 아니라 이름이 틀린 것이기 때문이다. 후보 69개 중 이 조건에 걸린 것은 하나뿐이고, 그다음으로 낮은 후보는 0.188 이라 경계가 붙어 있지 않다."
+}

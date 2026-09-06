@@ -24,6 +24,9 @@ import {
   updateSavedRatio,
 } from "./src/store.js";
 import { ratioFor } from "./public/ratio.js";
+import { expandAll, loadStructures } from "./src/expand.js";
+import { PICK_COUNT, selectStructures } from "./src/structure.js";
+import { loadSeeds, seedLabel } from "./src/seeds.js";
 import { FORMATS } from "./src/export.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("./public/", import.meta.url));
@@ -248,6 +251,34 @@ async function readJsonBody(req) {
 
 const paletteById = (id) => pipeline.palettes.find((p) => p.id === id);
 
+// 씨앗 풀은 기동 시 한 번만 읽는다. 코퍼스와 같은 이유다 - 요청마다 디스크를 다시 읽을 게 없다.
+// 없으면 빈 배열이고, 그래도 코퍼스 16쌍은 그대로 확장된다(S12-G4).
+const seedPool = loadSeeds();
+
+// 구조 카탈로그도 기동 시 한 번만 읽는다. LLM 프롬프트가 이 이름·원리를 그대로 쓰므로,
+// 요청마다 다시 읽으면 같은 질의가 파일 수정 순간에 다른 프롬프트를 받는다.
+// **detail 을 떨어뜨리지 않는다.** 프롬프트가 그것을 쓴다 — principle 은 기법만 말하고 증상 낱말이
+// 없어서, 여기서 빼면 "평면적이고 깊이가 없어요" 가 공기원근에 못 닿는다. 실제로 한 번 빠뜨렸고,
+// 프롬프트의 detail 자리가 늘 빈 문자열이라 개선이 통째로 무효였다. S14-G9 가 이제 그것을 검사한다.
+const structureCatalog = loadStructures().map((x) => ({
+  id: x.id,
+  name: x.name,
+  principle: x.principle,
+  detail: x.detail,
+}));
+
+/**
+ * 확장할 씨앗을 찾는다. **코퍼스와 씨앗 풀 양쪽을 본다** - 씨앗 풀이 생기면서 조회 자리가 둘이 됐고,
+ * 한쪽만 보면 24쌍이 화면에서 통째로 사라진다.
+ */
+const seedById = (id) => {
+  const wanted = String(id ?? "");
+  const corpus = pipeline.palettes.find((p) => p.id === wanted);
+  if (corpus) return { seed: corpus, label: corpus.name, from: "corpus" };
+  const pooled = seedPool.find((s) => s.id === wanted);
+  return pooled ? { seed: pooled, label: seedLabel(pooled), from: "pool" } : null;
+};
+
 async function handleWrite(req, res, pathname) {
   if (!isTrustedWrite(req)) {
     return sendJson(res, 403, { error: "이 화면에서 보낸 요청이 아니다" });
@@ -329,6 +360,63 @@ async function handleStatus(res) {
   });
 }
 
+/**
+ * 씨앗 하나를 배색 구조 여덟으로 펼친다.
+ *
+ * **색은 요청에서 받지 않는다.** id 만 받아 서버가 코퍼스·씨앗 풀에서 찾아 계산한다 —
+ * 클라이언트가 준 색을 믿지 않는 S4 규칙과 같은 자리다. 헥스를 받으면 이 화면이
+ * "배색사전이 말하는 조합" 이라고 이름 붙인 자리에 아무 색이나 넣을 수 있게 된다.
+ *
+ * 면적 비율도 여기서 내려보내지 않는다. 화면이 public/ratio.js 로 계산한다 - 검색 응답과 같은 규칙이다.
+ *
+ * **여덟을 전부 내려보내고, 무엇을 먼저 보일지는 selection 으로 따로 말한다.** 다섯만 내려보내면
+ * LLM 이 실패했을 때 화면이 그 사실을 모른 채 다섯만 그리게 되고, 나머지 셋은 서버가 이미 계산해
+ * 둔 것을 버리는 셈이 된다. 파생은 결정적이므로(S11-G3) 여덟을 다 주는 비용이 사실상 없다.
+ */
+async function handleExpand(res, params) {
+  const id = params.get("seed");
+  if (id === null || id.trim() === "") return sendJson(res, 400, { error: "seed 가 비어 있다" });
+  if (id.length > 60) return sendJson(res, 400, { error: "seed 가 너무 길다" });
+
+  const found = seedById(id);
+  // 없는 씨앗을 빈 결과로 돌려주면 화면이 "구조가 없는 조합" 으로 그린다. 없는 것과 다르다.
+  if (!found) return sendJson(res, 404, { error: "없는 씨앗이다" });
+
+  const structures = expandAll(found.seed).map((st) => ({
+    id: st.id,
+    name: st.name,
+    principle: st.principle,
+    source: st.source,
+    colors: st.colors,
+  }));
+
+  // 질의가 있을 때만 LLM 이 고른다. 없으면 selectStructures 가 부르지 않고 카탈로그 순서로 돌려준다.
+  const query = params.get("q") ?? "";
+  const picked = await selectStructures(query, structureCatalog, PICK_COUNT);
+
+  sendJson(res, 200, {
+    seed: {
+      id: found.seed.id,
+      label: found.label,
+      from: found.from,
+      colors: found.seed.colors.map((c) => ({ hex: c.hex, name: c.name ?? c.origName })),
+    },
+    structures,
+    selection: {
+      ids: picked.ids,
+      from: picked.from,
+      count: PICK_COUNT,
+      // 모델이 실제로 보탠 개수. 다섯 중 둘만 골랐는데 "다섯을 골랐다" 고 말하지 않기 위해서다.
+      matched: picked.matched ?? 0,
+      model: picked.model ?? null,
+      elapsedMs: picked.elapsedMs ?? null,
+      // /api/status·재작성과 같은 경계. 실패 사유에 OLLAMA_HOST 나 스폰 상세가 들어가므로
+      // 루프백 밖에 바인딩했다면 원문을 내보내지 않는다.
+      error: picked.error ? (LOOPBACK_ONLY ? picked.error : "구조 선택을 쓸 수 없습니다") : null,
+    },
+  });
+}
+
 function dispatch(req, res, url) {
   if (req.method === "POST") return handleWrite(req, res, url.pathname);
   if (req.method !== "GET") return sendJson(res, 405, { error: "GET·POST 만 받는다" });
@@ -338,6 +426,7 @@ function dispatch(req, res, url) {
   if (url.pathname === "/api/conversations") return handleConversations(res, url.searchParams);
   if (url.pathname === "/api/saved") return sendJson(res, 200, { saved: listSaved(), limits: LIMITS });
   if (url.pathname === "/api/export") return handleExport(res, url.searchParams);
+  if (url.pathname === "/api/expand") return handleExpand(res, url.searchParams);
   return serveStatic(res, url.pathname);
 }
 

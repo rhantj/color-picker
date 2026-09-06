@@ -2,7 +2,7 @@
 // innerHTML 로 조립하는 곳이 하나도 없어야 이 규칙이 유지된다.
 
 import { labelColor } from "./color.js";
-import { ratioFor } from "./ratio.js";
+import { equalShares, ratioFor, redistribute, shareBounds } from "./ratio.js";
 
 export const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -52,7 +52,7 @@ export function swatchView(colors, ratio) {
     colors.forEach((color, i) => {
       parts[i].style.width = `${next[i]}%`;
       parts[i].style.background = color.hex;
-      labels[i].textContent = `${color.hex} · ${next[i]}%`;
+      labels[i].textContent = color.role ? `${color.role} · ${next[i]}%` : `${color.hex} · ${next[i]}%`;
       labels[i].style.color = labelColor(color.hex);
     });
   };
@@ -122,6 +122,109 @@ export function ratioControl({ colors, value, defaultValue, onInput, onCommit })
  * @param options.onRatio 비율이 바뀔 때 호출. 주면 슬라이더가 붙는다.
  * @param options.actions 카드 본문에 넣을 동작 영역
  */
+/**
+ * 색이 셋 이상인 팔레트의 면적 슬라이더. 색마다 하나씩 붙는다.
+ *
+ * 왜 2색용 ratioControl 을 쓰지 않나: 그건 슬라이더 하나로 [v, 100-v] 를 만든다. 색이 셋이면
+ * 나머지 둘 사이를 어떻게 나눌지 말할 방법이 없다.
+ *
+ * 왜 기본이 균등인가: **3색 이상의 면적에는 원전도 실측도 없다.** 2색에는 규칙이 있지만
+ * (public/ratio.js) 그건 배색사전 D형 9쌍을 재서 얻은 것이고, 파생 팔레트에는 그런 근거가 없다.
+ * 규칙을 지어내는 대신 균등으로 두고 사용자가 옮겨 보게 한다 — 이 사이트가 "같은 헥스도 비율이
+ * 바뀌면 다른 색" 이라고 주장하므로, 그 주장을 만질 수 있게 하는 것이 규칙을 만드는 것보다 정직하다.
+ *
+ * 합이 100 이라는 것과 최소 지분은 redistribute() 가 지킨다(S13-G3). 여기서는 그리기만 한다.
+ */
+export function shareControl({ colors, value, onInput }) {
+  const box = el("div", "shares");
+  const bounds = shareBounds(colors.length);
+  const start = value ?? equalShares(colors.length);
+  let shares = start.slice();
+
+  const rows = colors.map((color, i) => {
+    const row = el("div", "shares__row");
+    const id = `share-${Math.random().toString(36).slice(2, 8)}-${i}`;
+
+    const swatch = el("span", "shares__dot");
+    swatch.style.background = color.hex;
+
+    const label = el("label", "shares__name", color.role ?? color.name ?? color.hex);
+    label.htmlFor = id;
+
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.id = id;
+    slider.className = "shares__slider";
+    // 슬라이더 범위를 여기서 따로 계산하지 않는다. redistribute 와 갈리면 사용자가 움직인 값을
+    // 계산이 조용히 되돌린다 — S5-G4 가 2색에서 같은 이유로 같은 규칙을 건다.
+    slider.min = String(bounds.min);
+    slider.max = String(bounds.max);
+    slider.step = String(RATIO_STEP);
+
+    const readout = el("span", "shares__readout");
+
+    slider.addEventListener("input", () => {
+      shares = redistribute(shares, i, Number(slider.value));
+      paint();
+      onInput?.(shares.slice());
+    });
+
+    row.append(swatch, label, slider, readout);
+    return { row, slider, readout, color };
+  });
+
+  function paint() {
+    rows.forEach((r, i) => {
+      r.slider.value = String(shares[i]);
+      r.readout.textContent = `${shares[i]}%`;
+      r.slider.setAttribute(
+        "aria-valuetext",
+        `${r.color.role ?? r.color.hex} ${shares[i]}%`,
+      );
+    });
+  }
+
+  const reset = el("button", "shares__reset", "균등으로");
+  reset.type = "button";
+  reset.addEventListener("click", () => {
+    shares = equalShares(colors.length);
+    paint();
+    onInput?.(shares.slice());
+  });
+
+  paint();
+  box.append(...rows.map((r) => r.row), reset);
+  return { node: box, shares: () => shares.slice() };
+}
+
+/**
+ * 씨앗 하나를 펼친 배색 구조 카드 하나.
+ *
+ * 구조 이름과 원리는 data/structures.json 이 원전에서 옮겨 온 문장이라 그대로 보이고,
+ * 어느 절에서 왔는지(source)도 함께 적는다 — 화면이 근거 없이 말하지 않게 하려는 것이다.
+ */
+export function structureCard(structure) {
+  const card = el("article", "struct");
+
+  const head = el("div", "struct__head");
+  head.append(
+    el("h4", "struct__name", structure.name),
+    el("span", "struct__source", structure.source),
+  );
+
+  const ratio = ratioFor(structure);
+  const view = swatchView(structure.colors, ratio);
+
+  const control = shareControl({
+    colors: structure.colors,
+    value: ratio,
+    onInput: (next) => view.set(next),
+  });
+
+  card.append(head, el("p", "struct__principle", structure.principle), view.node, control.node);
+  return card;
+}
+
 export function paletteCard(result, rank, { featured = false, actions = null, onRatio = null } = {}) {
   const root = el("article", featured ? "card card--featured" : "card");
   const body = el("div", "card__body");
