@@ -174,7 +174,7 @@ const gates = {
     // 저장 요청 본문에 note 를 싣는다.
     // **주석을 먼저 걷어낸다.** "구간 안에 note 라는 낱말이 있는가" 만 보면, 전송 코드를 지우고
     // 그 자리에 note 가 든 주석만 남겨도 통과한다. 이 게이트가 막으려는 바로 그 회귀다.
-    const stripped = app.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    const stripped = app.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
     const call = stripped.match(/api\(\s*["']\/api\/saved["'][\s\S]{0,400}?\n\s*\}\);/);
     if (!call) bad.push("/api/saved 호출 본문을 못 찾았다");
     // 낱말이 아니라 **객체에 실리는 형태**를 본다 — `note` 키이거나 `note` 를 펼치는 스프레드.

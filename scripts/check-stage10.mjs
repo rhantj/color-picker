@@ -134,7 +134,7 @@ const gates = {
       .map(read)
       .join("\n")
       .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/\/\/[^\n]*/g, "");
+      .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
 
     // 관계어가 코드에 문자열 리터럴로 박혀 있으면 안 된다.
     for (const value of [...new Set([...palettes.map((p) => p.hueRelation), ...palettes.map((p) => p.toneRelation)])]) {
@@ -235,6 +235,9 @@ const gates = {
       ["필드 없음", [{ ...two[0], hueRelation: undefined }, two[1]]],
       ["null", [{ ...two[0], hueRelation: null }, two[1], { ...two[0], id: "x", hueRelation: "유사색" }]],
       ["톤도 빈 문자열", [{ ...two[0], toneRelation: "" }, two[1]]],
+      // **내용에 공백이 섞인 값.** trim 으로 검사하고 원본을 저장하면 여기서 갈린다 —
+      // 필터는 통과하는데 축 문자열에는 공백 없는 형태만 있어 매치가 조용히 실패한다.
+      ["앞뒤 공백이 붙은 값", [{ ...two[0], hueRelation: " 유사색 " }, two[1]]],
     ];
 
     for (const [label, list] of cases) {
@@ -246,9 +249,13 @@ const gates = {
         continue;
       }
       // 빈 값은 어휘에 들어오면 안 된다. 들어오면 모든 축에 걸린다.
+      // **다듬리지 않은 값도 안 된다** — 필터는 통과하는데 축에는 공백 없는 형태만 있어
+      // 매치가 조용히 실패한다. 에러도 경고도 없이 연결이 하나 사라진다.
       for (const v of [...vocab.hues, ...vocab.tones]) {
         if (typeof v !== "string" || v.trim() === "") {
           bad.push(`${label}: 빈 관계값이 어휘에 들어갔다 — ${JSON.stringify(v)}`);
+        } else if (v !== v.trim()) {
+          bad.push(`${label}: 다듬리지 않은 관계값이 어휘에 들어갔다 — ${JSON.stringify(v)}`);
         }
       }
       // 관계를 말하지 않는 축에는 여전히 아무것도 안 붙어야 한다.
@@ -267,7 +274,7 @@ const gates = {
   // 화면이 둘을 구분해 만든다. 정적 검사다 — 회귀 스모크지 동작 증명이 아니다.
   async "S10-G6"() {
     const bad = [];
-    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
     const ui = strip(read("public/ui.js"));
     const app = strip(read("public/app.js"));
     const both = ui + "\n" + app;

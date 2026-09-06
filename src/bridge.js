@@ -33,7 +33,11 @@ const byLengthDesc = (a, b) => b.length - a.length;
  */
 const usableRelation = (v) => typeof v === "string" && v.trim() !== "";
 
-const uniqueSorted = (values) => [...new Set(values.filter(usableRelation))].sort(byLengthDesc);
+// **다듬은 값을 넣는다.** 다듬은 것으로 검사하고 원본을 넣으면 둘이 갈린다 — `" 유사색"` 은
+// 필터를 통과하지만 축 문자열에는 공백 없는 형태만 있어 매치가 조용히 실패한다. 에러도 경고도
+// 없이 연결이 하나 사라지고, 원인을 찾기가 매우 어렵다.
+const uniqueSorted = (values) =>
+  [...new Set(values.filter(usableRelation).map((v) => v.trim()))].sort(byLengthDesc);
 
 /**
  * 팔레트 코퍼스에서 관계 어휘를 읽는다. 상수로 박지 않는 이유는 위 주석에 있다.

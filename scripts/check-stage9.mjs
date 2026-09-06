@@ -178,7 +178,7 @@ const gates = {
   async "S9-G4"() {
     const bad = [];
     // 주석을 걷어낸다. 주석에 낱말만 남겨도 통과하는 것을 막는다.
-    const saved = read("public/saved.js").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    const saved = read("public/saved.js").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
 
     if (!/el\(\s*["'](?:textarea|input)["']/.test(saved)) {
       bad.push("메모를 받을 input/textarea 를 만드는 곳이 없다");
