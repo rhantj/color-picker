@@ -259,6 +259,30 @@ export function updateSavedRatio(id, value, defaultsFor = null) {
   });
 }
 
+/**
+ * 저장된 조합의 메모만 바꾼다. 색도 비율도 건드리지 않는다.
+ *
+ * 빈 값과 공백만 있는 값은 **지우기**다. 저장 경로(`savePalette`)에서 안 보낸 것과 빈 값을
+ * 가르는 것과 같은 규칙인데, 여기서는 "안 보냄" 이라는 상태가 없다 — 이 함수를 부르는 것
+ * 자체가 메모를 정하겠다는 뜻이라 `undefined` 를 이어받기로 해석할 자리가 없다.
+ */
+export function updateSavedNote(id, note) {
+  const wanted = clip(id, 60);
+  if (!ID_SHAPE.test(wanted)) return Promise.reject(new Error("잘못된 id"));
+  // 상한 초과는 거부가 아니라 절단이다. 저장 경로와 같은 규칙이어야 사용자가 어느 쪽에서
+  // 적었는지에 따라 다르게 동작하지 않는다.
+  const next = clip(note, LIMITS.noteChars);
+
+  return serialize(() => {
+    const all = listSaved();
+    const entry = all.find((s) => s.id === wanted);
+    if (!entry) throw new Error("없는 항목이다");
+    entry.note = next;
+    writeJson("saved.json", all);
+    return entry;
+  });
+}
+
 export function deleteSaved(id) {
   const wanted = clip(id, 60);
   if (!ID_SHAPE.test(wanted)) return Promise.reject(new Error("잘못된 id"));

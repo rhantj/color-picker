@@ -12,7 +12,16 @@ import { CorpusError } from "./src/palettes.js";
 import { createPipeline } from "./src/pipeline.js";
 import { ensureRunning, refresh as refreshOllama } from "./src/ollama.js";
 import { warmUp } from "./src/rewrite.js";
-import { LIMITS, deleteSaved, listConversations, listSaved, recordTurn, savePalette, updateSavedRatio } from "./src/store.js";
+import {
+  LIMITS,
+  deleteSaved,
+  listConversations,
+  listSaved,
+  recordTurn,
+  savePalette,
+  updateSavedNote,
+  updateSavedRatio,
+} from "./src/store.js";
 import { ratioFor } from "./public/ratio.js";
 import { FORMATS } from "./src/export.js";
 
@@ -244,6 +253,9 @@ async function handleWrite(req, res, pathname) {
         return palette ? ratioFor(palette) : null;
       };
       return sendJson(res, 200, await updateSavedRatio(body.id, body.ratio, defaultsFor));
+    }
+    if (pathname === "/api/saved/note") {
+      return sendJson(res, 200, await updateSavedNote(body.id, body.note));
     }
     if (pathname === "/api/saved/delete") {
       return sendJson(res, 200, await deleteSaved(body.id));

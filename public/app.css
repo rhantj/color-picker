@@ -838,14 +838,42 @@ a:hover {
   color: var(--ink-faint);
 }
 
-/* 저장 카드의 부가 정보 */
-.card__note {
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--ink);
-  margin: 0;
+/* 저장 카드의 메모 — 읽기 전용 문단이었다가 편집 칸이 됐다.
+   왼쪽 선을 유지해 카드 안에서 "적어 둔 것" 이라는 자리는 그대로 읽히게 한다. */
+.card__note-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   padding-left: 12px;
   border-left: 2px solid var(--line-strong);
+}
+.card__note-input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.card__note-input::placeholder {
+  color: var(--ink-muted);
+}
+.card__note-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+.card__note-input:disabled {
+  color: var(--ink-muted);
+}
+.card__note-status {
+  font-size: 12px;
+  color: var(--ink-muted);
+  min-height: 1em;
 }
 .card__meta {
   display: flex;
@@ -929,7 +957,8 @@ a:hover {
   .action,
   /* 같은 줄에 놓이므로 버튼만 커지면 입력만 작게 남는다. 이 저장소는 손가락 조작 요소를
      44px 로 올리는 규칙을 세 곳에서 이미 지키고 있다. */
-  .action__memo {
+  .action__memo,
+  .card__note-input {
     min-height: 44px;
   }
 }

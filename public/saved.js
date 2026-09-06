@@ -4,6 +4,71 @@ import { api, el, formatWhen, ratioControl, refreshRuntime, swatchView } from ".
 
 const list = document.getElementById("list");
 
+// 서버의 LIMITS.noteChars 와 **같아야 한다.** 어긋나면 사용자는 다 썼다고 보는데 서버가 조용히
+// 잘라, 저장된 뒤에야 알게 된다. 이 화면은 한계값을 받아오지 않으므로 S9-G4 가 두 값을 대조한다.
+const NOTE_MAX = 200;
+
+/**
+ * 메모 편집 칸. **포커스를 뗄 때** 저장한다 — 비율이 슬라이더에서 손을 뗄 때 저장하는 것과
+ * 같은 모양이다. 글자마다 보내면 요청이 쏟아지고, 버튼을 따로 두면 비율만 자동인 이유를
+ * 사용자가 알 수 없다.
+ *
+ * 값이 실제로 바뀐 경우에만 보낸다. 그냥 지나쳐 포커스만 스친 것으로 쓰기를 만들지 않는다.
+ * **빈 값은 지우기다** — 홈에서 못 하던 것이 여기서 열린다.
+ */
+function noteField(entry) {
+  const wrap = el("div", "card__note-edit");
+
+  const input = el("input", "card__note-input");
+  input.type = "text";
+  input.maxLength = NOTE_MAX;
+  input.value = entry.note ?? "";
+  input.placeholder = "메모 (선택) — 어디에 쓸 색인지";
+  input.setAttribute("aria-label", `${entry.name} 조합의 메모`);
+
+  const status = el("span", "card__note-status");
+
+  // 마지막으로 서버가 받아들인 값. 실패 롤백과 "바뀌었는가" 판정이 둘 다 여기를 본다 —
+  // 최초 로드 값으로 판정하면 한 번 성공한 뒤의 재편집을 안 보낸다.
+  let committed = entry.note ?? "";
+
+  // 전송 중인지를 **핸들러가 읽는 상태**로 따로 잡는다. `input.disabled` 를 세팅만 하고
+  // 가드로 쓰지 않으면, 전송이 끝나기 전에 blur 가 한 번 더 들어올 때 `committed` 가 아직
+  // 옛 값이라 두 번째 요청이 그대로 나간다 — 실측으로 요청이 2건 나가는 것을 확인했다.
+  // 브라우저가 포커스를 막는 것과 핸들러가 가드하는 것은 다르다. 이 저장소는 홈 화면에서
+  // 이미 같은 형태로("전송 중" 과 "저장 완료" 를 disabled 하나로 겸해) 중복 전송을 열었다.
+  let pending = false;
+
+  input.addEventListener("blur", async () => {
+    if (pending) return;
+    const next = input.value.trim();
+    if (next === committed) return;
+
+    pending = true;
+    input.disabled = true;
+    status.textContent = "저장 중…";
+    try {
+      await api("/api/saved/note", { id: entry.id, note: next });
+      committed = next;
+      status.textContent = next ? "메모를 저장했습니다" : "메모를 지웠습니다";
+    } catch (err) {
+      status.textContent = err.message;
+      input.value = committed; // 실패하면 서버가 아는 값으로 되돌린다
+    } finally {
+      pending = false;
+      input.disabled = false;
+    }
+  });
+
+  // Enter 로도 끝낼 수 있게 한다. blur 가 실제 저장을 맡으므로 경로는 하나다.
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") input.blur();
+  });
+
+  wrap.append(input, status);
+  return wrap;
+}
+
 function savedCard(entry, onRemoved) {
   const root = el("article", "card");
   const body = el("div", "card__body");
@@ -22,7 +87,7 @@ function savedCard(entry, onRemoved) {
   }
 
   body.append(head, coords, el("p", "card__text", entry.summary));
-  if (entry.note) body.append(el("p", "card__note", entry.note));
+  body.append(noteField(entry));
 
   // 저장된 조합도 비율을 다시 만질 수 있다. 저장은 슬라이더에서 손을 뗐을 때 한 번만 한다.
   // 마지막으로 서버가 받아들인 값. 실패 롤백이 여기로 돌아간다 —
@@ -64,7 +129,9 @@ function savedCard(entry, onRemoved) {
     remove.disabled = true;
     try {
       await api("/api/saved/delete", { id: entry.id });
-      onRemoved();
+      // **지운 카드만 걷어낸다.** 목록을 통째로 다시 그리면 다른 카드에서 아직 blur 하지 않은
+      // 메모(= 서버로 안 보낸 입력)가 원래 값으로 되돌아가 조용히 사라진다.
+      onRemoved(root);
     } catch (err) {
       feedback.textContent = err.message;
       remove.disabled = false;
@@ -77,15 +144,23 @@ function savedCard(entry, onRemoved) {
   return root;
 }
 
+const EMPTY_TEXT = "저장한 조합이 없습니다. 홈에서 추천을 받고 ‘조합 저장’ 을 누르세요.";
+
+/** 카드 하나가 지워졌을 때. 목록을 다시 받지 않고 그 노드만 뗀다 — 나머지 카드의 입력을 지킨다. */
+function dropCard(node) {
+  node.remove();
+  if (!list.querySelector(".card")) list.replaceChildren(el("p", "empty", EMPTY_TEXT));
+}
+
 async function load() {
   try {
     const { saved } = await api("/api/saved");
     list.replaceChildren();
     if (saved.length === 0) {
-      list.append(el("p", "empty", "저장한 조합이 없습니다. 홈에서 추천을 받고 ‘조합 저장’ 을 누르세요."));
+      list.append(el("p", "empty", EMPTY_TEXT));
       return;
     }
-    for (const entry of saved) list.append(savedCard(entry, load));
+    for (const entry of saved) list.append(savedCard(entry, dropCard));
   } catch (err) {
     list.replaceChildren(el("p", "empty", `불러오지 못했습니다 — ${err.message}`));
   }
