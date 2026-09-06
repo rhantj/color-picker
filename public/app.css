@@ -861,7 +861,9 @@ a:hover {
   flex: 1 0 100%;
   min-width: 0;
   padding: 7px 10px;
-  border: 1px solid var(--line);
+  /* 테두리를 두른 입력·버튼은 이 파일에서 전부 --line-strong 을 쓴다(.searchbar__field, .action 등).
+     --line 은 더 옅어 흰 배경에서 경계가 거의 안 보인다. */
+  border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: var(--surface);
   color: var(--ink);

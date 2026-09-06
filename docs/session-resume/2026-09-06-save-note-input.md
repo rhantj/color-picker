@@ -105,9 +105,13 @@ S6-G7(메모의 CSS 주석 주입 방어)은 주석을 걷어낸 뒤 잔여물�
 
 ## 리뷰 기록
 
-`skills/code-review-ko` 팬아웃. 기준점 `9f55216`(SHA 명시 — 이 저장소는 `gh repo create --source`
-로 만들어져 `origin/HEAD` ref 가 없다). **총 8콜** — Claude 3종(`typescript`·`security`·`code`)
-× 2라운드 + Codex × 2라운드. 상한 20 이내.
+`skills/code-review-ko` 팬아웃. 기준점 `9f55216`(SHA 명시). **총 8콜** —
+Claude 3종(`typescript`·`security`·`code`) × 2라운드 + Codex × 2라운드. 상한 20 이내.
+
+**SHA 를 명시한 이유는 리뷰 시점에 `refs/remotes/origin/HEAD` 가 없었기 때문이다** — 이 저장소는
+`git clone` 이 아니라 `gh repo create --source` 로 만들어졌다. 그 상태에서 스크립트 기본값
+(`origin/HEAD`)을 쓰면 `fatal: ambiguous argument` 로 죽는다. **그 뒤 push 를 거치며 ref 가
+생겼으므로 지금은 기본값이 동작한다** — 다음 리뷰는 SHA 를 명시하지 않아도 된다.
 
 - **`.css` 는 확장자 표에 없어** `code-reviewer` 로 보냈다.
 - **`security-reviewer` 는 경로 트리거 밖이다.** note 가 처음으로 사용자 텍스트를 CSS 주석·JSON

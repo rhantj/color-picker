@@ -92,8 +92,24 @@ function serialize(work) {
 
 const now = () => new Date().toISOString();
 const newId = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-// 코드포인트 단위로 자른다. slice 는 UTF-16 단위라 이모지 같은 서로게이트 쌍을 반으로 쪼갠다.
-const clip = (value, max) => [...String(value ?? "").trim()].slice(0, max).join("");
+// **사람이 한 글자로 보는 단위(그래핌 클러스터)로 자른다.**
+// slice 는 UTF-16 단위라 이모지의 서로게이트 쌍을 반으로 쪼갠다. 스프레드는 코드포인트 단위라
+// 거기까지는 막지만, 한글 자모 결합·악센트·ZWJ 로 이어 붙인 이모지는 여전히 중간에서 끊는다 —
+// 상한 근처에서 악센트만 떨어지거나 가족 이모지가 낱개로 흩어진다.
+// Intl.Segmenter 는 Node 와 최신 브라우저에 기본으로 있어 의존성이 늘지 않는다.
+const segmenter = new Intl.Segmenter("ko", { granularity: "grapheme" });
+const clip = (value, max) => {
+  const text = String(value ?? "").trim();
+  // 짧으면 자를 것이 없다. 세그먼트 순회 비용을 매 호출마다 치르지 않는다.
+  if (text.length <= max) return text;
+  let out = "";
+  let n = 0;
+  for (const { segment } of segmenter.segment(text)) {
+    if (++n > max) break;
+    out += segment;
+  }
+  return out;
+};
 
 const ID_SHAPE = /^[a-z]+-[a-z0-9]+-[a-z0-9]+$/;
 const VALID_ROUTES = new Set(["palette", "diagnosis", "none"]);

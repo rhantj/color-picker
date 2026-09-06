@@ -265,6 +265,7 @@ const gates = {
       const CLOSE = "*" + "/";
       const tail = ` } body::before { content: "INJECTED"; } .x{ /*`;
       const ctrl = (n) => String.fromCharCode(n);
+      const bidi = (n) => String.fromCodePoint(n);
 
       // 페이로드를 여럿 둔다. **리터럴 */ 하나만 넣으면 이 게이트는 헛돈다** — 손질 함수가
       // 리터럴은 정확히 잡으므로 통과하고, 정작 취약한 경로(삭제되는 문자가 사이에 끼어
@@ -275,6 +276,10 @@ const gates = {
         ["제어문자 둘", `메모 *${ctrl(2)}${ctrl(3)}/${tail}`],
         ["별표 둘", `메모 **${ctrl(4)}/${tail}`],
         ["DEL", `메모 *${ctrl(127)}/${tail}`],
+        // 양방향 제어문자도 **지우는** 연산이라 같은 재조립 경로를 만든다.
+        // 이것이 없으면 그 삭제를 아래로 내려도 게이트가 통과한다 - 실제로 그랬다.
+        ["양방향 RLO", `메모 *${bidi(0x202e)}/${tail}`],
+        ["양방향 LRM", `메모 *${bidi(0x200e)}/${tail}`],
       ];
 
       const bad = [];
@@ -307,6 +312,43 @@ const gates = {
 
       // 양성 대조 — 메모 자체는 (손질된 형태로) 남아 있어야 한다. 통째로 지워 버리는 것도 답이 아니다.
       if (!css.includes("메모")) bad.push("메모가 통째로 사라졌다");
+      return bad.length ? bad.join(" / ") : null;
+    } finally {
+      server.kill();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+
+  // 양방향 텍스트 제어문자는 CSS 파싱을 깨지 않는다. 대신 **에디터가 보여주는 순서**를 뒤집어,
+  // 주석처럼 보이는 자리에 실제로는 살아 있는 선언을 숨길 수 있다(Trojan Source 계열).
+  // 이 출력의 용도가 다른 프로젝트 스타일시트에 붙여넣는 것이라 표시가 곧 신뢰 근거가 된다.
+  async "S6-G8"() {
+    const dir = freshDataDir();
+    const port = 4616;
+    const server = await startServer(port, { TONEFIRST_DATA_DIR: dir });
+    const base = `http://127.0.0.1:${port}`;
+    try {
+      const cp = (h) => String.fromCodePoint(h);
+      // 재정렬(202A~202E) · 격리(2066~2069) · 표식(200E 200F 061C) 세 부류를 모두 넣는다.
+      const marks = [
+        0x202a, 0x202b, 0x202c, 0x202d, 0x202e,
+        0x2066, 0x2067, 0x2068, 0x2069,
+        0x200e, 0x200f, 0x061c,
+      ];
+      const note = "안전한메모" + marks.map(cp).join("x") + "끝";
+      await post(base, "/api/saved", { paletteId: "pair-10", note });
+
+      const css = await (await fetch(`${base}/api/export?format=css`)).text();
+      const bad = [];
+
+      const left = marks.filter((m) => css.includes(cp(m)));
+      if (left.length) {
+        bad.push(`양방향 제어문자가 남았다: ${left.map((m) => "U+" + m.toString(16).toUpperCase()).join(" ")}`);
+      }
+
+      // 양성 대조 — 메모를 통째로 지워 버리는 것도 답이 아니다. 보이는 글자는 남아야 한다.
+      if (!css.includes("안전한메모")) bad.push("메모의 보이는 부분까지 사라졌다");
+
       return bad.length ? bad.join(" / ") : null;
     } finally {
       server.kill();
