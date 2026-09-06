@@ -166,32 +166,46 @@ export function savePalette(input, lookup, ratioFor) {
     return Promise.reject(new Error(`면적 비율은 ${RATIO_MIN}~${RATIO_MAX} 의 정수여야 한다`));
   }
 
-  // 비율을 안 보냈는데 같은 조합을 이미 저장해 뒀다면, **그때 맞춰 둔 비율을 이어받는다.**
-  // 규칙의 기본값으로 되돌리면 사용자가 저장 화면에서 명시적으로 한 조정이 경고 없이 사라진다.
-  const previous = adjusted ? null : listSaved().find((s) => s.paletteId === palette.id);
-  const inherited = previous?.ratioAdjusted ? previous.colors.map((c) => c.ratio) : null;
-
   const defaults = ratioFor(palette);
-  const ratio = adjusted ?? inherited ?? defaults;
-  const entry = {
-    id: newId("save"),
-    savedAt: now(),
-    paletteId: palette.id,
-    name: palette.name,
-    type: palette.type,
-    hueRelation: palette.hueRelation,
-    toneRelation: palette.toneRelation,
-    summary: palette.summary,
-    colors: palette.colors.map((c, i) => ({ name: c.name, hex: c.hex, ratio: ratio[i] })),
-    // 기본값 그대로인지 사용자가 손댄 것인지 구분해 둔다. 화면이 "기본값으로" 를 제안할 수 있다.
-    ratioAdjusted: JSON.stringify(ratio) !== JSON.stringify(defaults),
-    defaultRatio: defaults,
-    note: clip(input.note, LIMITS.noteChars),
-    fromQuery: clip(input.fromQuery, LIMITS.queryChars) || null,
-  };
 
+  // **병합 기준을 직렬화 안에서 읽는다.** 앞의 값을 큐 밖에서 읽으면, 겹친 저장 둘이 모두 상대의
+  // 쓰기 전 스냅샷을 보고 항목을 만들어 나중에 쓰는 쪽이 앞의 것을 덮는다. `serialize` 가 쓰기를
+  // 순서화해도 소용없다 — 무엇을 이어받을지가 이미 낡은 값으로 정해져 있기 때문이다.
+  // 실제로 메모가 조용히 사라졌다(S8-G6). 콜백 안은 동기라 읽기와 쓰기 사이에 아무도 못 낀다.
+  //
+  // 검증은 이 밖에 남긴다. 잘못된 요청이 쓰기 큐에서 자리를 차지해 정상 요청을 늦추지 않게 한다.
   return serialize(() => {
     const all = listSaved();
+
+    // 같은 조합을 다시 저장하는 것은 **덮어쓰기**다. 안 보낸 항목은 앞의 것을 이어받아야
+    // 사용자가 명시적으로 넣은 값이 경고 없이 사라지지 않는다. 비율과 메모가 둘 다 그렇다.
+    const previous = all.find((s) => s.paletteId === palette.id);
+
+    // 비율을 안 보냈는데 그때 맞춰 둔 조정이 있으면 이어받는다.
+    // 규칙의 기본값으로 되돌리면 저장 화면에서 명시적으로 한 조정이 사라진다.
+    const inherited = !adjusted && previous?.ratioAdjusted ? previous.colors.map((c) => c.ratio) : null;
+
+    const ratio = adjusted ?? inherited ?? defaults;
+    const entry = {
+      id: newId("save"),
+      // 요청이 도착한 시각이 아니라 **쓰기가 일어난 시각**이다. 큐가 밀리면 둘이 벌어진다.
+      savedAt: now(),
+      paletteId: palette.id,
+      name: palette.name,
+      type: palette.type,
+      hueRelation: palette.hueRelation,
+      toneRelation: palette.toneRelation,
+      summary: palette.summary,
+      colors: palette.colors.map((c, i) => ({ name: c.name, hex: c.hex, ratio: ratio[i] })),
+      // 기본값 그대로인지 사용자가 손댄 것인지 구분해 둔다. 화면이 "기본값으로" 를 제안할 수 있다.
+      ratioAdjusted: JSON.stringify(ratio) !== JSON.stringify(defaults),
+      defaultRatio: defaults,
+      // 안 보냈으면 앞의 메모를 잇고, 보냈으면 그것을 쓴다. **빈 문자열은 "지우기" 라서 잇지 않는다** —
+      // 이어받기가 무조건이면 사용자가 메모를 지울 방법이 없어진다.
+      note: input.note === undefined ? (previous?.note ?? "") : clip(input.note, LIMITS.noteChars),
+      fromQuery: clip(input.fromQuery, LIMITS.queryChars) || null,
+    };
+
     // 같은 조합을 두 번 저장하지 않는다. 다시 저장하면 최신 것으로 갱신한다.
     const rest = all.filter((s) => s.paletteId !== entry.paletteId);
     rest.unshift(entry);

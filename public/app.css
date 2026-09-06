@@ -856,13 +856,37 @@ a:hover {
   cursor: default;
   opacity: 0.7;
 }
+.action__memo {
+  /* 버튼 줄 위에서 한 줄을 통째로 쓴다. flex-wrap 이 걸려 있어 basis 만으로 줄이 갈린다. */
+  flex: 1 0 100%;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.action__memo::placeholder {
+  color: var(--ink-muted);
+}
+.action__memo:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
 .action__feedback {
   font-size: 12px;
   color: var(--ink-muted);
 }
 
 @media (pointer: coarse) {
-  .action {
+  .action,
+  /* 같은 줄에 놓이므로 버튼만 커지면 입력만 작게 남는다. 이 저장소는 손가락 조작 요소를
+     44px 로 올리는 규칙을 세 곳에서 이미 지키고 있다. */
+  .action__memo {
     min-height: 44px;
   }
 }

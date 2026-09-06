@@ -57,15 +57,15 @@ Ollama 는 있으면 쓰고 없으면 안 쓴다. 죽어 있어도 검색은 그
 | 내보내기 | `src/export.js` |
 | 서버 | `server.js` |
 | 화면 | `public/` |
-| 게이트 | `GATES.md` + `scripts/check-stage{1..7}.mjs` |
+| 게이트 | `GATES.md` + `scripts/check-stage{1..8}.mjs` |
 
-## 게이트 46개
+## 게이트 53개
 
 ```bash
 node scripts/check-stage1.mjs S1-G1
 ```
 
-`GATES.md` 에 46개가 전부 있고 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
+`GATES.md` 에 53개가 전부 있고 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
 **게이트는 만들 때마다 일부러 망가뜨려 확인했다** — 통과하는 게이트보다 고장을 잡는 게이트가 목적이다.
 
 | 단계 | 수 | 무엇을 지키나 |
@@ -77,6 +77,7 @@ node scripts/check-stage1.mjs S1-G1
 | S5 | 6 | 면적 조정 · 범위 검증 · 재저장 시 조정 보존 |
 | S6 | 7 | 내보내기 형식 · 주석 주입 방어 · 프로토타입 체인 크래시 방어 |
 | S7 | 4 | 대화 이어하기 · 없는 대화 404 · 경합 방지 |
+| S8 | 7 | 저장 메모 입력 · 재저장 시 메모 보존 · 겹친 저장 · 전송 중 재오픈 차단 |
 
 ## 환경변수
 

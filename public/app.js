@@ -17,6 +17,10 @@ const ladder = document.getElementById("ladder");
 
 const INTENT_LABEL = { palette: "팔레트 탐색", diagnosis: "진단", other: "색과 무관" };
 
+// 서버의 LIMITS.noteChars 와 **같아야 한다.** 어긋나면 사용자는 다 썼다고 보는데 서버가 조용히
+// 잘라, 저장된 뒤에야 알게 된다. 홈은 한계값을 받아오지 않으므로 S8-G4 가 두 값을 대조한다.
+const NOTE_MAX = 200;
+
 // 한 번 검색하면 그 뒤로는 같은 대화에 이어 붙인다. 새로고침하면 새 대화가 열린다 —
 // 대화의 경계를 사용자가 선언하게 만들지 않고 세션으로 잡는다.
 let conversationId = null;
@@ -40,13 +44,45 @@ function resultCard(result, rank, featured) {
   button.type = "button";
   const feedback = el("span", "action__feedback");
 
+  // 메모는 저장할 때 함께 보낸다. 비어 있으면 아예 안 보내서, 앞서 적어 둔 메모가 남게 한다 —
+  // 빈 값을 보내는 것은 서버에서 "지우기" 로 읽히기 때문이다.
+  const memo = el("input", "action__memo");
+  memo.type = "text";
+  memo.maxLength = NOTE_MAX;
+  memo.placeholder = "메모 (선택) — 어디에 쓸 색인지";
+  memo.setAttribute("aria-label", `${result.name} 조합에 남길 메모`);
+
+  // 전송 중인지와 저장이 끝났는지를 버튼의 disabled 하나로 겸하면, 전송 중 입력이 버튼을 다시
+  // 열어 중복 전송이 된다. 상태를 따로 잡는다.
+  let pending = false;
+  // 전송 중에 사용자가 바꾼 것이 있는가. 전송 중에는 버튼을 안 열지만 **바뀐 사실은 남겨 둔다** —
+  // 그냥 버리면 전송된 값과 화면 값이 다른데 버튼은 "저장됨" 으로 잠긴 채 남아, 사용자가 한 번 더
+  // 건드리기 전에는 다시 저장할 방법이 없다.
+  let changedWhilePending = false;
+
+  // 버튼을 다시 여는 자리는 둘이다 — 메모 입력과 비율 변경. 한 곳에 모아 두 경로가 갈라지지
+  // 않게 한다. 실제로 한쪽에만 pending 가드가 있어 비율 쪽으로 중복 전송이 열려 있었다.
+  const reopen = (label) => {
+    if (pending) {
+      changedWhilePending = true;
+      return;
+    }
+    button.disabled = false;
+    button.textContent = label;
+    feedback.textContent = "";
+  };
+
   const save = async () => {
+    pending = true;
+    changedWhilePending = false;
     button.disabled = true;
+    const note = memo.value.trim();
     try {
       await api("/api/saved", {
         paletteId: result.id,
         fromQuery: lastQuery,
         ...(ratio ? { ratio: ratio[0] } : {}),
+        ...(note ? { note } : {}),
       });
       button.textContent = "저장됨";
       feedback.textContent = ratio
@@ -55,21 +91,34 @@ function resultCard(result, rank, featured) {
     } catch (err) {
       feedback.textContent = err.message;
       button.disabled = false;
+    } finally {
+      pending = false;
+      // 전송 중에 바뀐 것이 있으면 지금 연다. 이 시점에는 pending 이 끝나 중복 전송이 안 된다.
+      if (changedWhilePending) {
+        changedWhilePending = false;
+        reopen("바뀐 내용으로 저장");
+      }
     }
   };
 
+  // 저장한 뒤 메모를 고치면 다시 저장할 수 있어야 한다. 비율을 고쳤을 때와 같은 규칙이다.
+  memo.addEventListener("input", () => {
+    if (!pending && !button.disabled) return;
+    reopen("메모와 함께 저장");
+  });
+
   button.addEventListener("click", save);
-  box.append(button, feedback);
+  box.append(memo, button, feedback);
 
   return paletteCard(result, rank, {
     featured,
     actions: box,
     onRatio: (next) => {
+      // 값은 항상 받아 둔다. 전송 중이라고 여기서 버리면 사용자가 맞춘 비율이 사라진다 —
+      // 버튼을 여는 것만 미루고, 미뤘다는 사실은 reopen 이 기억한다.
       ratio = next;
       // 이미 저장한 뒤 비율을 바꿨다면 다시 저장할 수 있어야 한다.
-      button.disabled = false;
-      button.textContent = "이 비율로 저장";
-      feedback.textContent = "";
+      reopen("이 비율로 저장");
     },
   });
 }
