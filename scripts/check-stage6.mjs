@@ -263,11 +263,33 @@ const gates = {
     const base = `http://127.0.0.1:${port}`;
     try {
       const CLOSE = "*" + "/";
-      const evil = `메모 ${CLOSE} } body::before { content: "INJECTED"; } .x{ /*`;
-      await post(base, "/api/saved", { paletteId: "pair-10", note: evil });
+      const tail = ` } body::before { content: "INJECTED"; } .x{ /*`;
+      const ctrl = (n) => String.fromCharCode(n);
 
-      const css = await (await fetch(`${base}/api/export?format=css`)).text();
+      // 페이로드를 여럿 둔다. **리터럴 */ 하나만 넣으면 이 게이트는 헛돈다** — 손질 함수가
+      // 리터럴은 정확히 잡으므로 통과하고, 정작 취약한 경로(삭제되는 문자가 사이에 끼어
+      // 손질이 끝난 뒤 */ 가 재조립되는 것)는 건드리지도 못한다. 실제로 그렇게 놓쳤다.
+      const payloads = [
+        ["리터럴", `메모 ${CLOSE}${tail}`],
+        ["제어문자 끼움", `메모 *${ctrl(1)}/${tail}`],
+        ["제어문자 둘", `메모 *${ctrl(2)}${ctrl(3)}/${tail}`],
+        ["별표 둘", `메모 **${ctrl(4)}/${tail}`],
+        ["DEL", `메모 *${ctrl(127)}/${tail}`],
+      ];
+
       const bad = [];
+      for (const [label, evil] of payloads) {
+        await post(base, "/api/saved", { paletteId: "pair-10", note: evil });
+        const one = await (await fetch(`${base}/api/export?format=css`)).text();
+        const left = one.replace(/\/\*[\s\S]*?\*\//g, "");
+        if (/INJECTED|body::before/.test(left)) bad.push(`${label}: 메모가 주석 밖으로 새어 나왔다`);
+        const o = (one.match(/\{/g) ?? []).length;
+        const c = (one.match(/\}/g) ?? []).length;
+        if (o !== c) bad.push(`${label}: 중괄호 불균형 ${o}/${c}`);
+      }
+
+      // 마지막 페이로드 상태로 아래 기존 검사를 이어서 돌린다.
+      const css = await (await fetch(`${base}/api/export?format=css`)).text();
 
       // 주석을 전부 걷어낸 뒤 남는 것은 :root 와 우리 변수뿐이어야 한다.
       const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
