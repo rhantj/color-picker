@@ -330,6 +330,14 @@ const MATERIALS = {
     Object.hasOwn(DEFAULT_FINISH_BY_ROLE, role) ? DEFAULT_FINISH_BY_ROLE[role] : MATERIAL_FINISHES[0],
 };
 
+/**
+ * 재질 id→한글 이름 표. **두 곳이 쓴다** — `/api/expand`(홈의 재질 줄)와
+ * `/api/saved`(저장 목록). 같은 표를 두 번 적으면 한쪽만 고쳐질 자리가 생긴다.
+ *
+ * `loadFinishes()` 가 캐시하므로 요청마다 파일을 다시 읽지 않는다.
+ */
+const FINISH_NAMES = () => Object.fromEntries(loadFinishes().map((f) => [f.id, f.name]));
+
 async function handleWrite(req, res, pathname) {
   if (!isTrustedWrite(req)) {
     return sendJson(res, 403, { error: "이 화면에서 보낸 요청이 아니다" });
@@ -519,7 +527,7 @@ async function handleExpand(res, params) {
       assignments: finishes.assignments,
       // **id→이름 표를 함께 보낸다.** 화면이 한글 이름을 박으면 data/finishes.json 을 고쳐도
       // 안 따라오고, 그 어긋남은 아무도 안 알려 준다. 원리·detail 은 프롬프트용이라 안 보낸다.
-      names: Object.fromEntries(loadFinishes().map((f) => [f.id, f.name])),
+      names: FINISH_NAMES(),
       from: finishes.from,
       matched: finishes.matched ?? 0,
       model: finishes.model ?? null,
@@ -537,7 +545,18 @@ function dispatch(req, res, url) {
   if (url.pathname === "/api/search") return handleSearch(res, url.searchParams);
   if (url.pathname === "/api/status") return handleStatus(res);
   if (url.pathname === "/api/conversations") return handleConversations(res, url.searchParams);
-  if (url.pathname === "/api/saved") return sendJson(res, 200, { saved: listSaved(), limits: LIMITS });
+  /*
+   * 저장 목록. **재질 id→한글 이름 표를 함께 보낸다(22단계).**
+   *
+   * 저장에는 재질 id 만 남는다(`matte`). 화면에 그것을 그대로 찍으면 사용자가 무엇인지
+   * 모르고, 화면이 한글 이름을 박으면 `data/finishes.json` 을 고쳐도 안 따라온다 —
+   * 그 어긋남은 아무도 안 알려 준다. `/api/expand` 가 같은 이유로 같은 표를 보낸다(17-B).
+   *
+   * `limits` 를 싣는 것과 같은 자리다. 요청을 하나 더 만들지 않는다.
+   */
+  if (url.pathname === "/api/saved") {
+    return sendJson(res, 200, { saved: listSaved(), limits: LIMITS, finishNames: FINISH_NAMES() });
+  }
   if (url.pathname === "/api/export") return handleExport(res, url.searchParams);
   if (url.pathname === "/api/expand") return handleExpand(res, url.searchParams);
   return serveStatic(res, url.pathname);

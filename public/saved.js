@@ -1,6 +1,6 @@
 // 추천 받은 조합 화면.
 
-import { api, el, engineToggle, formatWhen, ratioControl, refreshRuntime, savedFields, shareControl, swatchView } from "./ui.js";
+import { api, el, engineToggle, finishLine, formatWhen, ratioControl, refreshRuntime, savedFields, shareControl, swatchView } from "./ui.js";
 
 const list = document.getElementById("list");
 
@@ -71,7 +71,22 @@ function noteField(entry, title) {
   return wrap;
 }
 
-function savedCard(entry, onRemoved) {
+/*
+ * **재질 이름표는 서버가 준다(22단계).** 저장에는 id 만 남으므로(`matte`) 화면이 한글 이름을
+ * 알려면 표가 필요하다. 화면에 이름을 박으면 `data/finishes.json` 을 고쳐도 안 따라오고,
+ * 그 어긋남은 아무도 안 알려 준다 — `/api/expand` 가 같은 이유로 같은 표를 보낸다(17-B).
+ *
+ * **모듈 전역에 두지 않고 인자로 넘긴다.** 전역 변수로 뒀더니 "목록을 받을 때 채운다" 는
+ * 순서에 기대게 됐고, 채우는 줄을 카드 그리는 줄 뒤로 옮기면 **첫 그리기가 id 를 그대로
+ * 보인다.** 게이트가 그 순서를 볼 방법이 없었다(뮤테이션으로 확인).
+ * 인자로 받으면 **틀릴 순서 자체가 없어진다** — 게이트를 더 만드는 것보다 낫다.
+ */
+
+/** 재질 id 를 사람이 읽는 이름으로. 자기 속성만 본다 — 손상된 표에서 함수가 나온다. */
+const nameLookup = (names) => (id) =>
+  names && Object.hasOwn(names, id) && typeof names[id] === "string" ? names[id] : id;
+
+function savedCard(entry, onRemoved, finishNames = null) {
   const root = el("article", "card");
   const body = el("div", "card__body");
 
@@ -93,6 +108,18 @@ function savedCard(entry, onRemoved) {
   }
 
   body.append(head, coords, el("p", "card__text", fields.text));
+
+  /*
+   * **재질 줄(22단계).** 저장에는 남고 엔진 내보내기로도 나가는데 목록에서만 안 보였다.
+   * 사용자는 자기가 무엇을 저장했는지 내보내기를 눌러 JSON 을 읽어야만 알 수 있었다.
+   *
+   * 그리는 것은 `finishLine` 이 한다 — 이 파일은 최상단에서 `getElementById` 를 부르므로
+   * 게이트가 불러올 수 없어서, 화면에 무엇이 나가는지를 **글자로만** 재게 된다.
+   * 코퍼스 조합에는 없다(`savedFields` 가 빈 배열을 준다) — 배색사전은 재질을 말하지 않는다.
+   */
+  const finishes = finishLine(fields, nameLookup(finishNames));
+  if (finishes) body.append(finishes);
+
   body.append(noteField(entry, fields.title));
 
   // 저장된 조합도 비율을 다시 만질 수 있다. 저장은 슬라이더에서 손을 뗐을 때 한 번만 한다.
@@ -208,7 +235,7 @@ function dropCard(node) {
 
 async function load() {
   try {
-    const { saved } = await api("/api/saved");
+    const { saved, finishNames } = await api("/api/saved");
     list.replaceChildren();
     if (saved.length === 0) {
       list.append(el("p", "empty", EMPTY_TEXT));
@@ -221,7 +248,7 @@ async function load() {
      */
     for (const entry of saved) {
       try {
-        list.append(savedCard(entry, dropCard));
+        list.append(savedCard(entry, dropCard, finishNames));
       } catch (err) {
         list.append(el("p", "empty", `이 항목을 그리지 못했습니다 — ${err.message}`));
       }

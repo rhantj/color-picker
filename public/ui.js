@@ -247,6 +247,45 @@ export function shareControl({ colors, value, onInput, onCommit }) {
  * @returns {{kind:"palette"|"derived", title:string, badge:string, text:string,
  *            coords:[string,string][], colors:{hex:string, ratio:number, role?:string}[]}}
  */
+/**
+ * 저장 목록의 **재질 줄**을 만든다. 그릴 것이 없으면 `null` 을 돌려준다.
+ *
+ * **화면에서 빼낸 이유는 게이트다.** `saved.js` 는 모듈 최상단에서 `getElementById` 를
+ * 부르므로 게이트가 불러올 수 없다 — 그래서 "재질이 실제로 화면에 나가는가" 를 소스에서
+ * `fields.finishes` 라는 **글자를 찾는** 방식으로 재고 있었다. 그러면 `if (false)` 로
+ * 감싸거나 `void` 로 버려도 검사가 통과한다(뮤테이션으로 확인). 21단계 리뷰가 같은 부류를
+ * `S21-G4` 에서 잡았고, 처방도 같다 — **함수로 빼서 게이트가 직접 부른다.**
+ *
+ * **이름을 여기서 정하지 않는다.** `nameFor` 로 받는다 — 재질 id→한글 이름 표는 서버가
+ * 카탈로그에서 만들어 보내고(`/api/saved` 의 `finishNames`), 화면이 이름을 박으면
+ * `data/finishes.json` 을 고쳐도 안 따라온다. 표가 없으면 id 를 그대로 보인다 —
+ * 줄이 통째로 사라지는 것보다 `matte` 라고라도 보이는 편이 낫다.
+ *
+ * @param {{finishes: {role:string,id:string}[], finishesAdjusted: boolean}} fields
+ *   `savedFields` 가 정규화한 것. 모르는 재질은 이미 걸러져 있다
+ * @param {((id:string) => string)|null} nameFor 재질 id 를 사람이 읽는 이름으로
+ */
+export function finishLine(fields, nameFor = null) {
+  const list = Array.isArray(fields?.finishes) ? fields.finishes : [];
+  if (list.length === 0) return null;
+
+  const line = el("div", "card__finishes");
+  for (const f of list) {
+    const item = el("span", "card__finish");
+    item.append(el("b", "card__finish-role", f.role), document.createTextNode(" "));
+    const name = nameFor ? nameFor(f.id) : f.id;
+    item.append(el("span", "card__finish-name", typeof name === "string" && name ? name : f.id));
+    line.append(item);
+  }
+  /*
+   * **누가 골랐는지 밝힌다.** 비율은 바로 아래에서 고칠 수 있어 출처가 덜 중요하지만,
+   * 재질은 이 화면에서 못 고치므로 "왜 이게 메탈릭이지" 를 답해 줘야 한다.
+   * 안 붙었을 때가 기본값(또는 LLM 배정)이라는 뜻으로 읽힌다.
+   */
+  if (fields.finishesAdjusted) line.append(el("span", "card__finish-mark", "직접 고름"));
+  return line;
+}
+
 export function savedFields(entry) {
   const e = entry ?? {};
   const or = (value, fallback) => (typeof value === "string" && value.trim() ? value : fallback);
@@ -257,6 +296,35 @@ export function savedFields(entry) {
   );
 
   if (e.kind === "derived") {
+    /*
+     * **재질도 그릴 수 있는 것만 남긴다(22단계).** 색과 같은 규율이다.
+     *
+     * 저장 파일이 손상되면 모르는 재질이나 이 구조에 없는 역할이 들어 있을 수 있다.
+     * 그대로 그리면 화면에 `undefined` 가 뜨거나, 더 나쁘게는 항목 하나가 던져서
+     * **목록 전체가 사라진다** — 18-B 에서 색 때문에 정확히 그 일이 났고 리뷰가 High 로
+     * 잡았다. 재질을 새로 그리면서 그 자리가 다시 생긴다.
+     *
+     * **색 순서로 낸다.** 화면이 스와치와 나란히 읽으므로 순서가 어긋나면
+     * "바탕은 광택" 이 엉뚱한 색 옆에 붙는다.
+     */
+    const table = e.finishes && typeof e.finishes === "object" && !Array.isArray(e.finishes) ? e.finishes : null;
+    const finishes = [];
+    for (const c of colors) {
+      /*
+       * 자기 속성만 본다. `__proto__` 같은 역할 이름이 프로토타입에서 값을 물고 나온다.
+       *
+       * **이 줄과 위 `Array.isArray` 를 지우는 변형은 게이트가 안 잡는다. 등가라서다** —
+       * 프로토타입에서 나오는 것은 함수·객체라 아래 `typeof id !== "string"` 에 걸리고,
+       * 배열 표에는 한글 역할 키가 없어 조회가 늘 `undefined` 다(실측으로 확인).
+       * 그래도 두는 것은 **이 함수가 무엇을 읽는지가 계약**이기 때문이다 — 아래 검사가
+       * 언제까지나 지금 모양일 보장은 없다. 19단계 `pickFinishes` 와 같은 판정이다.
+       */
+      if (!table || !Object.hasOwn(table, c.role)) continue;
+      const id = table[c.role];
+      if (typeof id !== "string" || !FINISH_IDS.includes(id)) continue;
+      finishes.push({ role: c.role, id });
+    }
+
     return {
       kind: "derived",
       title: or(e.name, "이름 없는 구조"),
@@ -268,6 +336,10 @@ export function savedFields(entry) {
         ["출처", or(e.source, "모름")],
       ],
       colors,
+      finishes,
+      // **누가 골랐는지 밝힌다.** 비율은 이 화면에서 바로 고칠 수 있어 출처가 덜 중요하지만,
+      // 재질은 여기서 못 고치므로 "왜 이게 메탈릭이지" 를 답해 줘야 한다.
+      finishesAdjusted: Boolean(e.finishesAdjusted),
     };
   }
 
@@ -282,6 +354,13 @@ export function savedFields(entry) {
       ["톤", or(e.toneRelation, "모름")],
     ],
     colors,
+    /*
+     * **코퍼스 조합에는 재질이 없다.** 배색사전 16쌍은 1930년대 안료 견본이라 발광도 금속도
+     * 말하지 않는다 — 20단계가 엔진 내보내기에서 코퍼스를 뺀 것과 같은 경계다.
+     * 그래도 필드는 둔다. 화면이 `kind` 로 갈라 두 갈래를 쓰지 않게.
+     */
+    finishes: [],
+    finishesAdjusted: false,
   };
 }
 

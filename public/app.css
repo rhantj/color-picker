@@ -1164,6 +1164,37 @@ a:hover {
 }
 /* 엔진 토글. 지금 어느 표기를 보고 있는지가 이 버튼 하나에 걸려 있어서, 글자만으로
    두지 않고 방향 기호를 붙인다 — 두 표기를 오가는 것이라는 뜻이 그 자리에서 보인다. */
+/* 저장 목록의 재질 줄(22단계). 홈 카드의 `.struct__finishes` 와 같은 모양이다 —
+   두 화면이 같은 것을 다르게 보이면 사용자가 같은 것인지 모른다. */
+.card__finishes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+.card__finish {
+  white-space: nowrap;
+}
+.card__finish-role {
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+.card__finish-name {
+  color: var(--accent-ink);
+}
+/* 손으로 고른 것. 배지를 안 붙인 쪽이 기본값이라는 뜻이라, 이쪽만 표시한다. */
+.card__finish-mark {
+  padding: 1px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+
 .export__engine {
   font-variant-numeric: tabular-nums;
 }

@@ -72,15 +72,15 @@ Ollama 는 있으면 쓰고 없으면 안 쓴다. 죽어 있어도 검색은 그
 | 서버 | `server.js` |
 | 면적 | `public/ratio.js`(2색 규칙 · 3색 이상 균등 · 슬라이더 재배분) |
 | 화면 | `public/` |
-| 게이트 | `GATES.md` + `scripts/check-stage{1..21}.mjs` |
+| 게이트 | `GATES.md` + `scripts/check-stage{1..22}.mjs` |
 
-## 게이트 170개
+## 게이트 175개
 
 ```bash
 node scripts/check-stage1.mjs S1-G1
 ```
 
-`GATES.md` 에 170개가 전부 있고 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
+`GATES.md` 에 175개가 전부 있고 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
 **게이트는 만들 때마다 일부러 망가뜨려 확인했다** — 통과하는 게이트보다 고장을 잡는 게이트가 목적이다.
 
 | 단계 | 수 | 무엇을 지키나 |
