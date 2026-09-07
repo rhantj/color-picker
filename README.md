@@ -69,15 +69,15 @@ Ollama 는 있으면 쓰고 없으면 안 쓴다. 죽어 있어도 검색은 그
 | 서버 | `server.js` |
 | 면적 | `public/ratio.js`(2색 규칙 · 3색 이상 균등 · 슬라이더 재배분) |
 | 화면 | `public/` |
-| 게이트 | `GATES.md` + `scripts/check-stage{1..16}.mjs` |
+| 게이트 | `GATES.md` + `scripts/check-stage{1..17}.mjs` |
 
-## 게이트 125개
+## 게이트 133개
 
 ```bash
 node scripts/check-stage1.mjs S1-G1
 ```
 
-`GATES.md` 에 125개가 전부 있고 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
+`GATES.md` 에 133개가 전부 있고 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
 **게이트는 만들 때마다 일부러 망가뜨려 확인했다** — 통과하는 게이트보다 고장을 잡는 게이트가 목적이다.
 
 | 단계 | 수 | 무엇을 지키나 |
@@ -98,11 +98,12 @@ node scripts/check-stage1.mjs S1-G1
 | S14 | 9 | LLM 구조 선택 · **모델 출력 검증** · 질의 없으면 미호출 · 폴백 · 시간 초과 |
 | S15 | 15 | 명도 방향 거울 · **기본 모드 무변경 회귀** · 어두운 바탕 · 단계 간격 · 채도 상한(전역·역할) · 옵션 방어 · **거울이 안 닿아야 할 자리** · 카드 스와치 선택자 · **두 모드 동시 전달** · **mode 는 서버 파라미터가 아니다** · 어두운 모드 라벨 대비 · 토글이 네트워크를 안 부름 · **요청당 카탈로그 재읽기 금지** · 토글 포커스 확정 |
 | S16 | 11 | 재질 카탈로그에 수치 없음 · 결정성 · 상수 헥스 없음 · **PBR base 범위(비금속·금속)** · **금속 색상각 보존** · metallic 이진 · **채도 면제 누수** · **EV 상한** · **엔진 변환 왕복** · 불량 입력 · 기본 배정 |
+| S17 | 8 | 모델 응답 검증 · 폴백 완전성 · 질의 없으면 미호출 · 시간 초과·HTTP 오류 · **배지 정직성** · 프롬프트 내용 · **LLM 이 색에 안 닿음** · 기본 배정 일치 |
 
 ## 환경변수
 
 `PORT` `HOST` `OLLAMA_HOST` `OLLAMA_BIN` `OLLAMA_AUTOSTART=0` `OLLAMA_WARMUP=0`
-`OLLAMA_MODEL` `REWRITE_TIMEOUT_MS` `STRUCTURE_TIMEOUT_MS` `TONEFIRST_DATA_DIR`
+`OLLAMA_MODEL` `REWRITE_TIMEOUT_MS` `STRUCTURE_TIMEOUT_MS` `FINISH_TIMEOUT_MS` `TONEFIRST_DATA_DIR`
 
 ## 알려진 한계 (의도적)
 
