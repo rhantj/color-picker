@@ -496,6 +496,108 @@ export function finishEditing(store, structure, base) {
   };
 }
 
+/*
+ * ── 모드 기억하기(23단계) ────────────────────────────────────
+ *
+ * **이 저장소의 첫 `localStorage` 다.** 그래서 문을 좁게 연다 — 저장을 만지는 자리는
+ * 아래 한 곳뿐이고, 화면 코드는 `modeStore` 를 거친다. 흩어지면 어느 값이 어디 저장됐는지
+ * 아무도 모르게 되고, 그때는 되돌릴 수도 없다(`S23-G6` 이 그것을 문다).
+ *
+ * **뒤집는 것은 원래 결정의 절반뿐이다.** `app.js` 가 *"전역이나 localStorage 에 두지
+ * 않는다 — 카드마다 다른 모드로 나란히 비교할 수 있고..."* 라고 적어 뒀는데,
+ * **카드별 어긋남은 그대로 둔다**(그것이 그 결정의 값이다). 저장하는 것은 **기본 모드
+ * 하나**이고, 새로 펼치는 카드가 그 모드로 시작할 뿐이다.
+ */
+
+const MODES = Object.freeze(["light", "dark"]);
+const MODE_KEY = "tonefirst:mode";
+
+/** 아는 모드면 그대로, 아니면 밝은 쪽. 저장값·인자 둘 다 이 문을 지난다. */
+const asMode = (value) => (typeof value === "string" && MODES.includes(value) ? value : "light");
+
+/**
+ * 기본 모드를 기억해 둔다.
+ *
+ * **저장소가 없거나 던져도 화면이 돌아야 한다.** 시크릿 창 · 사이트 데이터 차단 · 일부
+ * 임베드 환경에서 `localStorage` 는 **접근만 해도 던진다.** 감싸지 않으면 홈 화면이
+ * 통째로 안 뜬다 — 모드를 기억하자고 화면을 잃는 것은 말이 안 된다.
+ *
+ * **쓰기가 막혀도 토글은 되어야 한다.** 저장은 편의이고 토글은 기능이다.
+ *
+ * **저장값을 안 믿는다.** 개발자 도구로 아무 값이나 넣을 수 있고 같은 오리진의 다른 코드가
+ * 덮어쓸 수도 있다. 그대로 믿으면 `mode` 가 `"purple"` 이 되어 파생 계산이 어디서 터질지
+ * 모르는 상태가 된다.
+ *
+ * @param {Storage|null} storage 게이트가 가짜를 물릴 수 있게 밖에서 받는다
+ */
+export function modeStore(storage = defaultStorage()) {
+  return {
+    read() {
+      try {
+        return asMode(storage?.getItem?.(MODE_KEY));
+      } catch {
+        // 읽을 수 없는 환경. 밝은 모드로 시작하면 그만이다.
+        return "light";
+      }
+    },
+    write(mode) {
+      // 아는 모드만 쓴다. 이상한 값을 쓰면 **저장된 멀쩡한 값을 잃는다**.
+      if (!MODES.includes(mode)) return;
+      try {
+        storage?.setItem?.(MODE_KEY, mode);
+      } catch {
+        // 못 저장해도 이번 토글은 그대로 동작한다.
+      }
+    },
+  };
+}
+
+/** 브라우저의 저장소. **접근 자체가 던지므로** 여기서도 감싼다. */
+function defaultStorage() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 모드 토글 버튼이 무엇을 보일지 정한다. 20단계 `engineToggle` 과 같은 모양이다.
+ *
+ * **라벨은 지금이 아니라 갈 곳을 말한다.** "어두운" 이라고만 적혀 있으면 지금이 어두운지
+ * 누르면 어두워지는지 알 수 없다.
+ *
+ * **뺀 이유는 저장 때문이다.** 전에는 늘 밝은 모드로 시작해서 글자와 `aria-pressed` 를
+ * 박아 뒀는데, 저장된 모드로 시작하게 되면 **어두운 모드에서 버튼이 거짓말을 한다** —
+ * 이미 어두운데 어둡게 보자고 하고, 눌린 상태가 아니라고 알린다.
+ */
+export function modeToggle(mode) {
+  const now = asMode(mode);
+  const next = now === "dark" ? "light" : "dark";
+  return {
+    next,
+    pressed: now === "dark",
+    label: next === "dark" ? "어두운 배경으로 보기" : "밝은 배경으로 보기",
+  };
+}
+
+/**
+ * 모드 토글 버튼에 지금 모드를 칠한다. **만들 때와 누를 때 같은 함수를 쓴다.**
+ *
+ * 처음에는 화면이 그 둘을 따로 적었다. 늘 밝은 모드로 시작하던 시절에는 우연히 맞았지만,
+ * 저장된 모드로 시작하게 되면 **처음 칠하는 것을 빼먹기 쉽다** — 그러면 어두운 모드인데
+ * 버튼이 비어 있거나 밝은 모드인 척한다. 실제로 그 변형이 게이트를 통과했다.
+ *
+ * 함수로 빼면 게이트가 **가짜 버튼에 직접 칠해 보고** 확인한다. 화면 코드는 정적 검사밖에
+ * 못 하는데, 정적 검사는 "처음에 칠했는가" 를 못 본다.
+ */
+export function applyModeButton(button, mode) {
+  const view = modeToggle(mode);
+  button.setAttribute("aria-pressed", String(view.pressed));
+  button.textContent = view.label;
+  return view;
+}
+
 export function structureColors(structure, mode = "light") {
   return (mode === "dark" ? structure.colorsDark : null) ?? structure.colors;
 }

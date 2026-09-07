@@ -1,6 +1,6 @@
 // 홈 화면. 렌더 조각은 ui.js 가 세 화면과 공유한다.
 
-import { api, diagnosisCard, el, finishEditing, finishOverrides, paletteCard, refreshRuntime, structureCard } from "./ui.js";
+import { api, applyModeButton, diagnosisCard, el, finishEditing, finishOverrides, modeStore, modeToggle, paletteCard, refreshRuntime, structureCard } from "./ui.js";
 
 const form = document.getElementById("search-form");
 const input = document.getElementById("q");
@@ -145,9 +145,17 @@ function expansionSection(seedId, query) {
   let loaded = false;
   let pending = false;
 
-  // **모드 상태는 이 영역 클로저 안에만 있다.** 전역이나 localStorage 에 두지 않는다 —
-  // 카드마다 다른 모드로 나란히 비교할 수 있고, 이 저장소에 없던 저장 계층을 들이지도 않는다.
-  let mode = "light";
+  /*
+   * **모드 상태는 여전히 이 영역 클로저 안에만 있다.** 카드마다 다른 모드로 나란히
+   * 비교할 수 있어야 하기 때문이다 — 전역으로 올리면 한 카드를 어둡게 하는 순간
+   * 나머지가 전부 따라 어두워진다.
+   *
+   * **바뀐 것은 시작값뿐이다(23단계).** 전에는 늘 밝은 모드로 시작해서 새로고침할 때마다
+   * 다시 눌러야 했다. 이제 **기본 모드 하나**를 기억하고 그것으로 시작한다.
+   * 그 뒤로는 카드마다 따로 토글할 수 있다 — 원래 결정의 값은 그대로 산다.
+   */
+  const modes = modeStore();
+  let mode = modes.read();
   /*
    * **손으로 바꾼 재질도 여기, redraw 밖에 둔다.** 모드 토글이 격자를 통째로 다시 그리므로
    * 카드 안에 두면 어두운 모드로 바꾸는 순간 고친 것이 전부 사라진다 —
@@ -243,13 +251,20 @@ function expansionSection(seedId, query) {
       // 모드를 서버에 물으면 selectStructures 가 다시 돌아 같은 질의인데 보이는 다섯이 바뀐다.
       // 서버가 두 모드를 한 번에 보내 주므로(S15-G10) 여기서는 어느 쪽을 그릴지만 고른다.
       const modeBox = el("div", "expand__mode");
-      const modeBtn = el("button", "expand__mode-toggle", "어두운 배경으로 보기");
+      const modeBtn = el("button", "expand__mode-toggle");
       modeBtn.type = "button";
-      modeBtn.setAttribute("aria-pressed", "false");
+      /*
+       * **버튼 모양은 `applyModeButton` 한 곳에서 정한다.** 전에는 글자와 `aria-pressed` 를
+       * 만들 때와 누를 때 두 곳에 적었는데, 늘 밝은 모드로 시작했기에 그 둘이 우연히 맞았다.
+       * 저장된 모드로 시작하면 **어두운 모드에서 버튼이 거짓말을 한다** — 이미 어두운데
+       * 어둡게 보자고 하고, 눌린 상태가 아니라고 알린다.
+       */
+      applyModeButton(modeBtn, mode);
       modeBtn.addEventListener("click", () => {
-        mode = mode === "dark" ? "light" : "dark";
-        modeBtn.setAttribute("aria-pressed", String(mode === "dark"));
-        modeBtn.textContent = mode === "dark" ? "밝은 배경으로 보기" : "어두운 배경으로 보기";
+        mode = modeToggle(mode).next;
+        // 마지막으로 고른 것이 다음번 기본이 된다. 별도 버튼을 만들면 두 번 눌러야 한다.
+        modes.write(mode);
+        applyModeButton(modeBtn, mode);
         // **다시 그리기 전에 포커스를 이 버튼으로 확정한다.** redraw 가 격자를 통째로 갈아서,
         // 카드 안 비율 슬라이더에 포커스가 있었다면 그 요소가 DOM 에서 사라지고 포커스가 body 로
         // 떨어진다(실측). Safari 는 마우스 클릭으로 button 에 포커스를 주지 않으므로 그 경로가
