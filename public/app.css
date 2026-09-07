@@ -1579,6 +1579,35 @@ a.action--primary:hover {
 .struct__finish-name {
   color: var(--accent-ink);
 }
+/* 재질 고르개(21단계). 읽기 전용 표시 자리에 그대로 들어가므로 **줄 높이를 안 바꾼다** —
+   바뀌면 카드 여덟의 세로 길이가 함께 밀린다.
+   손가락으로 누를 것이라 세로 24px 은 작다. 글자 크기는 그대로 두고 여백만 준다. */
+.struct__finish-pick {
+  min-height: 26px;
+  padding: 2px 22px 2px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+  /* 브라우저 기본 화살표가 폰트를 안 따라 커서 줄이 밀린다. 직접 그린다. */
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 10px center, right 6px center;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+.struct__finish-pick:hover {
+  border-color: var(--accent);
+}
+.struct__finish-pick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 
 .expand__more {
   padding-top: 16px;

@@ -1,6 +1,6 @@
 // 홈 화면. 렌더 조각은 ui.js 가 세 화면과 공유한다.
 
-import { api, diagnosisCard, el, paletteCard, refreshRuntime, structureCard } from "./ui.js";
+import { api, diagnosisCard, el, finishOverrides, paletteCard, refreshRuntime, structureCard } from "./ui.js";
 
 const form = document.getElementById("search-form");
 const input = document.getElementById("q");
@@ -148,6 +148,12 @@ function expansionSection(seedId, query) {
   // **모드 상태는 이 영역 클로저 안에만 있다.** 전역이나 localStorage 에 두지 않는다 —
   // 카드마다 다른 모드로 나란히 비교할 수 있고, 이 저장소에 없던 저장 계층을 들이지도 않는다.
   let mode = "light";
+  /*
+   * **손으로 바꾼 재질도 여기, redraw 밖에 둔다.** 모드 토글이 격자를 통째로 다시 그리므로
+   * 카드 안에 두면 어두운 모드로 바꾸는 순간 고친 것이 전부 사라진다 —
+   * 15단계에서 겪은 것과 같은 부류이고 `S21-G4` 가 이 자리를 검사한다.
+   */
+  const overrides = finishOverrides();
   // 받아 둔 데이터로 다시 그리는 자리. 펼치기 전에는 그릴 것이 없어 null 이다.
   let redraw = null;
 
@@ -298,18 +304,32 @@ function expansionSection(seedId, query) {
        * 스스로 알고 보내는 편이 맞다.
        */
       const saveDerived = (st) => (shares) => {
-        const roles = st.colors.map((c) => c.role);
-        const finishes = {};
-        for (const role of roles) {
-          const id = fin?.assignments?.[role];
-          if (id) finishes[role] = id;
-        }
+        // 손으로 바꾼 것이 있으면 그것이, 없으면 LLM 배정이 실린다. 그 합치기는
+        // `forStructure` 한 곳에서 하고 화면이 다시 적지 않는다 — 두 곳에 적으면 갈라진다.
+        const finishes = overrides.forStructure(st, fin?.assignments);
         return api("/api/saved/derived", { seedId, structureId: st.id, mode, shares, finishes });
       };
 
+      /*
+       * **재질을 고쳐도 서버에 다시 묻지 않는다.** `/api/expand` 를 다시 부르면
+       * `selectStructures` 가 다시 돌아 같은 질의인데 **보이는 다섯이 바뀐다** —
+       * 모드 토글이 피한 것과 같은 함정이다(S15-G11). 담아 두고 다시 그리기만 한다.
+       *
+       * 다시 그리는 이유는 고르개가 새 값으로 열려야 하기 때문이다. 격자가 갈리므로
+       * 포커스가 사라지지 않게 모드 토글과 같은 처리를 한다.
+       */
+      const cardEditing = (st) => ({
+        assignments: overrides.forStructure(st, fin?.assignments),
+        onFinish: (role, id) => {
+          overrides.set(st.id, role, id);
+          redraw?.();
+        },
+      });
+
       redraw = () => {
-        grid.replaceChildren(...chosen.map((st) => structureCard(st, mode, fin, saveDerived(st))));
-        restGrid?.replaceChildren(...rest.map((st) => structureCard(st, mode, fin, saveDerived(st))));
+        const draw = (st) => structureCard(st, mode, fin, saveDerived(st), fin?.assignments ? cardEditing(st) : null);
+        grid.replaceChildren(...chosen.map(draw));
+        restGrid?.replaceChildren(...rest.map(draw));
       };
       redraw();
       loaded = true;

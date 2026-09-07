@@ -60,6 +60,13 @@ export function swatchView(colors, ratio) {
   return { node, set };
 }
 
+/*
+ * **쓸 수 있는 재질.** 서버가 카탈로그에서 만들어 보내 주지만(`finishes.names`), 응답이
+ * 없거나 손상됐을 때도 화면이 모르는 값을 담지 않도록 기본값을 둔다. `src/material.js` 의
+ * `MATERIAL_FINISHES` 와 같은 목록이고, 어긋나면 `S21-G1` 이 운다.
+ */
+export const FINISH_IDS = Object.freeze(["matte", "gloss", "metal", "emissive"]);
+
 export const RATIO_MIN = 10;
 export const RATIO_MAX = 90;
 const RATIO_STEP = 5;
@@ -289,6 +296,83 @@ export function savedFields(entry) {
  * 어두운 모드는 서버가 같은 응답에 함께 실어 보낸다(S15-G10). 없으면 밝은 쪽으로 물러선다 —
  * `colorsDark` 를 모르던 시절의 응답을 받아도 화면이 비지 않게 한다.
  */
+/**
+ * 재질 고르개에 넣을 항목을 만든다.
+ *
+ * **한글 이름을 쓴다.** 화면에 `metal` 이라고 뜨면 사용자가 그것이 무엇인지 모른다.
+ * 이름은 카탈로그(`data/finishes.json`)가 갖고 있고 서버가 `finishes.names` 로 보낸다.
+ * 이름이 없으면 id 로 물러선다 — 고르개가 통째로 비는 것보다 낫다.
+ *
+ * **LLM 이 고른 것에 표시를 붙인다.** 사용자가 이것저것 바꿔 본 뒤 원래로 돌아가려 할 때,
+ * 어느 것이 원래였는지 알 방법이 필요하다. 되돌리기 버튼과 그 상태를 따로 만드는 대신
+ * **목록 안에 적어** 상태를 하나도 안 늘린다.
+ *
+ * @param {string[]} ids 쓸 수 있는 재질. 서버가 카탈로그에서 만들어 보낸다
+ * @param {Record<string,string>|null} names 재질 id → 한글 이름
+ * @param {string|null} assigned LLM(또는 기본값)이 이 자리에 배정한 것
+ */
+export function finishOptions(ids, names, assigned) {
+  const list = Array.isArray(ids) ? ids : [];
+  return list.map((id) => {
+    // 자기 속성만 본다. 카탈로그가 손상되면 `__proto__` 같은 이름이 값을 물고 나온다.
+    const name = names && Object.hasOwn(names, id) && typeof names[id] === "string" ? names[id] : id;
+    return { id, label: id === assigned ? `${name} (LLM 배정)` : name };
+  });
+}
+
+/**
+ * 사용자가 손으로 바꾼 재질 배정을 담아 둔다.
+ *
+ * **구조마다 따로 담는다.** 배정 표는 역할별로 하나다(`본문 → 광택`) — 카드 여덟이 그것을
+ * 함께 본다. 그대로 고치면 **한 카드를 건드렸는데 나머지 일곱이 조용히 바뀐다.** 사용자는
+ * 하나의 배색을 다듬는 중이고, 저장도 구조 단위다.
+ *
+ * **이 상태는 카드 밖에 두어야 한다.** 모드 토글이 격자를 통째로 다시 그리므로(`redraw`),
+ * 카드 안에 두면 어두운 모드로 바꾸는 순간 고친 것이 전부 사라진다. 15단계에서 겪은 것과
+ * 같은 부류이고 `S21-G4` 가 그 자리를 검사한다.
+ *
+ * **모르는 값은 안 받는다.** 여기 담긴 것이 그대로 저장 요청에 실린다. 서버가 다시 거르지만
+ * (S19-G1) 화면이 모르는 값을 들고 있으면 **화면과 저장이 어긋난 채로** 보인다 —
+ * 사용자는 벨벳으로 저장했다고 믿고 저장소에는 무광이 앉는다.
+ */
+export function finishOverrides(valid = FINISH_IDS) {
+  const known = new Set(valid);
+  // 구조 id → (역할 → 재질). 프로토타입 없는 Map 이라 `__proto__` 가 키로 와도 안전하다.
+  const byStructure = new Map();
+
+  return {
+    set(structureId, role, finishId) {
+      if (typeof structureId !== "string" || typeof role !== "string") return;
+      if (typeof finishId !== "string" || !known.has(finishId)) return;
+      if (!byStructure.has(structureId)) byStructure.set(structureId, new Map());
+      byStructure.get(structureId).set(role, finishId);
+    },
+
+    /**
+     * 이 구조에 실제로 쓸 배정을 만든다 — **그 구조의 역할만.**
+     *
+     * 배정 표는 일곱 역할 전부를 담고 있지만 구조마다 쓰는 것은 3~4개다. 통째로 넘기면
+     * 서버가 어차피 거르지만(S19-G1), 화면이 무엇을 저장하는지 스스로 알고 보내는 편이 맞다.
+     */
+    forStructure(structure, base) {
+      const mine = byStructure.get(structure?.id);
+      const out = Object.create(null);
+      for (const color of structure?.colors ?? []) {
+        const role = color?.role;
+        if (typeof role !== "string") continue;
+        const picked = mine?.get(role);
+        if (picked) {
+          out[role] = picked;
+          continue;
+        }
+        // 원래 배정도 자기 속성만 본다 — 서버 응답이 손상됐을 때 프로토타입에서 값이 샌다.
+        if (base && Object.hasOwn(base, role) && known.has(base[role])) out[role] = base[role];
+      }
+      return out;
+    },
+  };
+}
+
 export function structureColors(structure, mode = "light") {
   return (mode === "dark" ? structure.colorsDark : null) ?? structure.colors;
 }
@@ -303,7 +387,11 @@ export function structureColors(structure, mode = "light") {
  *   을 고쳐도 화면이 안 따라오면 그 어긋남을 아무도 안 알려 준다. 없으면 재질 줄을 안 그린다
  *   (17-B 이전 응답을 받아도 화면이 깨지지 않게).
  */
-export function structureCard(structure, mode = "light", finishes = null, onSave = null) {
+/**
+ * @param {object|null} editing 재질을 고칠 수 있게 할 때 넘긴다 —
+ *   `{ assignments, onFinish(role, finishId) }`. 안 넘기면 17단계의 읽기 전용 표시 그대로다.
+ */
+export function structureCard(structure, mode = "light", finishes = null, onSave = null, editing = null) {
   const card = el("article", "struct");
 
   const head = el("div", "struct__head");
@@ -325,15 +413,40 @@ export function structureCard(structure, mode = "light", finishes = null, onSave
 
   card.append(head, el("p", "struct__principle", structure.principle), view.node);
 
-  // 재질 줄. 역할마다 어떤 재질이 배정됐는지만 적는다 — 수치는 이 단계에 없다(사용자 결정).
+  /*
+   * 재질 줄. 역할마다 어떤 재질이 배정됐는지만 적는다 — 수치는 화면에 안 낸다(사용자 결정).
+   *
+   * **`editing` 을 주면 고를 수 있게 된다(21단계).** 안 주면 17단계의 읽기 전용 표시 그대로다 —
+   * 이 카드는 홈에서만 쓰지만, 고르개를 늘 그리면 "볼 수만 있는 자리" 를 만들 수 없게 된다.
+   */
   if (finishes?.assignments) {
+    const shown = editing?.assignments ?? finishes.assignments;
     const line = el("div", "struct__finishes");
     for (const c of colors) {
-      const id = finishes.assignments[c.role];
+      // 자기 속성만 본다. 서버 응답이 손상되면 `__proto__` 같은 역할 이름이 값을 물고 나온다.
+      const id = Object.hasOwn(shown, c.role) ? shown[c.role] : null;
       if (!id) continue;
       const item = el("span", "struct__finish");
       item.append(el("b", "struct__finish-role", c.role), document.createTextNode(" "));
-      item.append(el("span", "struct__finish-name", finishes.names?.[id] ?? id));
+
+      if (editing?.onFinish) {
+        const pick = el("select", "struct__finish-pick");
+        // 역할 이름을 붙여 읽어 준다. "무광" 만 들리면 어느 자리의 재질인지 알 수 없다.
+        pick.setAttribute("aria-label", `${c.role}의 재질`);
+        // 어느 역할의 고르개인지를 DOM 에 남긴다 — 게이트가 이것으로 짝을 맞춘다.
+        pick.setAttribute("data-role", c.role);
+        for (const opt of finishOptions(finishes.ids ?? FINISH_IDS, finishes.names, finishes.assignments[c.role])) {
+          const node = el("option", null, opt.label);
+          node.value = opt.id;
+          pick.append(node);
+        }
+        pick.value = id;
+        pick.addEventListener("change", () => editing.onFinish(c.role, pick.value));
+        item.append(pick);
+      } else {
+        const name = finishes.names && Object.hasOwn(finishes.names, id) ? finishes.names[id] : id;
+        item.append(el("span", "struct__finish-name", name));
+      }
       line.append(item);
     }
     if (line.childElementCount) card.append(line);
