@@ -1,6 +1,6 @@
 // 홈 화면. 렌더 조각은 ui.js 가 세 화면과 공유한다.
 
-import { api, diagnosisCard, el, finishOverrides, paletteCard, refreshRuntime, structureCard } from "./ui.js";
+import { api, diagnosisCard, el, finishEditing, finishOverrides, paletteCard, refreshRuntime, structureCard } from "./ui.js";
 
 const form = document.getElementById("search-form");
 const input = document.getElementById("q");
@@ -330,10 +330,7 @@ function expansionSection(seedId, query) {
        *
        * 담아 두기만 한다. 다음에 격자가 갈릴 때(모드 토글) `forStructure` 가 합쳐서 넘긴다.
        */
-      const cardEditing = (st) => ({
-        assignments: overrides.forStructure(st, fin?.assignments),
-        onFinish: (role, id) => overrides.set(st.id, role, id),
-      });
+      const cardEditing = (st) => finishEditing(overrides, st, fin?.assignments);
 
       redraw = () => {
         const draw = (st) => structureCard(st, mode, fin, saveDerived(st), fin?.assignments ? cardEditing(st) : null);

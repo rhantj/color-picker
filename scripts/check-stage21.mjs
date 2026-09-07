@@ -99,7 +99,27 @@ const GATES = {
     const [bogus] = finishOptions(["matte"], { matte: { toString: () => "무광" } }, null);
     if (typeof bogus?.label !== "string") bad.push(`이름이 객체일 때 ${typeof bogus?.label} 이 나온다`);
 
-    out(bad.length ? bad.slice(0, 8).join("\n") : "고르개가 재질 넷을 한글 이름으로 주고 LLM 배정에만 표시가 붙는다");
+    /*
+     * **화면의 사본이 엔진의 목록과 같은지 대조한다.**
+     *
+     * `public/ui.js` 의 `FINISH_IDS` 는 `src/material.js` 의 `MATERIAL_FINISHES` 사본이다.
+     * 어긋나면 **화면이 고를 수 있는 것과 서버가 받는 것이 달라져**, 사용자가 고른 재질이
+     * 저장에서 조용히 기본값으로 바뀐다.
+     *
+     * 게이트 자신의 사본까지 셋을 맞춘다 — 두 쪽을 함께 고치면서 게이트를 안 고치는 것을
+     * 막기 위해서다. (전에는 `ui.js` 주석이 "여기서 대조한다" 고 적어 놓고 실제 대조가
+     * 없었다. 리뷰가 잡았다.)
+     */
+    const { FINISH_IDS: uiList } = await import("../public/ui.js");
+    const { MATERIAL_FINISHES } = await import("../src/material.js");
+    const asText = (v) => [...(v ?? [])].sort().join(",");
+    const mine = asText(FINISH_IDS);
+    if (asText(uiList) !== mine) bad.push(`ui.js 의 목록이 [${uiList}] — 게이트가 아는 것은 [${FINISH_IDS}]`);
+    if (asText(MATERIAL_FINISHES) !== mine) {
+      bad.push(`material.js 의 목록이 [${MATERIAL_FINISHES}] — 게이트가 아는 것은 [${FINISH_IDS}]`);
+    }
+
+    out(bad.length ? bad.slice(0, 8).join("\n") : "고르개가 재질 넷을 한글 이름으로 주고 LLM 배정에만 표시가 붙는다 (화면·엔진 목록 일치)");
     return bad.length === 0;
   },
 
@@ -229,6 +249,38 @@ const GATES = {
     target.fire("change");
     if (String(changed) !== "본문,metal") bad.push(`고쳤는데 안 알린다 (${JSON.stringify(changed)})`);
 
+    /*
+     * **손으로 바꾼 값으로 열리는가. 이 단계의 첫 번째 함정이 여기서 완성된다.**
+     *
+     * 격자가 다시 그려질 때(모드 토글) 카드는 **합쳐진 배정**을 받는다. 그것을 무시하고
+     * 원래 배정으로 그리면, 사용자가 고른 것이 저장에는 남는데 **화면에서만 원래대로
+     * 돌아간다** — 무엇이 저장될지 알 수 없게 된다.
+     *
+     * 앞의 검사는 `editing.assignments` 를 원래 배정과 **같게** 넘겨서 그 둘을 구별하지
+     * 못했다. 실제로 `editing` 을 통째로 무시하는 변형이 일곱 게이트를 다 통과했다
+     * (리뷰가 재현). 여기서는 **다른 값**을 넘겨 가른다.
+     */
+    const overridden = { ...finishes.assignments, 본문: "metal", 바탕: "emissive" };
+    const after = structureCard(st, "light", finishes, null, { assignments: overridden, onFinish: () => {} });
+    const opened = new Map(
+      findAll(after, (n) => n.tag === "select").map((s) => [s.attrs["data-role"], s.value]),
+    );
+    for (const [role, want] of Object.entries(overridden)) {
+      if (opened.get(role) !== want) {
+        bad.push(`손으로 바꾼 ${role} 이 ${opened.get(role)} 로 열린다 (${want} 여야 한다) — 화면이 저장과 어긋난다`);
+      }
+    }
+    // 양성 대조 — 안 바꾼 자리는 원래대로. 위 검사가 "늘 덮어쓴 값" 이 아님을 안다.
+    if (opened.get("강조") !== finishes.assignments.강조) {
+      bad.push(`안 바꾼 강조가 ${opened.get("강조")} 로 열린다`);
+    }
+    // `(LLM 배정)` 표시는 **원래** 배정을 따른다 — 되돌릴 자리를 알려 주는 것이 그 목적이다.
+    const bodyOpts = findAll(after, (n) => n.tag === "select").find((s) => s.attrs["data-role"] === "본문");
+    const marked = bodyOpts.children.filter((o) => /LLM/.test(o.textContent)).map((o) => o.value);
+    if (String(marked) !== finishes.assignments.본문) {
+      bad.push(`LLM 표시가 [${marked}] 에 붙었다 — 원래 배정(${finishes.assignments.본문})에 붙어야 한다`);
+    }
+
     // **고르개를 안 준 옛 호출은 그대로 돈다.** 17단계의 읽기 전용 표시가 회귀하지 않게.
     const plain = structureCard(st, "light", finishes, null);
     if (findAll(plain, (n) => n.tag === "select").length !== 0) bad.push("고르개 없이 불렀는데 고르개가 생겼다");
@@ -251,6 +303,10 @@ const GATES = {
     const bad = [];
     const js = stripComments(read("public/app.js"));
 
+    /*
+     * **정적으로는 자리만 본다.** 배정 상태가 `redraw` 보다 **위**에 선언돼 있는가 —
+     * 안에 있으면 모드 토글이 격자를 다시 그릴 때마다 초기화된다.
+     */
     const at = js.indexOf("finishOverrides(");
     if (at < 0) {
       out("app.js 가 finishOverrides 를 안 쓴다 — 바꾼 배정을 둘 자리가 없다");
@@ -260,66 +316,93 @@ const GATES = {
     if (redrawAt < 0) bad.push("app.js 에 redraw 가 없다 — 이 검사의 전제가 깨졌다");
     else if (at > redrawAt) bad.push("배정 상태가 redraw 안(또는 뒤)에 있다 — 다시 그릴 때마다 초기화된다");
 
-    /*
-     * **카드에 넘기는 "지금 배정" 이 합쳐진 것인가.**
-     *
-     * 처음엔 `redraw` 본문에 `overrides` 라는 글자가 있는지만 봤다. **그걸로는 못 잡는다** —
-     * 카드에 넘길 것을 만드는 자리가 `redraw` 밖(`cardEditing`)에 있고, 거기서
-     * `assignments` 를 원래 배정으로 바꿔치기해도 `overrides.set` 이 남아 검사가 통과했다.
-     * 실제로 그 변형이 살아남았다. 19단계 S19-G5 가 겪은 "조립부와 호출부가 따로 있다" 와
-     * 같은 부류다.
-     *
-     * 그래서 **`assignments:` 에 실리는 값이 `forStructure` 에서 오는지**를 직접 본다.
-     * 합치는 규칙이 한 곳에만 있으므로(`ui.js`), 그것을 안 거치면 합쳐진 것일 수 없다.
-     */
-    const merged = /assignments:\s*[^,;\n]*forStructure\s*\(/.test(js);
-    if (!merged) {
-      bad.push("카드에 넘기는 배정이 forStructure 를 안 거친다 — 다시 그리면 원래 배정으로 돌아간다");
-    }
-    const body = js.slice(redrawAt, js.indexOf("redraw();", redrawAt));
-    if (!/forStructure|overrides|Editing/.test(body)) {
-      bad.push("redraw 가 바꾼 배정을 안 읽는다");
-    }
+    // 화면이 그 묶음을 실제로 쓰는가. 안 쓰면 아래 동작 검사가 공허하다.
+    if (!js.includes("finishEditing(")) bad.push("app.js 가 finishEditing 을 안 쓴다 — 아래 검사가 겨냥하는 코드가 화면에 없다");
 
     /*
-     * **재질을 바꿀 때 서버에 다시 묻지 않는다.** `/api/expand` 를 다시 부르면
-     * `selectStructures` 가 다시 돌아 같은 질의인데 보이는 다섯이 바뀐다(S15-G11 과 같은 함정).
-     * `onFinish` 처리 안에 그 호출이 없어야 한다.
+     * **나머지는 직접 불러서 잰다. 정규식으로 재던 것을 걷어냈다.**
+     *
+     * 전에는 `app.js` 소스에서 `api(` 라는 글자를 찾아 "서버를 다시 안 부른다" 를
+     * 확인했다. 리뷰가 그것을 **한 줄로 우회**했다 — 호출을 이름 붙인 헬퍼로 빼서 검사 창
+     * 밖에 두면 그만이었고, 그건 난독화가 아니라 **평범한 리팩터링**이다. 그래서 판정 로직을
+     * `finishEditing` 이라는 순수 함수로 빼고, 여기서 그것을 부른다.
+     *
+     * 무는 것 셋:
+     *   1. 서버를 안 부른다 — `fetch` 를 감시한다
+     *   2. 화면을 안 부순다 — DOM 을 아예 안 깔고 부른다. 건드리면 던진다
+     *   3. 고른 것이 실제로 담긴다 — 담고 나서 다시 물어본다
      */
-    /*
-     * **처리기만 잘라 본다.** 처음엔 `onFinish` 부터 300자를 봤는데 그 창이 바로 뒤의
-     * `redraw = ` 선언까지 삼켜, 처리기가 깨끗해도 검사가 울었다. 다음 문장이 시작하는
-     * 자리에서 자른다.
-     */
-    const onFinishAt = js.indexOf("onFinish");
-    const nextStmt = js.indexOf("redraw = ", onFinishAt);
-    if (onFinishAt < 0) bad.push("app.js 가 onFinish 를 안 넘긴다 — 고쳐도 받을 곳이 없다");
-    else {
-      const handler = js.slice(onFinishAt, nextStmt > onFinishAt ? nextStmt : onFinishAt + 300);
-      if (/api\(|fetch\(/.test(handler)) bad.push("재질을 고칠 때 서버를 다시 부른다 — 보이는 다섯이 바뀐다");
-      /*
-       * **고칠 때 카드를 부수지도 않는다.** 처음 구현이 여기서 `redraw()` 를 불렀고,
-       * 그것이 브라우저에서 두 가지를 망가뜨렸다(실측):
-       *   - 사용자가 맞춘 면적 비율이 55:25:20 → 34:33:33 으로 초기화됐다
-       *   - 방금 조작한 고르개가 사라져 포커스가 body 로 떨어졌다
-       * 다시 그릴 이유도 없었다 — 고르개는 고른 값을 스스로 보이고, 카드의 나머지는
-       * 재질과 무관하다. 담아 두기만 한다.
-       */
-      if (/redraw/.test(handler)) {
-        bad.push("재질을 고칠 때 카드를 다시 그린다 — 맞춰 둔 비율과 포커스가 날아간다");
-      }
+    const { finishEditing, finishOverrides } = await import("../public/ui.js");
+    if (typeof finishEditing !== "function") {
+      out("public/ui.js 가 finishEditing 을 안 내보낸다");
+      return false;
     }
 
-    out(bad.length ? bad.slice(0, 8).join("\n") : "배정 상태가 redraw 밖에 있고 redraw 가 그것을 읽는다 · 고칠 때 서버를 안 부른다 (정적 검사)");
+    const realFetch = globalThis.fetch;
+    const realDocument = globalThis.document;
+    let fetched = 0;
+    globalThis.fetch = (...args) => {
+      fetched += 1;
+      return Promise.reject(new Error(`게이트: 여기서 부르면 안 된다 (${args[0]})`));
+    };
+    // DOM 을 치운다. 건드리면 던지고, 그 던짐이 아래에서 잡힌다.
+    delete globalThis.document;
+
+    let threw = null;
+    try {
+      const store = finishOverrides();
+      const st = structure("comp", ["바탕", "본문", "강조"]);
+      const base = { 바탕: "matte", 본문: "gloss", 강조: "emissive" };
+
+      const bundle = finishEditing(store, st, base);
+      // 지금 보일 배정은 합쳐진 것이다.
+      if (bundle.assignments?.본문 !== "gloss") bad.push(`처음 배정이 ${bundle.assignments?.본문}`);
+
+      bundle.onFinish("본문", "metal");
+      // 담겼는가 — 같은 묶음이 아니라 새로 만들어 물어본다(그래야 캐시가 아니라 저장을 본다).
+      const again = finishEditing(store, st, base);
+      if (again.assignments?.본문 !== "metal") bad.push(`고쳤는데 안 담겼다 (${again.assignments?.본문})`);
+      if (again.assignments?.바탕 !== "matte") bad.push(`안 건드린 바탕이 ${again.assignments?.바탕}`);
+
+      // 다른 구조는 안 바뀐다(구조별 격리가 이 경로로도 유지되는가).
+      const other = finishEditing(store, structure("wide", ["본문"]), base);
+      if (other.assignments?.본문 !== "gloss") bad.push("한 구조를 고쳤더니 다른 구조까지 바뀐다");
+
+      // 모르는 값은 안 담긴다.
+      bundle.onFinish("본문", "velvet");
+      if (finishEditing(store, st, base).assignments?.본문 !== "metal") bad.push("모르는 재질이 담겼다");
+    } catch (err) {
+      threw = err;
+    } finally {
+      globalThis.fetch = realFetch;
+      globalThis.document = realDocument;
+    }
+
+    if (threw) bad.push(`고칠 때 화면을 건드리거나 던졌다 — ${threw.message}`);
+    if (fetched) bad.push(`고칠 때 서버를 ${fetched}번 불렀다 — 보이는 다섯이 바뀐다`);
+
+    /*
+     * **양성 대조.** 위 감시가 진짜로 도는지 확인한다. 감시를 깔아 놓고 아무도 안 부르면
+     * "0번 불렀다" 는 늘 참이라 검사가 공허해진다.
+     */
+    let sawSpy = 0;
+    const keep = globalThis.fetch;
+    globalThis.fetch = () => {
+      sawSpy += 1;
+      return Promise.reject(new Error("spy"));
+    };
+    globalThis.fetch("http://example.invalid").catch(() => {});
+    globalThis.fetch = keep;
+    if (sawSpy !== 1) bad.push("fetch 감시가 안 걸린다 — 위 검사가 공허하다");
+
+    out(
+      bad.length
+        ? bad.slice(0, 8).join("\n")
+        : "배정 상태가 redraw 밖에 있다 · 고칠 때 서버 0번 · 화면 안 건드림 · 고른 것이 담기고 구조별로 갈린다",
+    );
     return bad.length === 0;
   },
 
-  /*
-   * **저장에 실리는 것이 화면에서 고친 것이다.**
-   *
-   * 고르개를 만들어 놓고 저장에는 원래 배정을 보내면, 사용자는 바꿔 저장했다고 믿는데
-   * 저장된 것은 LLM 배정이다. 정적으로 저장 요청 조립부를 본다.
-   */
   "S21-G5": async () => {
     const bad = [];
     const js = stripComments(read("public/app.js"));
@@ -497,6 +580,29 @@ function node(tag) {
       return self.children.filter((c) => c.tag !== "#text").length;
     },
   };
+  /*
+   * **`select` 의 `value` 는 자기 `option` 을 실제로 참조한다.**
+   *
+   * 그냥 필드로 두면 흉내가 브라우저보다 **너그러워진다.** 진짜 `select` 는 일치하는
+   * `option` 이 없는 값을 받지 않고 빈 문자열이 된다. 필드로 두면 아무 값이나 들어가서,
+   * `option` 의 `value` 를 이름표로 바꿔치기하는 변형이 **`S21-G3` 을 통과했다**
+   * (리뷰가 재현). 실제 브라우저에서는 그 변형이 기능을 통째로 깬다 —
+   * 고르개가 아무것도 안 고른 채로 열리고, 고르면 이름표 문자열이 저장으로 가서
+   * `finishOverrides` 가 조용히 버린다.
+   *
+   * 흉내는 최소로 두되, **브라우저보다 너그러운 자리는 만들지 않는다.** 너그러우면
+   * 게이트가 통과하는데 화면은 깨진다.
+   */
+  if (tag === "select") {
+    let picked = "";
+    Object.defineProperty(self, "value", {
+      get: () => picked,
+      set: (v) => {
+        const want = String(v);
+        picked = self.children.some((c) => c.tag === "option" && c.value === want) ? want : "";
+      },
+    });
+  }
   return self;
 }
 

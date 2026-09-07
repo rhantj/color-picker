@@ -62,8 +62,13 @@ export function swatchView(colors, ratio) {
 
 /*
  * **쓸 수 있는 재질.** 서버가 카탈로그에서 만들어 보내 주지만(`finishes.names`), 응답이
- * 없거나 손상됐을 때도 화면이 모르는 값을 담지 않도록 기본값을 둔다. `src/material.js` 의
- * `MATERIAL_FINISHES` 와 같은 목록이고, 어긋나면 `S21-G1` 이 운다.
+ * 없거나 손상됐을 때도 화면이 모르는 값을 담지 않도록 기본값을 둔다.
+ *
+ * `src/material.js` 의 `MATERIAL_FINISHES` 와 **같아야 하는 사본**이다. 서로 어긋나면
+ * 화면이 고를 수 있는 것과 서버가 받는 것이 달라져, 사용자가 고른 재질이 저장에서
+ * 조용히 기본값으로 바뀐다. `S21-G1` 이 두 목록을 대조한다.
+ * (전에는 이 주석이 대조한다고 적어 놓고 실제로는 게이트가 자기 사본하고만 비교했다 —
+ * 리뷰가 잡았다.)
  */
 export const FINISH_IDS = Object.freeze(["matte", "gloss", "metal", "emissive"]);
 
@@ -373,6 +378,33 @@ export function finishOverrides(valid = FINISH_IDS) {
   };
 }
 
+/**
+ * 카드에 넘길 재질 편집 묶음을 만든다 — **지금 보일 배정**과 **고쳤을 때 할 일**.
+ *
+ * **화면 코드에서 이걸 빼낸 이유는 게이트다.** 이 단계에서 가장 중요한 보장이
+ * "재질을 고쳐도 서버를 다시 안 부른다" 인데(부르면 `selectStructures` 가 다시 돌아
+ * **보이는 다섯이 바뀐다**), 그것을 `app.js` 소스에서 `api(` 라는 글자를 찾는 방식으로
+ * 재고 있었다. 리뷰가 그 검사를 **한 줄로 우회**했다 — 호출을 이름 붙인 헬퍼로 빼서
+ * 검사 창 밖에 두면 그만이었고, 그건 난독화가 아니라 **평범한 리팩터링**이다.
+ *
+ * 순수 함수로 빼면 게이트가 이것을 직접 부르고 **네트워크를 실제로 감시**할 수 있다.
+ * 17단계 `structureColors` · 18단계 `savedFields` · 20단계 `engineToggle` 과 같은 자리다.
+ *
+ * **여기서 하는 일은 담아 두는 것뿐이다.** 다시 그리지 않는다 — 그리면 사용자가 맞춘
+ * 면적 비율과 포커스가 날아간다(실측). 고르개는 고른 값을 이미 스스로 보이고 있고,
+ * 카드의 나머지는 재질과 무관하다. 합치기는 다음에 격자가 갈릴 때 `forStructure` 가 한다.
+ *
+ * @param {{set:Function, forStructure:Function}} store `finishOverrides()` 가 만든 것
+ * @param {object} structure 이 카드의 구조
+ * @param {Record<string,string>|null} base 서버가 준 원래 배정
+ */
+export function finishEditing(store, structure, base) {
+  return {
+    assignments: store.forStructure(structure, base),
+    onFinish: (role, finishId) => store.set(structure?.id, role, finishId),
+  };
+}
+
 export function structureColors(structure, mode = "light") {
   return (mode === "dark" ? structure.colorsDark : null) ?? structure.colors;
 }
@@ -382,14 +414,16 @@ export function structureColors(structure, mode = "light") {
  *
  * @param {object} structure 서버가 준 구조 하나
  * @param {"light"|"dark"} mode 어두운 모드로 볼지 (15단계)
- * @param {{assignments: Record<string,string>, names: Record<string,string>} | null} finishes
+ * @param {{assignments: Record<string,string>, names?: Record<string,string>, ids?: string[]} | null} finishes
  *   역할별 재질 배정과 재질 id→이름 표. **이름을 코드에 박지 않는다** — `data/finishes.json`
  *   을 고쳐도 화면이 안 따라오면 그 어긋남을 아무도 안 알려 준다. 없으면 재질 줄을 안 그린다
- *   (17-B 이전 응답을 받아도 화면이 깨지지 않게).
- */
-/**
- * @param {object|null} editing 재질을 고칠 수 있게 할 때 넘긴다 —
- *   `{ assignments, onFinish(role, finishId) }`. 안 넘기면 17단계의 읽기 전용 표시 그대로다.
+ *   (17-B 이전 응답을 받아도 화면이 깨지지 않게). `ids` 를 안 주면 `FINISH_IDS` 로 물러선다.
+ * @param {((shares:number[]) => Promise<unknown>)|null} onSave 저장 버튼을 붙일 때 넘긴다.
+ *   **색은 안 받는다** — 씨앗·구조·모드만 알면 서버가 다시 계산한다(`S18-G1`).
+ * @param {{assignments: Record<string,string>, onFinish: (role:string, finishId:string) => void}|null} editing
+ *   재질을 고칠 수 있게 할 때 넘긴다(21단계). 안 넘기면 17단계의 읽기 전용 표시 그대로다.
+ *   **`onFinish` 는 담아 두기만 해야 한다** — 거기서 카드를 다시 그리면 사용자가 맞춘 비율과
+ *   포커스가 날아간다(`S21-G4` 가 검사한다).
  */
 export function structureCard(structure, mode = "light", finishes = null, onSave = null, editing = null) {
   const card = el("article", "struct");
