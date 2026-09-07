@@ -172,12 +172,44 @@ const GATES = {
           본문: 7, // 타입 위장
           강조: "emissive", // 멀쩡
           면: "metal", // 이 구조에 없는 역할
-          __proto__: "matte",
         },
       }),
     );
     const ids = dirty.finishes.map((f) => `${f.role}:${f.id}`);
     if (String(ids) !== "강조:emissive") bad.push(`손상된 것을 안 걸렀다 — [${ids}]`);
+
+    /*
+     * **프로토타입 공격은 원문 JSON 으로 만든다.**
+     *
+     * 객체 리터럴의 `{ __proto__: "matte" }` 는 **공격이 아니다** — 값이 객체가 아니라서
+     * 프로토타입 대입이 조용히 무시되고, own 속성도 상속 속성도 안 생긴다(실측).
+     * 그 케이스를 넣어 두면 `Object.hasOwn` 이 있든 없든 똑같이 통과해 **검사가 헛돈다.**
+     *
+     * `JSON.parse('{"__proto__":...}')` 는 다르다 — **own 속성으로 만든다.** 저장 파일도
+     * HTTP 응답도 그 경로로 들어오므로 그것이 실제 형태다.
+     *
+     * **19단계에서 같은 실수를 하고 고쳤는데 또 했다**(S19-G1, 리뷰가 두 번 다 잡았다).
+     * 리터럴로 쓴 프로토타입 케이스는 이 저장소에서 두 번 헛돌았다.
+     */
+    const attacks = [
+      ['{"바탕":"matte","__proto__":"metal"}', "__proto__"],
+      ['{"바탕":"matte","constructor":"metal"}', "constructor"],
+      ['{"바탕":"matte","toString":"metal"}', "toString"],
+    ];
+    for (const [raw, key] of attacks) {
+      const parsed = JSON.parse(raw);
+      if (!Object.hasOwn(parsed, key)) {
+        bad.push(`${key} 가 own 속성으로 안 만들어졌다 — 이 검사가 공허하다`);
+        continue;
+      }
+      const got = savedFields(derived({ finishes: parsed }));
+      const roles = got.finishes.map((f) => f.role);
+      if (roles.includes(key)) bad.push(`${key} 가 재질 목록에 실렸다`);
+      // 멀쩡한 것은 그대로 살아야 한다 — 공격 하나가 항목을 통째로 죽이지 않게.
+      if (got.finishes.find((f) => f.role === "바탕")?.id !== "matte") {
+        bad.push(`${key} 공격에 멀쩡한 바탕까지 사라졌다`);
+      }
+    }
 
     // 재질이 아예 없는 옛 항목도 안 던진다.
     for (const [what, value] of [["없음", undefined], ["null", null], ["배열", []], ["문자열", "matte"]]) {
@@ -202,7 +234,11 @@ const GATES = {
     }
     if (savedFields(derived({ finishes: {} })).finishesAdjusted !== false) bad.push("손 안 댔는데 참이다");
 
-    out(bad.length ? bad.slice(0, 8).join("\n") : "savedFields 가 재질을 색 순서로 주고, 손상된 것 5가지를 거르고, 손댄 표시를 낸다");
+    out(
+      bad.length
+        ? bad.slice(0, 8).join("\n")
+        : "savedFields 가 재질을 색 순서로 준다 · 손상 4가지 + 원문 JSON 프로토타입 공격 3가지를 거른다 · 손댄 표시",
+    );
     return bad.length === 0;
   },
 
@@ -255,9 +291,18 @@ const GATES = {
      * **손댄 표시.** 재질은 이 화면에서 못 고치므로 "왜 이게 메탈릭이지" 를 답해 줘야 한다.
      * 붙을 때와 안 붙을 때를 **둘 다** 본다 — 한쪽만 보면 "늘 붙는다" 를 못 잡는다.
      */
-    if (shown.includes("직접 고름")) bad.push("안 건드렸는데 손댄 표시가 붙는다");
-    const touched = text(finishLine({ ...fields, finishesAdjusted: true }, (id) => names[id]));
-    if (!touched.includes("직접 고름")) bad.push("손댔는데 표시가 안 붙는다");
+    const markOf = (node) => findAll(node, (n) => n.className === "card__finish-mark");
+    if (markOf(line).length) bad.push("안 건드렸는데 손댄 표시가 붙는다");
+    const touchedLine = finishLine({ ...fields, finishesAdjusted: true }, (id) => names[id]);
+    const marks = markOf(touchedLine);
+    if (marks.length !== 1) bad.push(`손댔을 때 표시가 ${marks.length}개다 (하나여야 한다)`);
+    if (!String(marks[0]?.textContent ?? "").trim()) bad.push("손댄 표시에 글자가 없다");
+    /*
+     * **문구 자체는 게이트가 판정하지 않는다.** 여기서 무는 것은 "표시가 붙고 안 붙는가" 라는
+     * 기제이고, **무슨 말로 붙는가는 사람이 본다.** 실제로 첫 문구(`직접 고름`)가 줄 끝에
+     * 하나 붙어 **셋 다 손으로 골랐다는 뜻으로 읽혔고**(리뷰 지적), 그것은 정규식으로 판정할
+     * 수 있는 종류가 아니다. 게이트가 문구를 고정하면 고칠 때마다 거짓 실패만 낸다.
+     */
 
     /*
      * **이름표가 없어도 줄이 사라지지 않는다.** 서버가 표를 못 보냈을 때 재질 줄이 통째로
@@ -420,6 +465,105 @@ const GATES = {
       if (drawn !== 5) bad.push(`${drawn}개만 그려졌다 (멀쩡한 1 + 손상 4 = 5개여야 한다)`);
     });
     out(bad.length ? bad.slice(0, 8).join("\n") : "손상 항목 4가지에서도 안 던지고 undefined 도 안 샌다 (다섯 개 다 그려짐)");
+    return bad.length === 0;
+  },
+
+  /*
+   * **게이트 수가 네 곳에서 같은가.**
+   *
+   * 이 저장소는 그 일치를 **사람이 손으로** 세어 왔다(`docs/com/open-work.md` 의 **C3**).
+   * 그리고 실제로 어긋났다 — 20·21·22단계에서 **연속 세 번** README 표에 행이 안 들어가
+   * 표 합계 156 과 선언 175 가 벌어졌다. 세 번째를 리뷰가 잡았다.
+   *
+   * **잊지 말자고 적는 것과 잊을 수 없게 만드는 것은 다르다.** 이 게이트가 그 셈을 대신한다.
+   *
+   * 네 곳:
+   *   1. 실제로 도는 게이트 — 검사기를 하나씩 물어본다(**이것이 기준이다**)
+   *   2. `GATES.md` 의 `S*-G*` 항목
+   *   3. `README.md` 의 선언("게이트 N개")
+   *   4. `README.md` 표의 단계별 합계
+   * 여기에 README 의 `check-stage{1..N}` 범위가 실제 마지막 단계와 맞는지도 함께 본다.
+   *
+   * **기준을 파일에서 안 읽는다.** 문서끼리만 대조하면 넷이 사이좋게 틀릴 수 있다.
+   * 검사기를 실제로 실행해 얻은 수가 기준이다.
+   */
+  "S22-G6": async () => {
+    const bad = [];
+
+    // ── 1. 실제로 도는 게이트를 센다. 인자 없이 부르면 쓸 수 있는 id 를 찍는다.
+    const actual = new Set();
+    let lastStage = 0;
+    for (let i = 1; i <= 99; i += 1) {
+      const path = join(ROOT, "scripts", `check-stage${i}.mjs`);
+      let exists = true;
+      try {
+        readFileSync(path);
+      } catch {
+        exists = false;
+      }
+      if (!exists) continue;
+      lastStage = i;
+      const printed = await new Promise((resolve) => {
+        const child = spawn(process.execPath, [path], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
+        let text = "";
+        child.stdout.on("data", (c) => (text += c.toString("utf8")));
+        child.on("close", () => resolve(text));
+      });
+      for (const m of printed.matchAll(new RegExp(`S${i}-G\\d+`, "g"))) actual.add(m[0]);
+    }
+    if (actual.size === 0) {
+      out("게이트를 하나도 못 셌다 — 이 검사의 전제가 깨졌다");
+      return false;
+    }
+
+    /*
+     * ── 2. GATES.md — **제목이 있는 항목만** 센다.
+     *
+     * 파일 어디든 그 id 가 있으면 통과하게 했더니, 제목 줄만 지워도 바로 아래 `CHECK:` 줄에
+     * id 가 남아 검사가 통과했다(변형으로 확인). 이 문서의 항목은 `S22-G6 무엇을 지키나`
+     * 형태로 **줄 맨 앞에서** 시작하므로 그것만 센다 — 사람이 읽는 설명이 거기 있다.
+     */
+    const gatesDoc = new Set((read("GATES.md").match(/^S\d+-G\d+(?= )/gm) ?? []));
+    for (const id of actual) {
+      if (!gatesDoc.has(id)) bad.push(`${id} 이 도는데 GATES.md 에 없다`);
+    }
+    for (const id of gatesDoc) {
+      if (!actual.has(id)) bad.push(`GATES.md 의 ${id} 이 실제로 안 돈다`);
+    }
+
+    // ── 3·4. README 선언과 표 합계
+    const readme = read("README.md");
+    const declared = Number(readme.match(/게이트 (\d+)개/)?.[1]);
+    if (declared !== actual.size) bad.push(`README 선언이 ${declared} — 실제 ${actual.size}`);
+
+    const rows = [...readme.matchAll(/^\| S(\d+) \| (\d+) \|/gm)];
+    const sum = rows.reduce((n, r) => n + Number(r[2]), 0);
+    if (sum !== actual.size) bad.push(`README 표 합계가 ${sum} — 실제 ${actual.size}`);
+
+    // 단계별로도 맞는가. 합계만 보면 한 단계가 넘치고 다른 단계가 모자라도 통과한다.
+    const perStage = new Map();
+    for (const id of actual) {
+      const n = id.slice(1, id.indexOf("-"));
+      perStage.set(n, (perStage.get(n) ?? 0) + 1);
+    }
+    for (const [n, count] of perStage) {
+      const row = rows.find((r) => r[1] === n);
+      if (!row) bad.push(`README 표에 S${n} 행이 없다 (${count}개가 돈다)`);
+      else if (Number(row[2]) !== count) bad.push(`README 표의 S${n} 이 ${row[2]} — 실제 ${count}`);
+    }
+    for (const r of rows) {
+      if (!perStage.has(r[1])) bad.push(`README 표의 S${r[1]} 이 실제로 안 돈다`);
+    }
+
+    // ── 5. 검사기 범위 표기
+    const range = Number(readme.match(/check-stage\{1\.\.(\d+)\}/)?.[1]);
+    if (range !== lastStage) bad.push(`README 가 check-stage{1..${range}} 라 적었는데 마지막은 ${lastStage} 단계다`);
+
+    out(
+      bad.length
+        ? bad.slice(0, 8).join("\n")
+        : `게이트 ${actual.size}개가 네 곳에서 같다 — 실제·GATES.md·README 선언·README 표(단계별 ${perStage.size}줄)`,
+    );
     return bad.length === 0;
   },
 };
