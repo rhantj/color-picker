@@ -271,6 +271,8 @@ async function showExport(format) {
     const toggle = engineToggle(format);
     engineBtn.hidden = !toggle.visible;
     engineBtn.textContent = toggle.label;
+    // 버튼으로 바로 이동하면 위 제목을 안 지나므로, 지금 어느 표기인지를 버튼이 직접 말한다.
+    engineBtn.setAttribute("aria-label", toggle.speech);
     panel.hidden = false;
     panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
   } catch (err) {

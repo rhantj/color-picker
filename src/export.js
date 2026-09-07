@@ -213,7 +213,6 @@ const ENGINE_SPEC = {
 };
 
 export const ENGINE_IDS = Object.freeze(Object.keys(ENGINE_SPEC));
-export const isEngineFormat = (format) => typeof format === "string" && Object.hasOwn(ENGINE_SPEC, format);
 
 /**
  * 파생 팔레트 하나를 엔진 수치로 바꾼다. **못 바꾸면 `null` 을 돌려준다.**
@@ -232,7 +231,16 @@ function enginePalette(entry, spec) {
     let material;
     try {
       material = applyFinish(color.hex, finishes[color.role], color.role);
-    } catch {
+    } catch (err) {
+      /*
+       * **던지지 않는 것과 흔적을 안 남기는 것은 다르다**(리뷰 지적). 대부분은 손상된 저장
+       * 데이터겠지만, `applyFinish` 가 **진짜 결함** 때문에 던지는 날이면 그것이
+       * `skippedBroken` 숫자 하나로만 남아 아무도 원인을 못 찾는다. `failSafely` 와 같은
+       * 자리에 한 줄 남긴다 — 사용자 응답에는 안 싣고 로그에만.
+       */
+      process.stderr.write(
+        Buffer.from(`엔진 수치를 못 만들었다 (${entry.id ?? "?"} · ${color.role}): ${err?.message ?? err}\n`, "utf8"),
+      );
       return null; // 색 하나라도 못 만들면 팔레트가 반쪽이 된다 — 반쪽을 내보내지 않는다
     }
     const { baseColor, ...rest } = spec.convert(material);
@@ -261,8 +269,23 @@ function enginePalette(entry, spec) {
  * **둘 다 0 일 때도 필드를 둔다** — 없으면 "이 형식은 코퍼스도 담는다" 로 오해할 자리가 생긴다.
  */
 export function toEngine(entries, engineId) {
+  /*
+   * **참/거짓으로 보면 안 된다.** `ENGINE_SPEC["constructor"]` 는 프로토타입 체인에서
+   * `Object` 를 물고 나와 truthy 라 이 검사를 통과한다. 그러고는 `spec.convert` 가 없어
+   * `TypeError` 가 나는데, 그것은 `enginePalette` 의 try/catch 밖이라 위로 튄다(리뷰가 재현).
+   *
+   * 이 저장소가 같은 것을 세 곳에서 이미 `Object.hasOwn` 으로 막았다 —
+   * `handleExport` 의 형식 조회 · `evForRole` 의 역할 조회 · `applyFinish` 의 재질 조회.
+   * 여기만 빠져 있었다.
+   *
+   * **지금은 HTTP 로 못 닿는다.** `FORMATS` 의 엔진 항목이 `id` 를 **리터럴로** 묶어 두고,
+   * 서버가 `Object.hasOwn(FORMATS, format)` 로 먼저 거른다. 그래도 고치는 것은 이 함수가
+   * **공개 API** 이기 때문이다 — 호출부가 하나뿐이라는 사실이 언제까지나 참일 보장은 없다.
+   */
+  if (typeof engineId !== "string" || !Object.hasOwn(ENGINE_SPEC, engineId)) {
+    throw new Error(`모르는 엔진이다: ${typeof engineId === "string" ? engineId : typeof engineId}`);
+  }
   const spec = ENGINE_SPEC[engineId];
-  if (!spec) throw new Error(`모르는 엔진이다: ${engineId}`);
 
   const list = Array.isArray(entries) ? entries : [];
   const derived = list.filter((e) => !isExportable(e));

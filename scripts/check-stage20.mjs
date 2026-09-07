@@ -135,6 +135,24 @@ const GATES = {
     const bad = [];
     await withServer(4981, async (api) => {
       await seedSaves(api);
+      /*
+       * **하나는 사람이 손댄 것으로 만든다.** 안 그러면 두 팔레트가 다 기본값이라
+       * `finishesAdjusted` 를 `false` 로 굳히는 변형과 구별이 안 된다 — 실제로 그 변형이
+       * 살아남았다. 참·거짓 **타입**만 보면 검사가 절반만 사는 것이다.
+       *
+       * 같은 씨앗·구조·모드로 다시 저장하면 앞의 항목을 고친다(19단계 이어받기 규칙).
+       * 바탕의 기본 재질은 무광이므로 광택을 보내면 "손댔다" 가 된다.
+       */
+      const touched = await api.post("/api/saved/derived", {
+        seedId: SEED, structureId: STRUCT, mode: "light", finishes: { 바탕: "gloss" },
+      });
+      // 다른 하나는 **비율만** 손댄다. 두 팔레트에서 두 값이 늘 같으면, 둘을 서로 바꿔치기한
+      // 변형이 구별되지 않는다 — 실제로 그 변형이 살아남았다. 엇갈리게 둔다.
+      const reshared = await api.post("/api/saved/derived", {
+        seedId: SEED, structureId: WIDE, mode: "dark", shares: [40, 30, 20, 10],
+      });
+      if (!touched.ok || !reshared.ok) throw new Error(`손댄 저장이 실패했다 (${touched.status}/${reshared.status})`);
+
       for (const engine of ENGINES) {
         const r = await api.exportAs(engine);
         if (r.status !== 200) {
@@ -145,6 +163,40 @@ const GATES = {
         if ((doc.palettes ?? []).length !== 2) bad.push(`${engine}: 파생이 2개여야 하는데 ${doc.palettes?.length}`);
         const counts = (doc.palettes ?? []).map((p) => (p.colors ?? []).length).sort();
         if (String(counts) !== "3,4") bad.push(`${engine}: 색 수가 3·4 여야 하는데 ${counts}`);
+
+        /*
+         * **팔레트 단위 정보도 문다.** 색마다의 수치만 보다가 구멍이 났다 — `structure` 를
+         * 통째로 빼고 `finishesAdjusted` 를 `false` 로 굳혀도 일곱 게이트가 전부 통과했다
+         * (리뷰가 변형으로 재현). 이 값들은 붙여넣는 사람이 실제로 쓰는 것이다:
+         * 어느 구조·어느 모드인지, 재질이 사람이 고른 것인지 기본값인지.
+         *
+         * **기대값을 여기서 따로 계산한다.** 저장한 조합이 무엇인지 이 게이트가 이미 알고
+         * 있으므로(위 `seedSaves`), 출력에서 읽어 와 대조하는 것이 아니라 미리 적어 둔다.
+         */
+        const want = new Map([
+          // 재질만 손댔다 — 재질 참 · 비율 거짓
+          [`${SEED}-${STRUCT}-light`, { structure: STRUCT, mode: "light", finishesAdjusted: true, ratioAdjusted: false }],
+          // 비율만 손댔다 — 재질 거짓 · 비율 참. 두 줄이 **엇갈려야** 뒤바꾼 변형이 잡힌다.
+          [`${SEED}-${WIDE}-dark`, { structure: WIDE, mode: "dark", finishesAdjusted: false, ratioAdjusted: true }],
+        ]);
+        for (const pal of doc.palettes ?? []) {
+          const expect = want.get(pal.id);
+          if (!expect) {
+            bad.push(`${engine}: 모르는 팔레트 id ${pal.id} — 씨앗·구조·모드로 짓지 않았다`);
+            continue;
+          }
+          if (pal.structure !== expect.structure) bad.push(`${engine}: ${pal.id} 의 structure 가 ${pal.structure}`);
+          if (pal.mode !== expect.mode) bad.push(`${engine}: ${pal.id} 의 mode 가 ${pal.mode}`);
+          if (typeof pal.name !== "string" || !pal.name) bad.push(`${engine}: ${pal.id} 에 이름이 없다`);
+          if (typeof pal.seed !== "string" || !pal.seed) bad.push(`${engine}: ${pal.id} 에 씨앗 이름이 없다`);
+          for (const flag of ["ratioAdjusted", "finishesAdjusted"]) {
+            if (typeof pal[flag] !== "boolean") {
+              bad.push(`${engine}: ${pal.id} 의 ${flag} 가 참·거짓이 아니다 (${pal[flag]})`);
+            } else if (pal[flag] !== expect[flag]) {
+              bad.push(`${engine}: ${pal.id} 의 ${flag} 가 ${expect[flag]} 여야 하는데 ${pal[flag]}`);
+            }
+          }
+        }
         for (const c of allColors(doc)) {
           for (const field of ["role", "finish", "baseColor", "metallic"]) {
             if (c[field] === undefined || c[field] === null) bad.push(`${engine}: ${c.role} 에 ${field} 가 없다`);
@@ -348,6 +400,18 @@ const GATES = {
     if (y.next !== "unreal") bad.push(`유니티의 다음이 언리얼이 아니다 (${y.next})`);
     if (!String(u.label).includes("유니티")) bad.push(`언리얼일 때 라벨이 갈 곳을 안 말한다 (${u.label})`);
     if (!String(y.label).includes("언리얼")) bad.push(`유니티일 때 라벨이 갈 곳을 안 말한다 (${y.label})`);
+    /*
+     * **읽어 주는 문장은 지금과 갈 곳을 둘 다 말해야 한다.** 버튼으로 바로 이동하면 위 제목을
+     * 안 지나므로, 갈 곳만 말하면 지금이 어디인지 알 방법이 없다(리뷰 지적).
+     * 그리고 **보이는 글자를 그대로 담아야** 음성으로 조작하는 사람이 눈에 보이는 대로
+     * 말해서 누를 수 있다.
+     */
+    for (const [id, ko, t] of [["unreal", "언리얼", u], ["unity", "유니티", y]]) {
+      const speech = String(t.speech ?? "");
+      if (!speech.includes(ko)) bad.push(`${id}: 읽어 주는 문장이 지금 표기를 안 말한다 (${speech})`);
+      if (!speech.includes(t.label)) bad.push(`${id}: 읽어 주는 문장이 보이는 글자를 안 담는다 (${speech})`);
+    }
+    if (engineToggle("css").speech) bad.push("엔진 형식이 아닌데 읽어 줄 문장이 남는다");
     for (const f of ["css", "json", "__proto__", "constructor", "", null, undefined, 7, ["unreal"]]) {
       if (engineToggle(f).visible) bad.push(`${String(f)} 인데 토글이 보인다`);
     }
@@ -371,6 +435,14 @@ const GATES = {
     if (!opens.some((arg) => arg.includes("next"))) {
       bad.push("토글이 engineToggle 의 next 를 안 따라간다 — 눌러도 늘 같은 엔진이 열린다");
     }
+    /*
+     * **`aria-label` 이 있는지만 보면 안 된다.** 이 파일은 메모 입력칸에도 그 속성을 쓰므로
+     * 토글이 안 붙여도 검사가 통과한다(실측: `void toggle.speech;` 변형이 살아남았다).
+     * `speech` 를 쓰는 자리 **가까이에** 그 속성이 있는지를 본다 — 만들어 놓고 안 붙이는
+     * 변형을 잡기 위해서다. 19단계 S19-G5 가 같은 부류를 겪었다.
+     */
+    const bound = js.split(";").filter((line) => line.includes("aria-label") && line.includes("speech"));
+    if (bound.length === 0) bad.push("읽어 줄 문장을 만들어 놓고 버튼에 안 붙인다 (같은 구문에 없다)");
     const html = read("public/saved.html");
     if (!html.includes('id="export-engine"')) bad.push("saved.html 에 토글 버튼이 없다");
     if (!html.includes('id="export-engine-open"')) bad.push("saved.html 에 엔진 내보내기 버튼이 없다 — 열 길이 없다");
@@ -397,7 +469,33 @@ const GATES = {
         if ((await api.exportAs(ok)).status !== 200) bad.push(`${ok} 이 200 이 아니다 — 멀쩡한 형식이 막혔다`);
       }
     });
-    out(bad.length ? bad.slice(0, 8).join("\n") : "이상한 형식 7가지가 400, 정상 형식 4가지가 200, 서버는 살아 있다");
+
+    /*
+     * **`toEngine` 을 직접 부른다.** HTTP 로는 서버의 형식 검사가 먼저 걸러서 이 함수의
+     * 자기 방어가 한 번도 안 불린다 — 그래서 그 방어가 틀려 있어도 게이트가 몰랐다
+     * (리뷰가 찾았다: `ENGINE_SPEC["constructor"]` 가 `Object` 를 물고 나와 참으로 통과했고,
+     * 뒤에서 `TypeError` 가 났다). 공개 함수이니 그 경계도 여기서 잰다.
+     */
+    const { toEngine } = await import("../src/export.js");
+    for (const evil of ["__proto__", "constructor", "toString", "valueOf", "", 7, null, undefined, ["unreal"]]) {
+      let err = null;
+      try {
+        toEngine([], evil);
+      } catch (e) {
+        err = e;
+      }
+      if (!err) bad.push(`toEngine(${String(evil)}) 이 안 던졌다`);
+      else if (!/모르는 엔진/.test(err.message)) bad.push(`toEngine(${String(evil)}) 이 엉뚱하게 던졌다 — ${err.message}`);
+    }
+    // 양성 대조 — 멀쩡한 엔진 이름은 그대로 돈다.
+    for (const okId of ENGINES) {
+      try {
+        JSON.parse(toEngine([], okId));
+      } catch (e) {
+        bad.push(`toEngine("${okId}") 가 빈 목록에서 깨졌다 — ${e.message}`);
+      }
+    }
+    out(bad.length ? bad.slice(0, 8).join("\n") : "이상한 형식 7가지가 400 · 정상 4가지가 200 · toEngine 이 이상한 엔진 이름 9가지를 직접 막는다");
     return bad.length === 0;
   },
 };

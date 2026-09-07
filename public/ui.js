@@ -525,21 +525,36 @@ export async function refreshRuntime(attempt = 0, onStage) {
  * 누르면 언리얼이 되는지 알 수 없다. 15단계 모드 토글이 "어두운 배경으로 보기" 라고 적는
  * 것과 같은 규칙이다.
  *
+ * **화면을 못 보는 사람에게는 그것만으로 부족하다.** 눈으로 보면 바로 위 제목에 "언리얼
+ * 엔진" 이 떠 있어서 지금이 어디인지 알지만, 버튼으로 바로 이동하면 그 제목을 안 지난다 —
+ * "유니티 표기로 보기" 만 들리고 지금이 어디인지는 모른다. 그래서 `speech` 가 **지금과 갈
+ * 곳을 함께** 말한다(`aria-label`).
+ *
+ * **`aria-pressed` 를 안 쓴다.** 15단계 모드 토글은 그것을 쓰지만 거기는 "어두운 모드가
+ * 켜졌는가" 라는 이진 상태다. 여기는 **둘 사이를 오가는 전환**이라 눌림/안 눌림이 언리얼·
+ * 유니티에 대응되지 않는다 — 읽어 주면 오히려 틀린 말이 된다. (리뷰가 같은 자리를 지적했고,
+ * 상태 표시가 빠졌다는 지적은 맞지만 그 수단은 이쪽이 맞다고 봤다.)
+ *
+ * **`speech` 는 보이는 글자를 그대로 포함한다.** 음성으로 조작하는 사람은 눈에 보이는 것을
+ * 말해서 버튼을 누르므로, 라벨이 보이는 글자를 안 담으면 그 방법이 막힌다.
+ *
  * **순수 함수로 빼는 이유는 게이트다.** 화면 코드는 정적 검사밖에 못 하는데 정적 검사는
  * "눌렀을 때 어디로 가는가" 를 못 본다. 17단계 `structureColors` · 18단계 `savedFields` 와
  * 같은 자리다.
  *
  * @param {unknown} format 지금 보고 있는 형식
- * @returns {{visible:boolean, next:string|null, label:string, current:string}}
+ * @returns {{visible:boolean, next:string|null, label:string, speech:string}}
+ *   `label` 은 눈으로 읽는 글자, `speech` 는 읽어 주는 문장(`aria-label`)이다.
  */
 export function engineToggle(format) {
   const ENGINE_KO = { unreal: "언리얼", unity: "유니티" };
   // 자기 속성만 본다. `__proto__`·`constructor` 는 평범한 객체에서 값을 물고 나온다.
   if (typeof format !== "string" || !Object.hasOwn(ENGINE_KO, format)) {
-    return { visible: false, next: null, label: "", current: "" };
+    return { visible: false, next: null, label: "", speech: "" };
   }
   const next = format === "unreal" ? "unity" : "unreal";
-  return { visible: true, next, label: `${ENGINE_KO[next]} 표기로 보기`, current: ENGINE_KO[format] };
+  const label = `${ENGINE_KO[next]} 표기로 보기`;
+  return { visible: true, next, label, speech: `지금 ${ENGINE_KO[format]} 표기 · ${label}` };
 }
 
 export const formatWhen = (iso) => {
