@@ -286,11 +286,28 @@ const GATES = {
      * `selectStructures` 가 다시 돌아 같은 질의인데 보이는 다섯이 바뀐다(S15-G11 과 같은 함정).
      * `onFinish` 처리 안에 그 호출이 없어야 한다.
      */
+    /*
+     * **처리기만 잘라 본다.** 처음엔 `onFinish` 부터 300자를 봤는데 그 창이 바로 뒤의
+     * `redraw = ` 선언까지 삼켜, 처리기가 깨끗해도 검사가 울었다. 다음 문장이 시작하는
+     * 자리에서 자른다.
+     */
     const onFinishAt = js.indexOf("onFinish");
+    const nextStmt = js.indexOf("redraw = ", onFinishAt);
     if (onFinishAt < 0) bad.push("app.js 가 onFinish 를 안 넘긴다 — 고쳐도 받을 곳이 없다");
     else {
-      const handler = js.slice(onFinishAt, onFinishAt + 400);
+      const handler = js.slice(onFinishAt, nextStmt > onFinishAt ? nextStmt : onFinishAt + 300);
       if (/api\(|fetch\(/.test(handler)) bad.push("재질을 고칠 때 서버를 다시 부른다 — 보이는 다섯이 바뀐다");
+      /*
+       * **고칠 때 카드를 부수지도 않는다.** 처음 구현이 여기서 `redraw()` 를 불렀고,
+       * 그것이 브라우저에서 두 가지를 망가뜨렸다(실측):
+       *   - 사용자가 맞춘 면적 비율이 55:25:20 → 34:33:33 으로 초기화됐다
+       *   - 방금 조작한 고르개가 사라져 포커스가 body 로 떨어졌다
+       * 다시 그릴 이유도 없었다 — 고르개는 고른 값을 스스로 보이고, 카드의 나머지는
+       * 재질과 무관하다. 담아 두기만 한다.
+       */
+      if (/redraw/.test(handler)) {
+        bad.push("재질을 고칠 때 카드를 다시 그린다 — 맞춰 둔 비율과 포커스가 날아간다");
+      }
     }
 
     out(bad.length ? bad.slice(0, 8).join("\n") : "배정 상태가 redraw 밖에 있고 redraw 가 그것을 읽는다 · 고칠 때 서버를 안 부른다 (정적 검사)");
