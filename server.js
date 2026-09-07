@@ -20,11 +20,12 @@ import {
   listSaved,
   recordTurn,
   savePalette,
+  saveDerived,
   updateSavedNote,
   updateSavedRatio,
 } from "./src/store.js";
 import { ratioFor } from "./public/ratio.js";
-import { expandAll, loadStructures } from "./src/expand.js";
+import { expandAll, expandSeed, loadStructures } from "./src/expand.js";
 import { PICK_COUNT, selectStructures } from "./src/structure.js";
 import { selectFinishes } from "./src/finish.js";
 import { loadFinishes } from "./src/material.js";
@@ -287,6 +288,27 @@ const seedById = (id) => {
   return pooled ? { seed: pooled, label: seedLabel(pooled), from: "pool" } : null;
 };
 
+/**
+ * 씨앗·구조·모드로 **색을 다시 계산한다.** 저장 경로가 화면이 보낸 색을 안 믿기 위한 자리다
+ * (`src/store.js` 규칙 4). 파생은 결정적이라(S11-G3) 같은 셋이면 늘 같은 색이 나온다.
+ *
+ * `expandSeed` 는 없는 씨앗·없는 구조·프로토타입 이름에 **던지지 않고 null 을 준다**(실측).
+ * 그래서 여기서 걸러 낼 것은 씨앗 조회뿐이다.
+ */
+const resolveDerived = (seedId, structureId, mode) => {
+  const found = seedById(seedId);
+  if (!found) return null;
+  const st = expandSeed(found.seed, structureId, fullCatalog, { mode });
+  if (!st) return null;
+  return {
+    colors: st.colors,
+    name: st.name,
+    principle: st.principle,
+    source: st.source,
+    seedLabel: found.label,
+  };
+};
+
 async function handleWrite(req, res, pathname) {
   if (!isTrustedWrite(req)) {
     return sendJson(res, 403, { error: "이 화면에서 보낸 요청이 아니다" });
@@ -305,6 +327,9 @@ async function handleWrite(req, res, pathname) {
     }
     if (pathname === "/api/saved") {
       return sendJson(res, 200, await savePalette(body, paletteById, ratioFor));
+    }
+    if (pathname === "/api/saved/derived") {
+      return sendJson(res, 200, await saveDerived(body, resolveDerived, ratioFor));
     }
     if (pathname === "/api/saved/ratio") {
       // 옛 항목에 defaultRatio 가 없으면 코퍼스에서 채워 넣도록 조회 함수를 넘긴다.

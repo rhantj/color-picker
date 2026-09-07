@@ -149,11 +149,24 @@ const gates = {
       if (!entry) bad.push("조합을 못 찾았다");
       else if (entry.note) bad.push(`빈 메모를 보냈는데 안 지워졌다: ${JSON.stringify(entry.note)}`);
 
-      // 공백만 보낸 것도 지운 것으로 친다 — clip 이 trim 하므로 빈 문자열과 같아야 한다.
-      await post(base, "/api/saved", { paletteId: id, note: "다시 쓴 메모" });
-      await post(base, "/api/saved", { paletteId: id, note: "   " });
-      const blank = await findEntry(base, id);
-      if (blank?.note) bad.push(`공백 메모가 안 지워졌다: ${JSON.stringify(blank.note)}`);
+      /*
+       * 공백만 보낸 것도 지운 것으로 친다 — clip 이 trim 하므로 빈 문자열과 같아야 한다.
+       *
+       * **`null` 도 함께 본다.** 18단계 리뷰가 파생 저장 쪽에서 이 틈을 찾았다 —
+       * `clip` 앞에서 `String(value)` 를 하면 `null` 이 문자열 "null" 로 저장된다.
+       * 두 저장 경로가 같은 규칙을 지고 있으므로 여기서도 같은 것을 본다.
+       * 화면이 "메모 없음" 을 `null` 로 보내는 것은 흔한 형태다.
+       */
+      for (const empty of ["   ", "", null, String.fromCharCode(9, 10)]) {
+        await post(base, "/api/saved", { paletteId: id, note: "다시 쓴 메모" });
+        await post(base, "/api/saved", { paletteId: id, note: empty });
+        const blank = await findEntry(base, id);
+        if (blank?.note) bad.push(`빈 메모 ${JSON.stringify(empty)} 가 안 지워졌다: ${JSON.stringify(blank.note)}`);
+      }
+      // 양성 대조 — 진짜 메모는 남는다. 아니면 위 검사가 "전부 지운다" 로 공허해진다.
+      await post(base, "/api/saved", { paletteId: id, note: "남을 메모" });
+      const kept = await findEntry(base, id);
+      if (kept?.note !== "남을 메모") bad.push(`진짜 메모가 안 남았다: ${JSON.stringify(kept?.note)}`);
 
       if (bad.length) throw new Error(bad.join(" / "));
       out("S8_G3_OK");

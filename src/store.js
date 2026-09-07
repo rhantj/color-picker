@@ -8,6 +8,10 @@
 //      색·헥스·유형은 서버가 코퍼스에서 찾아 채운다. 화면이 보낸 색을 그대로 저장하면
 //      저장소가 코퍼스와 어긋나기 시작한다.
 //
+//      **파생 팔레트도 같다.** 코퍼스에 없지만 파생은 결정적이라(S11-G3) 씨앗 id·구조 id·모드
+//      셋만 받으면 서버가 색을 다시 계산할 수 있다. 그래서 여기서도 화면이 색을 보내지 않는다.
+//      S18-G1 이 색을 실어 보내는 요청으로 그것을 확인한다.
+//
 //      면적 비율만 예외인 이유: 색은 코퍼스가 아는 사실이지만 **비율은 사용자의 판단**이다.
 //      같은 두 헥스도 비율이 바뀌면 다른 색이 되므로, 그 결정을 사용자에게서 받는 것이 이 도구의 요점이다.
 //      대신 형태는 강제한다 — 정수, 10~90. 0 이나 100 은 한 색을 없애는 것이라 2색 조합이 아니게 된다.
@@ -27,6 +31,43 @@ export function normalizeRatio(value) {
   if (!Number.isInteger(value)) return null;
   if (value < RATIO_MIN || value > RATIO_MAX) return null;
   return [value, 100 - value];
+}
+
+/**
+ * 색이 n 개일 때 한 색이 가질 수 있는 지분의 하한.
+ *
+ * **`public/ratio.js` 의 `shareBounds` 와 같은 값을 독립적으로 적는다.** 화면과 서버가 각자
+ * 계산하면 사용자가 슬라이더로 움직인 값을 서버가 거부하는 일이 생긴다 — `S5-G4` 가 2색에서
+ * 같은 이유로 같은 규칙을 걸고, `S18-G2` 가 다색에서 그것을 본다. 읽어 오지 않는 이유는
+ * 이 저장소가 "게이트·검증이 감시 대상에서 값을 가져오면 함께 느슨해진다" 로 세 번 뚫렸기 때문이다.
+ *
+ * 하한이 개수와 동시에 성립하지 않는 구간이 있다 — `MIN_SHARE × n > 100` 이면 "합 100" 과
+ * "각자 10 이상" 을 같이 만족할 수 없다. 합이 먼저이므로 하한을 개수에 맞춰 낮춘다.
+ */
+const shareFloor = (count) => Math.min(RATIO_MIN, Math.floor(100 / count));
+
+/**
+ * 다색 지분을 검증한다. 색 개수를 알아야 하므로 개수를 함께 받는다.
+ *
+ * 무는 것 넷 — 길이가 색 개수와 같다 · 전부 정수다 · 각자 하한 이상이다 · **합이 정확히 100** 이다.
+ * 합이 100 이 아니면 스와치 바에 틈이 생기거나 마지막 색이 잘려, 화면이 말하는 비율과 보이는
+ * 비율이 달라진다(`S13-G1` 이 같은 이유로 같은 것을 본다).
+ *
+ * **2색이면 숫자 하나도 받는다.** 기존 경로(`ratio: 70`)가 그대로 살아야 하기 때문이다 —
+ * `S18-G8` 이 그 회귀를 본다.
+ */
+export function normalizeShares(value, count) {
+  if (!Number.isInteger(count) || count < 2) return null;
+  if (count === 2 && Number.isInteger(value)) return normalizeRatio(value);
+
+  if (!Array.isArray(value) || value.length !== count) return null;
+  const floor = shareFloor(count);
+  let sum = 0;
+  for (const v of value) {
+    if (!Number.isInteger(v) || v < floor) return null;
+    sum += v;
+  }
+  return sum === 100 ? [...value] : null;
 }
 
 export const LIMITS = {
@@ -169,6 +210,36 @@ export function listSaved() {
 }
 
 /**
+ * 앞의 항목에서 **무엇을 이어받을지** 정한다. 두 저장 경로(`savePalette`·`saveDerived`)가
+ * 같은 규칙을 쓰게 하는 자리다.
+ *
+ * **이 중복이 이미 결함을 하나 만들었다.** 두 함수가 같은 40여 줄을 각자 적고 있었는데,
+ * 메모 줄만 표기가 갈렸다 — 한쪽은 `clip(input.note, ...)`, 다른 쪽은
+ * `clip(String(input.note).trim(), ...)`. `clip` 안에 이미 `?? ""` 가 있어서 앞쪽은 `null` 을
+ * 빈 문자열로 바꾸지만 뒤쪽은 **문자열 "null" 로 저장했다**(리뷰 지적, 재현 확인).
+ * 규칙이 하나면 갈릴 수 없다.
+ *
+ * **함수 자체는 안 합친다.** 조회 방식(코퍼스 id vs 씨앗·구조·모드)과 항목 스키마가 근본적으로
+ * 다르다. 갈리면 안 되는 것은 **병합 규칙**뿐이고, 그것만 여기 둔다.
+ *
+ * 규칙 둘:
+ *   - 비율을 안 보냈는데 앞에서 손대 둔 것이 있으면 이어받는다. 규칙의 기본값으로 되돌리면
+ *     사용자가 명시적으로 한 조정이 사라진다(S5-G5).
+ *   - 메모는 **안 보낸 것과 빈 값을 가른다.** 안 보냈으면 잇고, 빈 값은 지우기다(S8-G2·G3).
+ *     이어받기가 무조건이면 사용자가 메모를 지울 방법이 없어진다.
+ */
+function mergeWithPrevious(previous, { adjusted, defaults, note }) {
+  const inherited = !adjusted && previous?.ratioAdjusted ? previous.colors.map((c) => c.ratio) : null;
+  const ratio = adjusted ?? inherited ?? defaults;
+  return {
+    ratio,
+    // 기본값 그대로인지 사용자가 손댄 것인지 구분해 둔다. 화면이 "기본값으로" 를 제안할 수 있다.
+    ratioAdjusted: JSON.stringify(ratio) !== JSON.stringify(defaults),
+    note: note === undefined ? (previous?.note ?? "") : clip(note, LIMITS.noteChars),
+  };
+}
+
+/**
  * @param lookup (paletteId) => 코퍼스의 팔레트 또는 undefined
  * 색과 비율은 lookup 이 준 것만 쓴다. 요청 본문의 색은 쳐다보지도 않는다.
  */
@@ -197,11 +268,9 @@ export function savePalette(input, lookup, ratioFor) {
     // 사용자가 명시적으로 넣은 값이 경고 없이 사라지지 않는다. 비율과 메모가 둘 다 그렇다.
     const previous = all.find((s) => s.paletteId === palette.id);
 
-    // 비율을 안 보냈는데 그때 맞춰 둔 조정이 있으면 이어받는다.
-    // 규칙의 기본값으로 되돌리면 저장 화면에서 명시적으로 한 조정이 사라진다.
-    const inherited = !adjusted && previous?.ratioAdjusted ? previous.colors.map((c) => c.ratio) : null;
-
-    const ratio = adjusted ?? inherited ?? defaults;
+    // 무엇을 이어받을지는 `mergeWithPrevious` 한 곳에 있다 — 두 저장 경로가 갈리지 않게.
+    const merged = mergeWithPrevious(previous, { adjusted, defaults, note: input.note });
+    const ratio = merged.ratio;
     const entry = {
       id: newId("save"),
       // 요청이 도착한 시각이 아니라 **쓰기가 일어난 시각**이다. 큐가 밀리면 둘이 벌어진다.
@@ -213,12 +282,9 @@ export function savePalette(input, lookup, ratioFor) {
       toneRelation: palette.toneRelation,
       summary: palette.summary,
       colors: palette.colors.map((c, i) => ({ name: c.name, hex: c.hex, ratio: ratio[i] })),
-      // 기본값 그대로인지 사용자가 손댄 것인지 구분해 둔다. 화면이 "기본값으로" 를 제안할 수 있다.
-      ratioAdjusted: JSON.stringify(ratio) !== JSON.stringify(defaults),
+      ratioAdjusted: merged.ratioAdjusted,
       defaultRatio: defaults,
-      // 안 보냈으면 앞의 메모를 잇고, 보냈으면 그것을 쓴다. **빈 문자열은 "지우기" 라서 잇지 않는다** —
-      // 이어받기가 무조건이면 사용자가 메모를 지울 방법이 없어진다.
-      note: input.note === undefined ? (previous?.note ?? "") : clip(input.note, LIMITS.noteChars),
+      note: merged.note,
       fromQuery: clip(input.fromQuery, LIMITS.queryChars) || null,
     };
 
@@ -231,19 +297,115 @@ export function savePalette(input, lookup, ratioFor) {
 }
 
 /**
+ * 파생 팔레트를 저장한다. `savePalette` 와 같은 모양이고, 다른 것은 **무엇으로 색을 찾는가**뿐이다.
+ *
+ * @param {{seedId:string, structureId:string, mode?:string, shares?:number[], note?:string}} input
+ * @param {(seedId:string, structureId:string, mode:string) => null | {
+ *   colors: {role:string, hex:string}[], name:string, principle:string, source:string, seedLabel:string
+ * }} resolve 씨앗·구조·모드로 색을 다시 계산하는 함수. `savePalette` 의 `lookup` 과 같은 자리다 —
+ *   저장소가 `src/expand.js` 를 직접 읽지 않게 밖에서 넣는다.
+ * @param {(palette:{colors:unknown[]}) => number[]} ratioFor 기본 면적 규칙. `savePalette` 와
+ *   같은 자리다 — 면적 규칙은 `public/ratio.js` 한 곳에 있고, 저장소가 그것을 다시 적지 않는다.
+ *
+ * **같은 씨앗·구조·모드는 하나다.** 다시 저장하면 덮어쓰고, 안 보낸 비율·메모는 앞의 것을
+ * 이어받는다(`S5-G5`·`S8-G2` 와 같은 규칙). **모드가 다르면 다른 항목**이다 — 색이 다르기 때문이다.
+ */
+export function saveDerived(input, resolve, ratioFor) {
+  /*
+   * **문자열인지 먼저 본다.** `clip` 은 `String(value)` 로 강제 변환하므로 배열 하나짜리가
+   * 그대로 통과한다 — `String(["complementary"]) === "complementary"` (실측). `S18-G3` 이
+   * 그것으로 이 코드를 뚫었다.
+   *
+   * 17단계에서 리뷰가 `Object.hasOwn` 의 키 강제 변환으로 같은 부류를 찾았다.
+   * **강제 변환하는 함수 앞에서는 타입을 먼저 본다** — 이 저장소에서 두 번째다.
+   */
+  if (typeof input.seedId !== "string" || typeof input.structureId !== "string") {
+    return Promise.reject(new Error("씨앗과 구조는 문자열이어야 한다"));
+  }
+  const seedId = clip(input.seedId, 60);
+  const structureId = clip(input.structureId, 60);
+  // 모드는 둘뿐이다. 모르는 값을 밝은 모드로 삼키면 사용자가 고른 것과 다른 것이 저장된다.
+  const mode = input.mode === undefined ? "light" : input.mode;
+  if (mode !== "light" && mode !== "dark") {
+    return Promise.reject(new Error("모드는 light 또는 dark 다"));
+  }
+  if (!seedId || !structureId) return Promise.reject(new Error("씨앗과 구조를 지정해야 한다"));
+
+  const found = resolve(seedId, structureId, mode);
+  if (!found) return Promise.reject(new Error("모르는 씨앗이거나 구조다"));
+
+  const count = found.colors.length;
+  // `savePalette` 와 같은 자리다 — 면적 규칙은 `public/ratio.js` 한 곳에 있고 밖에서 받는다.
+  const defaults = ratioFor({ colors: found.colors });
+  const adjusted = input.shares === undefined ? null : normalizeShares(input.shares, count);
+  if (input.shares !== undefined && !adjusted) {
+    return Promise.reject(new Error(`면적 비율은 ${count}칸 정수 배열이고 합이 100 이어야 한다`));
+  }
+
+  // 병합 기준을 직렬화 안에서 읽는다 — savePalette 와 같은 이유다(S8-G6).
+  return serialize(() => {
+    const all = listSaved();
+    const previous = all.find(
+      (e) => e.kind === "derived" && e.seedId === seedId && e.structureId === structureId && e.mode === mode,
+    );
+
+    // savePalette 와 **같은 규칙**을 쓴다. 규칙이 하나면 두 경로가 갈릴 수 없다.
+    const merged = mergeWithPrevious(previous, { adjusted, defaults, note: input.note });
+    const ratio = merged.ratio;
+
+    const entry = {
+      id: newId("save"),
+      savedAt: now(),
+      kind: "derived",
+      // 이 셋이 있으면 색을 언제든 다시 계산할 수 있다. 없으면 저장된 헥스가 유일한 진실이 되고,
+      // 그때부터 저장소가 엔진과 갈라진다.
+      seedId,
+      structureId,
+      mode,
+      seedLabel: found.seedLabel,
+      // 코퍼스 항목의 type·hueRelation·summary 자리를 대신한다. 화면이 그릴 것이다.
+      name: found.name,
+      principle: found.principle,
+      source: found.source,
+      colors: found.colors.map((c, i) => ({ role: c.role, hex: c.hex, ratio: ratio[i] })),
+      ratioAdjusted: merged.ratioAdjusted,
+      defaultRatio: defaults,
+      note: merged.note,
+    };
+
+    const rest = all.filter((e) => e !== previous);
+    writeJson("saved.json", [entry, ...rest].slice(0, LIMITS.saved));
+    return entry;
+  });
+}
+
+/**
  * 저장된 조합의 면적 비율만 바꾼다. 색은 건드리지 않는다.
  * @param defaultsFor (entry) => [a, b] — 옛 항목에 defaultRatio 가 없을 때 코퍼스에서 채우기 위한 것.
  */
 export function updateSavedRatio(id, value, defaultsFor = null) {
   const wanted = clip(id, 60);
   if (!ID_SHAPE.test(wanted)) return Promise.reject(new Error("잘못된 id"));
-  const ratio = normalizeRatio(value);
-  if (!ratio) return Promise.reject(new Error(`면적 비율은 ${RATIO_MIN}~${RATIO_MAX} 의 정수여야 한다`));
+
+  /*
+   * **개수 검증은 큐 안에서 한다.** 몇 색짜리 항목인지는 저장된 것을 봐야 알 수 있는데,
+   * 그 읽기는 직렬화 안에 있어야 겹친 쓰기가 서로를 덮지 않는다(S8-G6 과 같은 이유).
+   *
+   * 모양 검증만 밖에 남긴다 — 숫자도 정수 배열도 아닌 것은 개수를 몰라도 거를 수 있고,
+   * 그런 요청이 쓰기 큐에서 자리를 차지해 정상 요청을 늦추지 않게 한다.
+   */
+  const looksUsable = Number.isInteger(value) || (Array.isArray(value) && value.every(Number.isInteger));
+  if (!looksUsable) return Promise.reject(new Error("면적 비율은 정수 또는 정수 배열이다"));
 
   return serialize(() => {
     const all = listSaved();
     const entry = all.find((s) => s.id === wanted);
     if (!entry) throw new Error("없는 항목이다");
+
+    const ratio = normalizeShares(value, entry.colors.length);
+    if (!ratio) {
+      throw new Error(`면적 비율은 ${entry.colors.length}칸 정수 배열이고 합이 100 이어야 한다`);
+    }
     // 스테이지5 이전에 저장된 항목에는 defaultRatio 가 없다. 없으면 코퍼스에서 채운다 —
     // 안 채우면 기본값으로 되돌려도 ratioAdjusted 가 영원히 true 로 남는다.
     if (!Array.isArray(entry.defaultRatio) && defaultsFor) {
