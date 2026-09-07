@@ -5,12 +5,15 @@
 // **이 파일은 구현보다 먼저 쓰였다.** 다섯 게이트가 전부 실패하는 것을 확인한 뒤에
 // src/expand.js 를 고쳤다. 통과부터 하는 게이트는 무엇을 지키는지 알 수 없다.
 
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ANCHORS, MIRROR, expandAll, expandSeed, hexToHsl, perceivedChroma, structureIds } from "../src/expand.js";
 import { loadSeeds } from "../src/seeds.js";
+import { contrast, labelColor } from "../public/color.js";
+import { structureColors } from "../public/ui.js";
 
 const out = (line = "") => process.stdout.write(Buffer.from(line + "\n", "utf8"));
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -73,6 +76,49 @@ const NOT_INVOLUTIVE = ["tone-in-tone"];
 
 /** 파생 결과의 바탕(첫 자리). 역할 이름은 구조마다 다르므로 순서로 잡는다. */
 const groundOf = (structure) => structure.colors[0];
+
+/**
+ * 서버를 띄워 실제 응답을 본다. check-stage13 의 것과 같은 형태를 **독립적으로** 적는다 —
+ * 한쪽에서 읽어 오면 그쪽 하네스가 바뀔 때 이 단계 게이트가 조용히 다른 것을 검사하게 된다.
+ */
+function startServer(port) {
+  const child = spawn(process.execPath, ["server.js"], {
+    cwd: ROOT,
+    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", OLLAMA_AUTOSTART: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return new Promise((resolve, reject) => {
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`서버가 5초 안에 뜨지 않았다. stderr: ${stderr.trim() || "(없음)"}`));
+    }, 5000);
+    child.stdout.on("data", (c) => {
+      if (c.toString("utf8").includes(String(port))) {
+        clearTimeout(timer);
+        resolve(child);
+      }
+    });
+    child.stderr.on("data", (c) => (stderr += c.toString("utf8")));
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      reject(new Error(`서버가 코드 ${code} 로 종료했다. stderr: ${stderr.trim() || "(없음)"}`));
+    });
+  });
+}
+
+async function withServer(port, fn) {
+  const child = await startServer(port);
+  try {
+    return await fn((path) => fetch(`http://127.0.0.1:${port}${path}`));
+  } finally {
+    child.kill();
+  }
+}
+
+/** 주석을 걷어낸 소스. check-stage13 과 같은 예외(문자열 안 URL 스킴)를 같은 이유로 둔다. */
+const stripComments = (src) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 const GATES = {
   /*
@@ -656,6 +702,369 @@ const GATES = {
 
     out(`카드 스코프 .swatch 규칙 ${cardScoped.length}개가 전부 직속 자식(\`>\`)이고 구성이 표와 같다 — ${[...EXPECTED].map(([s, n]) => `${s} ×${n}`).join(" / ")}`);
     out("S15_G9_OK");
+  },
+
+  /**
+   * **두 모드를 한 번에 내려보낸다.** 토글이 모드를 서버에 보내지 않기로 한 결정(S15-G11)의
+   * 반대쪽 절반이다 — 보내지 않으려면 이미 받아 둔 것이 있어야 한다.
+   *
+   * 검사는 셋이다.
+   *   1. `colors` 가 **엔진 기본 모드 출력과 정확히 같다** — 기존 필드가 안 바뀌었다는 회귀 검사.
+   *      S13-G4·S14-G4 는 응답 "형태" 를 보지 값까지는 안 본다.
+   *   2. `colorsDark` 가 **엔진 어두운 모드 출력과 정확히 같다.** `colors` 를 그대로 복사해
+   *      내려보내는 구현은 여기서 죽는다.
+   *   3. 두 필드가 실제로 다른 장 수가 **엔진이 다른 장 수와 일치한다.**
+   *
+   * ③의 기준값을 상수로 박지 않고 엔진에서 매번 다시 센다. 박아 두면 앵커를 고쳤을 때
+   * 게이트가 옛 숫자를 지키느라 거짓 실패한다. **실측 320장 중 298장이 다르다** — 같은 22장은
+   * 전부 `톤인톤` 이고, 접기(`min(l, 1-l)`)라 이미 어두운 씨앗에서는 항등이기 때문이다.
+   */
+  "S15-G10": async () => {
+    // **씨앗 전부를 본다.** 처음엔 코퍼스·씨앗 풀에서 하나씩 두 개만 물었고(구조 16장),
+    // 리뷰가 지적했다 — 주석은 "320장 중 298장" 이라는 전수 실측을 근거로 인용하는데 게이트가
+    // 실제로 도는 범위는 16장이었다. 서버는 한 번만 띄우고 요청만 40번 보내면 되므로 값이 싸다.
+    const seeds = allSeeds();
+    if (seeds.length < 2) throw new Error("씨앗이 둘 미만이라 이 게이트가 검사할 것이 없다");
+
+    const bad = [];
+    let checked = 0;
+    let differing = 0;
+    let expectedDiffering = 0;
+
+    await withServer(4930, async (get) => {
+      for (const seed of seeds) {
+        const label = seed.id;
+        const res = await get(`/api/expand?seed=${encodeURIComponent(seed.id)}`);
+        if (res.status !== 200) {
+          bad.push(`${label} ${seed.id}: HTTP ${res.status}`);
+          continue;
+        }
+        const body = await res.json();
+        const light = expandAll(seed);
+        const dark = expandAll(seed, undefined, { mode: "dark" });
+        const byId = new Map((body.structures ?? []).map((st) => [st.id, st]));
+        const shape = (list) =>
+          Array.isArray(list) ? list.map((c) => `${c.role}:${c.hex}`).join(",") : `(배열아님 ${typeof list})`;
+
+        for (let i = 0; i < light.length; i += 1) {
+          const id = light[i].id;
+          const got = byId.get(id);
+          if (!got) {
+            bad.push(`${label}/${id}: 응답에 없다`);
+            continue;
+          }
+          checked += 1;
+
+          const wantLight = shape(light[i].colors);
+          const wantDark = shape(dark[i].colors);
+          const gotLight = shape(got.colors);
+          const gotDark = shape(got.colorsDark);
+
+          if (gotLight !== wantLight) bad.push(`${label}/${id} colors 회귀: ${gotLight} != ${wantLight}`);
+          if (gotDark !== wantDark) bad.push(`${label}/${id} colorsDark 불일치: ${gotDark} != ${wantDark}`);
+          if (gotLight !== gotDark) differing += 1;
+          if (wantLight !== wantDark) expectedDiffering += 1;
+        }
+      }
+    });
+
+    if (bad.length) throw new Error(bad.slice(0, 6).join(" / ") + (bad.length > 6 ? ` … 총 ${bad.length}건` : ""));
+    if (checked !== seeds.length * 8) {
+      throw new Error(`대조한 장 수가 ${checked} — 씨앗 ${seeds.length} × 구조 8 = ${seeds.length * 8} 이어야 한다`);
+    }
+    if (differing !== expectedDiffering) {
+      throw new Error(`응답에서 두 모드가 다른 장 ${differing} — 엔진 기준 ${expectedDiffering}`);
+    }
+    // 앵커가 통째로 무너져 엔진마저 두 모드가 같아진 경우를 여기서 한 번 더 문다.
+    if (differing === 0) throw new Error("두 모드가 한 장도 다르지 않다 — 어두운 모드가 없는 것과 같다");
+
+    out(`씨앗 ${seeds.length} × 구조 8 = ${checked}장 · colors 회귀 0 · colorsDark 가 엔진 어두운 모드와 일치 · 두 모드가 다른 장 ${differing}/${checked}`);
+    out("S15_G10_OK");
+  },
+
+  /**
+   * **`mode` 를 서버 파라미터로 만들지 않는다.** 만드는 순간 토글이 `/api/expand` 재요청을 부를
+   * 경로가 생기고, `q` 가 붙어 있으면 그 요청이 **LLM 재선택을 다시 돌린다** — 같은 질의인데
+   * 토글 한 번에 보이는 다섯이 바뀐다. 게다가 매번 ~500ms 다.
+   *
+   * **양성 대조가 이 게이트의 절반이다.** "쿼리를 붙여도 응답이 같다" 는 비교하는 코드가 죽어
+   * 있어도 통과한다. 그래서 **실제로 응답을 바꾸는 파라미터(`seed`)** 를 같은 비교에 넣어 그쪽은
+   * 반드시 달라지는 것을 확인한다.
+   *
+   * `q` 는 안 붙인다 — 붙이면 LLM 이 끼어 응답이 요청마다 달라져 비교 자체가 성립하지 않는다.
+   */
+  "S15-G11": async () => {
+    const corpus = palettes()[0];
+    const other = palettes()[1];
+    if (!other) throw new Error("팔레트가 하나뿐이라 양성 대조를 만들 수 없다");
+
+    const bad = [];
+    await withServer(4931, async (get) => {
+      const body = async (qs) => {
+        const res = await get(`/api/expand?${qs}`);
+        if (res.status !== 200) throw new Error(`HTTP ${res.status} — ${qs}`);
+        return JSON.stringify(await res.json());
+      };
+
+      const base = await body(`seed=${encodeURIComponent(corpus.id)}`);
+      for (const extra of ["mode=dark", "mode=light", "mode=", "mode=%EA%B9%80", "mode=dark&mode=light"]) {
+        const got = await body(`seed=${encodeURIComponent(corpus.id)}&${extra}`);
+        if (got !== base) bad.push(`${extra} 를 붙였더니 응답이 달라졌다 — mode 가 서버에 닿는다`);
+      }
+
+      // 양성 대조: 응답을 실제로 바꾸는 파라미터는 반드시 달라져야 한다.
+      const changed = await body(`seed=${encodeURIComponent(other.id)}`);
+      if (changed === base) bad.push("씨앗을 바꿨는데 응답이 같다 — 이 비교가 아무것도 검사하지 않는다");
+    });
+
+    // 정적 대조: 응답이 같아도 handleExpand 가 mode 를 읽고 있으면 다음 사람이 그것을 쓰게 된다.
+    const server = stripComments(read("server.js"));
+    const from = server.indexOf("async function handleExpand");
+    if (from < 0) throw new Error("server.js 에서 handleExpand 를 못 찾았다 — 이 검사가 공허하다");
+    const to = server.indexOf("function dispatch", from);
+    const head = server.slice(from, to > 0 ? to : undefined);
+    if (/params\.get\(\s*['"`]mode['"`]\s*\)/.test(head)) bad.push("handleExpand 가 mode 파라미터를 읽는다");
+
+    if (bad.length) throw new Error(bad.join(" / "));
+    out("mode=dark|light|빈값|한글|중복 다섯 가지가 응답을 바꾸지 않는다 · 양성 대조(seed 변경) 통과 · handleExpand 가 mode 를 안 읽는다");
+    out("S15_G11_OK");
+  },
+
+  /**
+   * **어두운 색이 화면에 나가는 순간 라벨이 안 읽히면 기능이 아니라 결함이다.**
+   * `S13-G6` 과 같은 기준·같은 음성 대조를 쓰되 어두운 모드 파생색을 본다 — 지금 S13-G6 은
+   * 밝은 모드만 본다.
+   *
+   * 음성 대조가 없으면 이 게이트는 아무것도 검사하지 않는다. `labelColor` 는 후보에 흰색과
+   * 순검정을 함께 들고 있어 어떤 배경에서도 최소 4.58 을 낸다 — S13-G6 주석이 같은 이유로
+   * 같은 말을 한다. 고정 회색 라벨이 **실제로 실패하는 것**을 함께 확인한다.
+   */
+  "S15-G12": async () => {
+    const NAIVE = "#888888";
+    let worst = { c: 99 };
+    let fellBack = 0;
+    let count = 0;
+    let naiveFails = 0;
+
+    for (const seed of allSeeds()) {
+      for (const st of expandAll(seed, undefined, { mode: "dark" })) {
+        for (const c of st.colors) {
+          count += 1;
+          const ratio = contrast(labelColor(c.hex), c.hex);
+          if (ratio < worst.c) worst = { c: ratio, where: `${seed.id}/${st.id}/${c.role} ${c.hex}` };
+          if (ratio < 4.5) fellBack += 1;
+          if (contrast(NAIVE, c.hex) < 4.5) naiveFails += 1;
+        }
+      }
+    }
+
+    if (fellBack) {
+      throw new Error(`어두운 모드에서 labelColor 가 4.5 를 못 넘겨 물러선 색 ${fellBack}개 — 최악 ${worst.c.toFixed(2)} ${worst.where}`);
+    }
+    if (naiveFails === 0) {
+      throw new Error("고정 회색 라벨조차 어두운 모드 파생색 전부에서 4.5 를 넘는다 — 대비 계산이 죽었다");
+    }
+
+    out(`어두운 모드 파생색 ${count}개 · 대비 최솟값 ${worst.c.toFixed(2)} — ${worst.where}`);
+    out(`음성 대조: 고정 라벨 ${NAIVE} 였다면 ${naiveFails}개가 4.5 미만`);
+    out("S15_G12_OK");
+  },
+
+  /**
+   * **토글은 이미 받아 둔 데이터로만 다시 그린다** — 네트워크 0, LLM 재호출 0.
+   * S15-G11 이 서버 쪽(파라미터가 없다)을 막고 이 게이트가 화면 쪽(다시 부르지 않는다)을 막는다.
+   * 둘 중 하나만 있으면 `mode` 를 쿼리에 안 붙이면서 그냥 재요청하는 구현이 통과한다.
+   *
+   * **정적 검사다** — 회귀 스모크지 동작 증명이 아니다. S13-G7 이 같은 이유로 같은 말을 한다.
+   * 표기가 다른 동등 구현(`fetch` 직접 호출)은 잡지만 우회로 전부를 막지는 못한다.
+   * 실제 동작은 브라우저에서 따로 본다.
+   */
+  "S15-G13": async () => {
+    const bad = [];
+    const app = stripComments(read("public/app.js"));
+    const css = read("public/app.css");
+
+    const between = (src, from, to, what) => {
+      const a = src.indexOf(from);
+      if (a < 0) throw new Error(`${what} 를 못 찾았다 — 이 검사가 공허하다`);
+      const b = src.indexOf(to, a + from.length);
+      return src.slice(a, b > 0 ? b : undefined);
+    };
+
+    /*
+     * ① 모드에 따라 어느 색을 그리는지는 **불러서** 확인한다.
+     *
+     * 처음엔 이것도 정적 검사였고, 뮤테이션이 뚫었다 — `mode === "dark"` 를 `"light"` 로
+     * 뒤바꾼 변형(토글이 정반대로 도는 결함)이 게이트 아홉을 **전부** 통과했다. 그래서 색 고르기를
+     * `structureColors` 로 빼내 여기서 직접 호출한다. DOM 이 필요한 카드 조립만 정적으로 남는다.
+     */
+    const A = [{ role: "바탕", hex: "#ffffff" }];
+    const B = [{ role: "바탕", hex: "#111111" }];
+    const cases = [
+      ["dark", { colors: A, colorsDark: B }, B, "dark 는 colorsDark 를 준다"],
+      ["light", { colors: A, colorsDark: B }, A, "light 는 colors 를 준다"],
+      [undefined, { colors: A, colorsDark: B }, A, "모드를 안 주면 밝은 쪽이 기본"],
+      ["dark", { colors: A }, A, "colorsDark 가 없으면 colors 로 물러선다"],
+      ["dark", { colors: A, colorsDark: null }, A, "colorsDark 가 null 이어도 물러선다"],
+    ];
+    for (const [mode, st, want, what] of cases) {
+      const got = structureColors(st, mode);
+      if (got !== want) bad.push(`${what} — 아니다 (${JSON.stringify(got)})`);
+    }
+
+    // ② 카드 조립이 그 함수를 실제로 쓰고, 모드를 인자로 받는다. 여기는 DOM 이 필요해 정적이다.
+    const ui = stripComments(read("public/ui.js"));
+    const cardBody = between(ui, "export function structureCard", "export function paletteCard", "structureCard");
+    if (!/function structureCard\(\s*structure\s*,\s*mode/.test(cardBody)) {
+      bad.push("structureCard 가 mode 를 인자로 안 받는다");
+    }
+    if (!/=\s*structureColors\(\s*structure\s*,\s*mode\s*\)/.test(cardBody)) {
+      bad.push("structureCard 가 structureColors(structure, mode) 의 반환을 안 받는다 — ①의 검사가 화면에 안 닿는다");
+    }
+    /*
+     * **카드가 색에 닿는 경로는 `structureColors` 하나뿐이다.**
+     *
+     * 처음엔 호출이 있는지만 봤고, 리뷰가 그것으로 뚫었다 — `structureColors(structure, mode);`
+     * 로 부르기만 하고 반환을 버린 뒤 `const colors = structure.colors;` 를 쓰면 **토글을 눌러도
+     * 화면이 전혀 안 바뀌는데** 게이트 넷이 전부 조용했다(재현 확인).
+     *
+     * 반환을 받는지(위 줄)만 조이면 표기를 바꿔 또 빠져나간다. 그래서 **우회로 자체를 막는다** —
+     * 카드 본문에 `structure.colors` 가 나오면 실패다. 헬퍼 밖에서 씨앗 색에 직접 닿을 이유가 없다.
+     */
+    const bypass = cardBody.match(/structure\.colors\b/g);
+    if (bypass) {
+      bad.push(`structureCard 가 structure.colors 에 직접 닿는다 ${bypass.length}곳 — 색은 structureColors 로만 가져온다`);
+    }
+
+    // ③ 펼침 영역에 모드 상태가 있고, 토글 구간이 네트워크를 다시 부르지 않는다.
+    const secBody = between(app, "function expansionSection", "function renderStatus", "expansionSection");
+    if (!/let\s+mode\s*=/.test(secBody)) bad.push("펼침 영역에 mode 상태가 없다 (재대입 가능해야 한다)");
+
+    const modeArea = between(secBody, "expand__mode", "expand__more", "모드 토글 구간");
+    if (/\bapi\s*\(/.test(modeArea) || /\bfetch\s*\(/.test(modeArea)) {
+      bad.push("모드 토글이 네트워크를 다시 부른다 — 이미 받아 둔 데이터로만 그려야 한다");
+    }
+
+    /*
+     * ④ 화면이 쓰는 `expand__mode*` 클래스가 **전부** 스타일시트에 있다.
+     *
+     * 처음엔 `.expand__mode` 규칙이 CSS 에 있는지만 봤고, 뮤테이션이 뚫었다 — JS 쪽 컨테이너
+     * 클래스만 딴 이름으로 바꿔도 버튼 문자열(`expand__mode-toggle`)이 부분 문자열로 걸려
+     * 통과했고, CSS 규칙은 아무도 안 쓰는 채로 남았다. **양쪽 목록을 대조한다.**
+     */
+    const used = [...new Set((app.match(/expand__mode[\w-]*/g) ?? []))];
+    if (used.length < 2) bad.push(`모드 토글 클래스가 ${used.length}개뿐이다 — 컨테이너와 버튼 둘이어야 한다`);
+    const missing = used.filter((cls) => !new RegExp(`\\.${cls}(?![\\w-])`).test(css));
+    if (missing.length) bad.push(`화면이 쓰는데 스타일시트에 없는 클래스: ${missing.join(", ")}`);
+
+    if (bad.length) throw new Error(bad.join(" / "));
+    out(`structureColors 동작 ${cases.length}가지 일치 · structureCard 가 그 반환을 받고 structure.colors 에 직접 안 닿음 · mode 상태 · 토글 구간에 api(/fetch( 없음`);
+    out(`클래스 대조: ${used.join(" · ")} 가 전부 app.css 에 있다`);
+    out("S15_G13_OK");
+  },
+
+  /**
+   * **요청 핸들러가 카탈로그를 다시 읽지 않는다.**
+   *
+   * `expandAll(palette, catalog = loadStructures(), options)` 라 **두 번째 인자를 생략하면
+   * 요청마다 readFileSync + JSON.parse 가 돈다.** 어두운 모드를 붙이며 호출이 둘이 되면서 그
+   * 동기 I/O 가 요청당 2회로 늘었고, 리뷰가 잡았다. `server.js` 는 바로 그 위에서 "구조 카탈로그는
+   * 기동 시 한 번만 읽는다" 고 적어 두고 있었는데 새 코드가 그 캐시를 안 썼다.
+   *
+   * **이름을 고정하지 않는다.** `fullCatalog` 라는 특정 식별자를 요구하면 이름만 바꿔도 실패한다.
+   * 무는 것은 구조다 — `handleExpand` 안의 모든 `expandAll(` 호출이 **두 번째 인자를 갖고, 그것이
+   * `undefined` 가 아니다.**
+   *
+   * 정적 검사다. 실행 시점 읽기 횟수는 못 센다 — 프로세스 밖에서 `readFileSync` 를 셀 방법이
+   * 없기 때문이다. 다른 경로로 파일을 다시 읽는 구현은 못 잡는다.
+   */
+  "S15-G14": async () => {
+    const server = stripComments(read("server.js"));
+    const from = server.indexOf("async function handleExpand");
+    if (from < 0) throw new Error("server.js 에서 handleExpand 를 못 찾았다 — 이 검사가 공허하다");
+    const to = server.indexOf("function dispatch", from);
+    const body = server.slice(from, to > 0 ? to : undefined);
+
+    // `expandAll(` 부터 짝이 맞는 닫는 괄호까지를 걸어서 읽는다. 정규식으로는 중첩 인자를 못 가른다.
+    const calls = [];
+    for (let i = body.indexOf("expandAll("); i >= 0; i = body.indexOf("expandAll(", i + 1)) {
+      let depth = 0;
+      let j = i + "expandAll".length;
+      for (; j < body.length; j += 1) {
+        if (body[j] === "(") depth += 1;
+        else if (body[j] === ")") {
+          depth -= 1;
+          if (depth === 0) break;
+        }
+      }
+      calls.push(body.slice(i + "expandAll(".length, j));
+    }
+
+    if (calls.length === 0) throw new Error("handleExpand 에 expandAll 호출이 없다 — 이 검사가 공허하다");
+
+    // 최상위 쉼표로만 인자를 가른다. 중첩 괄호·중괄호 안의 쉼표는 인자 경계가 아니다.
+    const argsOf = (src) => {
+      const out = [];
+      let depth = 0;
+      let cur = "";
+      for (const ch of src) {
+        if ("([{".includes(ch)) depth += 1;
+        else if (")]}".includes(ch)) depth -= 1;
+        if (ch === "," && depth === 0) {
+          out.push(cur.trim());
+          cur = "";
+          continue;
+        }
+        cur += ch;
+      }
+      if (cur.trim()) out.push(cur.trim());
+      return out;
+    };
+
+    const bad = [];
+    for (const call of calls) {
+      const args = argsOf(call);
+      if (args.length < 2) bad.push(`expandAll(${call}) — 카탈로그 인자가 없다 (요청마다 파일을 다시 읽는다)`);
+      else if (args[1] === "undefined" || args[1] === "") {
+        bad.push(`expandAll(${call}) — 카탈로그 자리가 ${args[1] || "빈칸"} 이다 (기본값이 loadStructures() 를 부른다)`);
+      }
+    }
+    if (bad.length) throw new Error(bad.join(" / "));
+
+    out(`handleExpand 의 expandAll 호출 ${calls.length}개가 전부 카탈로그를 넘겨받는다 — ${calls.map((c) => argsOf(c)[1]).join(" · ")}`);
+    out("S15_G14_OK");
+  },
+
+  /**
+   * **모드 토글이 포커스를 자기에게 확정한 뒤 다시 그린다.**
+   *
+   * `redraw` 가 격자를 통째로 갈아서, 카드 안 비율 슬라이더에 포커스가 있었다면 그 요소가 DOM 에서
+   * 사라지고 **포커스가 body 로 떨어진다**(브라우저 실측). Chrome·Firefox 는 버튼 클릭이 포커스를
+   * 옮겨 주지만 **Safari(WebKit)는 마우스 클릭으로 button 에 포커스를 주지 않는다** — 그 경로가
+   * 실제로 열려 있고, 스크린리더에게는 포커스가 조용히 사라지는 것으로 보인다(리뷰 지적).
+   *
+   * 정적 검사다. **순서까지 본다** — `focus()` 가 `redraw` 뒤에 있으면 이미 지워진 뒤라 늦다.
+   */
+  "S15-G15": async () => {
+    const app = stripComments(read("public/app.js"));
+    const from = app.indexOf("function expansionSection");
+    if (from < 0) throw new Error("expansionSection 을 못 찾았다 — 이 검사가 공허하다");
+    const to = app.indexOf("function renderStatus", from);
+    const sec = app.slice(from, to > 0 ? to : undefined);
+
+    const start = sec.indexOf("expand__mode");
+    const stop = sec.indexOf("expand__more", start);
+    if (start < 0) throw new Error("모드 토글 구간을 못 찾았다 — 이 검사가 공허하다");
+    const area = sec.slice(start, stop > 0 ? stop : undefined);
+
+    const focusAt = area.search(/\.focus\(\s*\)/);
+    const redrawAt = area.search(/redraw\s*\?\.\s*\(\s*\)|redraw\s*\(\s*\)/);
+    if (focusAt < 0) throw new Error("모드 토글이 포커스를 확정하지 않는다 — Safari 에서 포커스가 body 로 떨어진다");
+    if (redrawAt < 0) throw new Error("모드 토글 구간에 redraw 호출이 없다 — 이 검사가 공허하다");
+    if (focusAt > redrawAt) throw new Error("focus() 가 redraw 뒤에 있다 — 격자가 이미 갈린 뒤라 늦다");
+
+    out("모드 토글이 redraw 전에 포커스를 자기에게 확정한다");
+    out("S15_G15_OK");
   },
 };
 

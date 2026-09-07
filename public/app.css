@@ -1452,6 +1452,47 @@ a.action--primary:hover {
   min-width: 0;
 }
 
+/* 보기 방식을 바꾸는 버튼이지 내용을 여는 버튼이 아니다. 그래서 펼치기(.expand__toggle)보다
+   물러서고, 나머지 보기(.expand__more-toggle)와는 같은 무게로 둔다 - 둘 다 보조 조작이다.
+   눌린 상태는 색이 아니라 aria-pressed 로 말한다(색만으로 상태를 알리지 않는다). */
+.expand__mode {
+  margin: -4px 0 12px;
+}
+.expand__mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+/* 어두운 모드로 보는 중이라는 것을 글자 말고도 알린다. 채워진 사각형 하나면 충분하다. */
+.expand__mode-toggle::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  background: transparent;
+}
+.expand__mode-toggle[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.expand__mode-toggle[aria-pressed="true"]::before {
+  background: currentColor;
+}
+.expand__mode-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
 .expand__more {
   padding-top: 16px;
 }

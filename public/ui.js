@@ -203,7 +203,21 @@ export function shareControl({ colors, value, onInput }) {
  * 구조 이름과 원리는 data/structures.json 이 원전에서 옮겨 온 문장이라 그대로 보이고,
  * 어느 절에서 왔는지(source)도 함께 적는다 — 화면이 근거 없이 말하지 않게 하려는 것이다.
  */
-export function structureCard(structure) {
+/**
+ * 파생 구조에서 그 모드로 그릴 색 배열을 고른다.
+ *
+ * **structureCard 밖으로 뺀 이유는 게이트다.** 카드 조립은 DOM 이 있어야 돌아 정적 검사밖에
+ * 못 하는데, 정적 검사는 `dark` 와 `light` 를 뒤바꾼 변형을 못 잡는다(실측 — 뮤테이션 M6 이
+ * 게이트 아홉을 전부 통과했다). 순수 함수로 빼면 S15-G13 이 그냥 불러서 대조한다.
+ *
+ * 어두운 모드는 서버가 같은 응답에 함께 실어 보낸다(S15-G10). 없으면 밝은 쪽으로 물러선다 —
+ * `colorsDark` 를 모르던 시절의 응답을 받아도 화면이 비지 않게 한다.
+ */
+export function structureColors(structure, mode = "light") {
+  return (mode === "dark" ? structure.colorsDark : null) ?? structure.colors;
+}
+
+export function structureCard(structure, mode = "light") {
   const card = el("article", "struct");
 
   const head = el("div", "struct__head");
@@ -212,11 +226,13 @@ export function structureCard(structure) {
     el("span", "struct__source", structure.source),
   );
 
-  const ratio = ratioFor(structure);
-  const view = swatchView(structure.colors, ratio);
+  const colors = structureColors(structure, mode);
+
+  const ratio = ratioFor({ ...structure, colors });
+  const view = swatchView(colors, ratio);
 
   const control = shareControl({
-    colors: structure.colors,
+    colors,
     value: ratio,
     onInput: (next) => view.set(next),
   });

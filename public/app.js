@@ -145,6 +145,12 @@ function expansionSection(seedId, query) {
   let loaded = false;
   let pending = false;
 
+  // **모드 상태는 이 영역 클로저 안에만 있다.** 전역이나 localStorage 에 두지 않는다 —
+  // 카드마다 다른 모드로 나란히 비교할 수 있고, 이 저장소에 없던 저장 계층을 들이지도 않는다.
+  let mode = "light";
+  // 받아 둔 데이터로 다시 그리는 자리. 펼치기 전에는 그릴 것이 없어 null 이다.
+  let redraw = null;
+
   toggle.addEventListener("click", async () => {
     if (!body.hidden) {
       body.hidden = true;
@@ -194,21 +200,40 @@ function expansionSection(seedId, query) {
         note.append(el("span", "status__timing", `${data.selection.model} · ${data.selection.elapsedMs}ms`));
       }
 
-      const grid = el("div", "expand__grid");
-      for (const st of chosen) grid.append(structureCard(st));
+      // **토글은 이미 받아 둔 data 로만 다시 그린다 — 네트워크 0, LLM 재호출 0.**
+      // 모드를 서버에 물으면 selectStructures 가 다시 돌아 같은 질의인데 보이는 다섯이 바뀐다.
+      // 서버가 두 모드를 한 번에 보내 주므로(S15-G10) 여기서는 어느 쪽을 그릴지만 고른다.
+      const modeBox = el("div", "expand__mode");
+      const modeBtn = el("button", "expand__mode-toggle", "어두운 배경으로 보기");
+      modeBtn.type = "button";
+      modeBtn.setAttribute("aria-pressed", "false");
+      modeBtn.addEventListener("click", () => {
+        mode = mode === "dark" ? "light" : "dark";
+        modeBtn.setAttribute("aria-pressed", String(mode === "dark"));
+        modeBtn.textContent = mode === "dark" ? "밝은 배경으로 보기" : "어두운 배경으로 보기";
+        // **다시 그리기 전에 포커스를 이 버튼으로 확정한다.** redraw 가 격자를 통째로 갈아서,
+        // 카드 안 비율 슬라이더에 포커스가 있었다면 그 요소가 DOM 에서 사라지고 포커스가 body 로
+        // 떨어진다(실측). Safari 는 마우스 클릭으로 button 에 포커스를 주지 않으므로 그 경로가
+        // 실제로 열려 있다 — 스크린리더에게는 포커스가 조용히 사라지는 것으로 보인다.
+        modeBtn.focus();
+        redraw?.();
+      });
+      modeBox.append(modeBtn);
 
-      body.replaceChildren(note, grid);
+      const grid = el("div", "expand__grid");
+
+      body.replaceChildren(note, modeBox, grid);
 
       // 나머지는 지우지 않고 접어 둔다. 서버가 이미 계산해 둔 것이고, 고른 다섯이 마음에 안 들 때
       // 사용자가 볼 자리가 있어야 한다.
+      let restGrid = null;
       if (rest.length) {
         const moreBox = el("div", "expand__more");
         const more = el("button", "expand__more-toggle", `나머지 ${rest.length}가지 보기`);
         more.type = "button";
         more.setAttribute("aria-expanded", "false");
-        const restGrid = el("div", "expand__grid");
+        restGrid = el("div", "expand__grid");
         restGrid.hidden = true;
-        for (const st of rest) restGrid.append(structureCard(st));
         more.addEventListener("click", () => {
           restGrid.hidden = !restGrid.hidden;
           more.setAttribute("aria-expanded", String(!restGrid.hidden));
@@ -217,6 +242,14 @@ function expansionSection(seedId, query) {
         moreBox.append(more, restGrid);
         body.append(moreBox);
       }
+
+      // 두 격자를 한 자리에서 다시 그린다. 접힘 상태(restGrid.hidden)는 replaceChildren 이
+      // 건드리지 않으므로 모드를 바꿔도 펼쳐 둔 나머지가 도로 접히지 않는다.
+      redraw = () => {
+        grid.replaceChildren(...chosen.map((st) => structureCard(st, mode)));
+        restGrid?.replaceChildren(...rest.map((st) => structureCard(st, mode)));
+      };
+      redraw();
       loaded = true;
     } catch (err) {
       // 실패를 삼키면 사용자는 빈 칸을 보고 구조가 없다고 읽는다.

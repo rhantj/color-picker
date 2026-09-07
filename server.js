@@ -260,7 +260,13 @@ const seedPool = loadSeeds();
 // **detail 을 떨어뜨리지 않는다.** 프롬프트가 그것을 쓴다 — principle 은 기법만 말하고 증상 낱말이
 // 없어서, 여기서 빼면 "평면적이고 깊이가 없어요" 가 공기원근에 못 닿는다. 실제로 한 번 빠뜨렸고,
 // 프롬프트의 detail 자리가 늘 빈 문자열이라 개선이 통째로 무효였다. S14-G9 가 이제 그것을 검사한다.
-const structureCatalog = loadStructures().map((x) => ({
+// **전체 카탈로그도 기동 시 한 번만 읽는다.** `expandAll` 의 기본 인자가 `loadStructures()` 라,
+// 인자를 생략하면 요청마다 readFileSync + JSON.parse 가 돈다 — 어두운 모드를 붙이며 호출이 둘이
+// 되면서 그 동기 I/O 가 요청당 2회로 늘었다(리뷰 지적). 아래 structureCatalog 는 LLM 프롬프트용이라
+// `source` 를 떨어뜨려서 확장에 그대로 못 쓴다. 그래서 원본을 따로 들고 있는다.
+const fullCatalog = loadStructures();
+
+const structureCatalog = fullCatalog.map((x) => ({
   id: x.id,
   name: x.name,
   principle: x.principle,
@@ -382,12 +388,20 @@ async function handleExpand(res, params) {
   // 없는 씨앗을 빈 결과로 돌려주면 화면이 "구조가 없는 조합" 으로 그린다. 없는 것과 다르다.
   if (!found) return sendJson(res, 404, { error: "없는 씨앗이다" });
 
-  const structures = expandAll(found.seed).map((st) => ({
+  // **두 모드를 한 번에 내려보낸다. `mode` 를 쿼리 파라미터로 만들지 않는다.**
+  // 만드는 순간 화면의 토글이 이 엔드포인트를 다시 부를 경로가 생기고, `q` 가 붙어 있으면
+  // 그 요청이 selectStructures 를 다시 돌린다 — **같은 질의인데 토글 한 번에 보이는 다섯이 바뀐다.**
+  // 게다가 LLM 왕복이 매번 ~500ms 다. S15-G11 이 파라미터의 부활을 막는다.
+  const dark = expandAll(found.seed, fullCatalog, { mode: "dark" });
+  const darkById = new Map(dark.map((st) => [st.id, st.colors]));
+  const structures = expandAll(found.seed, fullCatalog).map((st) => ({
     id: st.id,
     name: st.name,
     principle: st.principle,
     source: st.source,
     colors: st.colors,
+    // 기존 필드는 하나도 안 바꾼다 — S13-G4·S14-G4 가 응답 형태를 본다. 새 필드만 얹는다.
+    colorsDark: darkById.get(st.id) ?? st.colors,
   }));
 
   // 질의가 있을 때만 LLM 이 고른다. 없으면 selectStructures 가 부르지 않고 카탈로그 순서로 돌려준다.

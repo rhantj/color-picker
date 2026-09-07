@@ -419,7 +419,10 @@ const gates = {
     // server.js 가 실제로 만드는 카탈로그를 그 소스에서 확인한다 — 여기서 따로 만들면
     // 게이트만 통과하고 제품은 안 고쳐진 채로 남는다(방금 그렇게 됐다).
     const serverSrc = stripComments(read("server.js"));
-    const projection = serverSrc.match(/const structureCatalog = loadStructures\(\)\.map\([\s\S]{0,220}?\);/)?.[0] ?? "";
+    // **무엇에서 map 하는지는 안 고정한다.** 처음엔 `loadStructures().map(` 로 앵커를 박았고,
+    // 15단계에서 요청당 파일 재읽기를 없애려고 모듈 캐시(`fullCatalog.map(`)로 바꾸자 이 게이트가
+    // 통째로 실패했다 — 투영은 그대로였는데 앵커만 안 맞았다. 무는 것은 **투영에 네 필드가 있는가**다.
+    const projection = serverSrc.match(/const structureCatalog = [^;=]{0,60}\.map\([\s\S]{0,220}?\);/)?.[0] ?? "";
     if (!projection) bad.push("server.js 의 카탈로그 조립부를 못 찾았다");
     for (const field of ["id", "name", "principle", "detail"]) {
       if (!new RegExp(`\\b${field}\\b`).test(projection)) bad.push(`서버 카탈로그가 ${field} 를 안 넘긴다`);
