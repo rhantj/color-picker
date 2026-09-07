@@ -41,6 +41,8 @@ export const status = () => ({ ...current });
 
 const STATUS_TTL_MS = 5000;
 let lastProbeAt = 0;
+/** 진행 중인 탐지. 동시 호출이 낡은 상태를 받지 않게 여기 합류시킨다 — refresh() 주석 참조. */
+let probing = null;
 
 /**
  * 상태를 다시 확인한다. **절대 프로세스를 띄우지 않는다** — 요청 처리 경로에서 부를 수 있어야 하기 때문이다.
@@ -48,16 +50,32 @@ let lastProbeAt = 0;
  */
 export async function refresh() {
   if (inflight) return status(); // 기동 시도 중이면 그쪽 결과를 기다린다
+  // **진행 중인 탐지가 있으면 거기 합류한다.**
+  //
+  // 이게 없으면 동시 호출한 두 번째가 아래 TTL 검사에 걸려 **아직 끝나지 않은 탐지의 낡은
+  // 상태**를 받는다 — `lastProbeAt` 을 `await probe()` 앞에서 세우기 때문이다. 기동 직후에는
+  // 그 낡은 상태가 `"unknown"` 이라 호출부가 "Ollama 를 쓸 수 없다" 로 물러선다.
+  //
+  // 17단계에서 `/api/expand` 가 구조 선택과 재질 배정을 **나란히** 부르기 시작하면서 실제로
+  // 그렇게 됐다 — 재질 배정이 첫 요청마다 조용히 폴백했고, S17-G10 이 "모델 호출 1회" 로 잡았다.
+  // 순차 호출만 있던 시절에는 드러날 수 없던 결함이다.
+  if (probing) return probing;
   if (Date.now() - lastProbeAt < STATUS_TTL_MS) return status();
   lastProbeAt = Date.now();
 
-  const models = await probe();
-  if (models) {
-    current = { ...current, state: "ready", models };
-  } else if (current.state === "ready") {
-    current = { ...current, state: "unavailable", detail: `${HOST} 응답이 끊겼다`, models: [] };
-  }
-  return status();
+  probing = (async () => {
+    const models = await probe();
+    if (models) {
+      current = { ...current, state: "ready", models };
+    } else if (current.state === "ready") {
+      current = { ...current, state: "unavailable", detail: `${HOST} 응답이 끊겼다`, models: [] };
+    }
+    return status();
+  })().finally(() => {
+    probing = null;
+  });
+
+  return probing;
 }
 
 /** 떠 있으면 모델 이름 배열, 아니면 null. 던지지 않는다. */

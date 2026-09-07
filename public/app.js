@@ -200,6 +200,39 @@ function expansionSection(seedId, query) {
         note.append(el("span", "status__timing", `${data.selection.model} · ${data.selection.elapsedMs}ms`));
       }
 
+      /*
+       * **재질 배정의 출처를 따로 밝힌다.** 구조 선택 배지와 나란히 두지 않고 줄을 나눈다 —
+       * 둘은 서로 다른 호출이고 한쪽만 실패할 수 있다. 한 줄에 붙이면 "LLM 이 고름" 이 무엇에
+       * 대한 말인지 흐려진다.
+       *
+       * 배지가 거짓말하지 않게 하는 판정은 서버가 이미 했다(S17-G5) — 모델이 쓸 수 있는 배정을
+       * 하나도 안 줬으면 from 이 fallback 이다. 화면은 그것을 그대로 옮긴다.
+       */
+      const fin = data.finishes;
+      const roleCount = Object.keys(fin?.assignments ?? {}).length;
+      const finNote = el("p", "expand__finish-note");
+      if (fin?.assignments) {
+        const byLlm = fin.from === "llm";
+        finNote.append(
+          el("span", "status__badge", byLlm ? "LLM 이 배정" : "기본 배정"),
+          el(
+            "span",
+            "expand__finish-text",
+            byLlm
+              ? // 문장을 조각내 잇지 않는다. 조건마다 온전한 문장을 쓴다 — 14단계에서 조각을
+                // 이어 붙였다가 "골랐고" + "습니다" 가 붙어 "골랐고습니다" 가 나간 적이 있고,
+                // 여기서는 전부 배정됐는데도 "나머지는 기본 배정" 이라고 말했다(브라우저 실측).
+                fin.matched < roleCount
+                ? `질문에 맞춰 ${fin.matched}자리를 로컬 LLM 이 배정했고, 나머지 ${roleCount - fin.matched}자리는 기본 재질입니다.`
+                : `역할 ${fin.matched}자리의 재질을 질문에 맞춰 로컬 LLM 이 배정했습니다.`
+              : `${fin.error ? `${fin.error} — ` : ""}역할별 기본 재질로 보여줍니다.`,
+          ),
+        );
+        if (byLlm && fin.elapsedMs != null) {
+          finNote.append(el("span", "status__timing", `${fin.model} · ${fin.elapsedMs}ms`));
+        }
+      }
+
       // **토글은 이미 받아 둔 data 로만 다시 그린다 — 네트워크 0, LLM 재호출 0.**
       // 모드를 서버에 물으면 selectStructures 가 다시 돌아 같은 질의인데 보이는 다섯이 바뀐다.
       // 서버가 두 모드를 한 번에 보내 주므로(S15-G10) 여기서는 어느 쪽을 그릴지만 고른다.
@@ -222,7 +255,7 @@ function expansionSection(seedId, query) {
 
       const grid = el("div", "expand__grid");
 
-      body.replaceChildren(note, modeBox, grid);
+      body.replaceChildren(note, ...(finNote.childElementCount ? [finNote] : []), modeBox, grid);
 
       // 나머지는 지우지 않고 접어 둔다. 서버가 이미 계산해 둔 것이고, 고른 다섯이 마음에 안 들 때
       // 사용자가 볼 자리가 있어야 한다.
@@ -246,8 +279,8 @@ function expansionSection(seedId, query) {
       // 두 격자를 한 자리에서 다시 그린다. 접힘 상태(restGrid.hidden)는 replaceChildren 이
       // 건드리지 않으므로 모드를 바꿔도 펼쳐 둔 나머지가 도로 접히지 않는다.
       redraw = () => {
-        grid.replaceChildren(...chosen.map((st) => structureCard(st, mode)));
-        restGrid?.replaceChildren(...rest.map((st) => structureCard(st, mode)));
+        grid.replaceChildren(...chosen.map((st) => structureCard(st, mode, fin)));
+        restGrid?.replaceChildren(...rest.map((st) => structureCard(st, mode, fin)));
       };
       redraw();
       loaded = true;

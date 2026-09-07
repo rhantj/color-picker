@@ -1,17 +1,18 @@
 #!/usr/bin/env node
-// 17단계(LLM 이 역할별 재질을 배정한다) · 17-A 완료 조건 검사기.
+// 17단계(LLM 이 역할별 재질을 배정한다) 완료 조건 검사기.
 //   node scripts/check-stage17.mjs S17-G1
 //
 // **이 파일은 구현보다 먼저 쓰였다.** 여덟 게이트가 전부 실패하는 것을 확인한 뒤에
 // src/finish.js 를 만들었다. 통과부터 하는 게이트는 무엇을 지키는지 알 수 없다.
 //
-// 17-A 는 배정 엔진까지다. `/api/expand` 에 얹는 것과 화면 표시는 17-B 다.
+// 17-A 가 배정 엔진(G1~G8), 17-B 가 `/api/expand` 연결과 화면 표시(G9~G12)다.
 //
 // **`src/finish.js` 를 정적으로 import 하지 않는다.** 그 모듈이 `OLLAMA_HOST` 를 모듈 적재
 // 시점에 읽으므로, 가짜 Ollama 로 향하게 하려면 **환경변수를 먼저 세우고 동적으로 불러야** 한다.
 // 정적 import 로 두면 진짜 포트(11434)를 물고 올라와 이 기계에 Ollama 가 떠 있는지에 따라
 // 게이트 결과가 달라진다 — 그건 검사가 아니라 운이다.
 
+import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -61,6 +62,10 @@ function stubOllama(initial = {}) {
   let chatCalls = 0;
   let lastBody = null;
   const sockets = new Set();
+  // **겹침을 직접 센다.** 시간으로 병렬을 판정하면 바쁜 기계에서 흔들린다(리뷰 지적).
+  // 두 요청이 실제로 같은 순간에 떠 있었는지는 여기서 세는 것이 정확하고 흔들리지 않는다.
+  let inFlight = 0;
+  let maxInFlight = 0;
 
   const server = createServer(async (req, res) => {
     if (req.url === "/api/tags") {
@@ -69,18 +74,24 @@ function stubOllama(initial = {}) {
     }
     if (req.url === "/api/chat") {
       chatCalls += 1;
-      let raw = "";
-      for await (const chunk of req) raw += chunk;
-      lastBody = raw;
-      const { chatDelayMs, reply, status } = cfg;
-      if (chatDelayMs) await new Promise((r) => setTimeout(r, chatDelayMs));
-      if (res.writableEnded || res.destroyed) return undefined;
-      if (status !== 200) {
-        res.writeHead(status, { "content-type": "application/json" });
-        return res.end("{}");
+      inFlight += 1;
+      if (inFlight > maxInFlight) maxInFlight = inFlight;
+      try {
+        let raw = "";
+        for await (const chunk of req) raw += chunk;
+        lastBody = raw;
+        const { chatDelayMs, reply, status } = cfg;
+        if (chatDelayMs) await new Promise((r) => setTimeout(r, chatDelayMs));
+        if (res.writableEnded || res.destroyed) return undefined;
+        if (status !== 200) {
+          res.writeHead(status, { "content-type": "application/json" });
+          return res.end("{}");
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        return res.end(JSON.stringify({ message: { content: reply ?? "{}" } }));
+      } finally {
+        inFlight -= 1;
       }
-      res.writeHead(200, { "content-type": "application/json" });
-      return res.end(JSON.stringify({ message: { content: reply ?? "{}" } }));
     }
     res.writeHead(404).end("{}");
     return undefined;
@@ -99,6 +110,7 @@ function stubOllama(initial = {}) {
           cfg = { chatDelayMs: 0, reply: null, status: 200, ...next };
         },
         calls: () => chatCalls,
+        maxInFlight: () => maxInFlight,
         resetCalls: () => {
           chatCalls = 0;
         },
@@ -146,6 +158,49 @@ async function withoutOllama(fn) {
   const mod = await import("../src/finish.js");
   return fn(mod);
 }
+
+/**
+ * 서버를 띄워 실제 응답을 본다. check-stage13·15 의 것과 같은 형태를 **독립적으로** 적는다 —
+ * 한쪽에서 읽어 오면 그쪽 하네스가 바뀔 때 이 단계 게이트가 조용히 다른 것을 검사하게 된다.
+ */
+function startServer(port, env = {}) {
+  const child = spawn(process.execPath, ["server.js"], {
+    cwd: ROOT,
+    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", OLLAMA_AUTOSTART: "0", ...env },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return new Promise((resolve, reject) => {
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`서버가 5초 안에 뜨지 않았다. stderr: ${stderr.trim() || "(없음)"}`));
+    }, 5000);
+    child.stdout.on("data", (c) => {
+      if (c.toString("utf8").includes(String(port))) {
+        clearTimeout(timer);
+        resolve(child);
+      }
+    });
+    child.stderr.on("data", (c) => (stderr += c.toString("utf8")));
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      reject(new Error(`서버가 코드 ${code} 로 종료했다. stderr: ${stderr.trim() || "(없음)"}`));
+    });
+  });
+}
+
+async function withServer(port, env, fn) {
+  const child = await startServer(port, env);
+  try {
+    return await fn((path) => fetch(`http://127.0.0.1:${port}${path}`));
+  } finally {
+    child.kill();
+  }
+}
+
+/** 주석을 걷어낸 소스. check-stage13·15 와 같은 예외(문자열 안 URL 스킴)를 같은 이유로 둔다. */
+const stripComments = (src) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 const sameTable = (a, b) =>
   Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((k) => a[k] === b[k]);
@@ -578,6 +633,259 @@ const GATES = {
     out(`폴백이 독립 사본·material.js 기본 배정 셋 다 일치 — ${Object.entries(fb).map(([r, i]) => `${r}→${i}`).join(" · ")}`);
     out(`실제 역할 ${seen.size}가지를 전부 덮고 죽은 항목 없음 · 없는 역할 4가지에 던진다`);
     out("S17_G8_OK");
+  },
+
+  /*
+   * `/api/expand` 가 **배정을 함께 내려보내고 기존 필드는 하나도 안 바꾼다.**
+   *
+   * 수치(base·metallic·roughness·emission)는 **안 보낸다.** 사용자가 고른 것이다 — 두 모드 ×
+   * 8구조 × 3~4색이라 응답이 3.8KB → 12KB 가 되는데, 이 단계가 화면에 그리는 것은 재질
+   * **이름**뿐이다. 안 쓰는 것을 보내지 않는다. 수치가 필요해지면 그때 별도로 붙인다.
+   *
+   * 기존 필드 회귀는 이 저장소가 단계마다 무는 것이다(S13-G4·S14-G4·S15-G10).
+   */
+  "S17-G9": async () => {
+    const bad = [];
+    const seed = JSON.parse(read("data/palettes.json")).palettes[0];
+    const stub = await stubOllama({ reply: JSON.stringify({ assignments: { 바탕: "emissive" }, ids: [] }) });
+
+    try {
+      await withServer(4951, { OLLAMA_HOST: `127.0.0.1:${stub.port}` }, async (get) => {
+        const res = await get(`/api/expand?seed=${encodeURIComponent(seed.id)}&q=${encodeURIComponent("네온")}`);
+        if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+        const body = await res.json();
+
+        // 기존 필드 회귀 — 형태가 그대로인가.
+        if (body.structures?.length !== 8) bad.push(`구조가 ${body.structures?.length}개`);
+        if (!body.selection?.ids) bad.push("selection 이 사라졌다");
+        for (const st of body.structures ?? []) {
+          if (!Array.isArray(st.colors) || !Array.isArray(st.colorsDark)) bad.push(`${st.id}: colors/colorsDark 가 없다`);
+        }
+
+        // 새 필드.
+        const f = body.finishes;
+        if (!f) bad.push("finishes 가 없다");
+        else {
+          if (!f.assignments) bad.push("finishes.assignments 가 없다");
+          if (!["llm", "fallback"].includes(f.from)) bad.push(`finishes.from 이 ${f.from}`);
+          if (typeof f.matched !== "number") bad.push("finishes.matched 가 없다");
+
+          // **id→이름 표.** 화면이 한글 이름을 박지 않으려면 서버가 줘야 한다(S17-G12 와 짝).
+          const catalog = JSON.parse(read("data/finishes.json")).finishes;
+          for (const item of catalog) {
+            if (f.names?.[item.id] !== item.name) bad.push(`names 에 ${item.id}→${item.name} 이 없다`);
+          }
+          if (Object.keys(f.names ?? {}).length !== catalog.length) {
+            bad.push(`names 가 ${Object.keys(f.names ?? {}).length}개 (카탈로그 ${catalog.length}개)`);
+          }
+          // 프롬프트용 필드는 안 보낸다 — 화면이 안 쓴다.
+          for (const item of catalog) {
+            if (JSON.stringify(body).includes(item.principle)) bad.push(`응답에 ${item.id} 의 principle 이 있다`);
+          }
+
+          // 실제로 나오는 역할이 전부 배정돼 있는가. 빠지면 화면이 그 자리를 못 그린다.
+          const roles = new Set((body.structures ?? []).flatMap((st) => st.colors.map((c) => c.role)));
+          for (const role of roles) {
+            if (!f.assignments[role]) bad.push(`역할 ${role} 에 배정이 없다`);
+          }
+          if (roles.size === 0) bad.push("역할이 0개다 — 이 검사가 공허하다");
+
+          // 값이 전부 실재하는 재질인가.
+          for (const [role, id] of Object.entries(f.assignments)) {
+            if (!FINISH_IDS.includes(id)) bad.push(`${role} 에 재질이 아닌 값 ${id}`);
+          }
+
+          // **수치는 안 보낸다.** 보내면 응답이 3배가 되는데 이 단계가 안 쓴다.
+          const flat = JSON.stringify(body);
+          for (const key of ["roughness", "metallic", "baseColor", "emission", "smoothness"]) {
+            if (flat.includes(key)) bad.push(`응답에 ${key} 가 있다 — 이 단계는 이름만 보낸다`);
+          }
+        }
+      });
+    } finally {
+      stub.close();
+    }
+
+    /*
+     * **재질 호출이 그물에 싸여 있는가.** `selectFinishes` 는 `roles` 가 잘못되면 던지고
+     * (호출부 잘못이라 그렇게 설계했다), 그것이 `Promise.all` 안에서 터지면 **구조·파생까지
+     * 함께 500** 이 된다. 재질 하나 때문에 펼치기 전체를 잃지 않게 한다.
+     *
+     * **정적 검사다.** 현재 데이터로는 던지는 경로를 만들 수 없어(역할이 `expand.js` 의
+     * RULES 로 고정, `S16-G11` 이 표와의 일치를 검사) HTTP 로 재현할 수 없다. 그래서 구조만 본다 —
+     * 다음 사람이 그물을 걷어내는 것을 막는 것이 이 검사의 일이다.
+     */
+    const server = stripComments(read("server.js"));
+    const call = server.indexOf("selectFinishes(query, roles)");
+    if (call < 0) bad.push("server.js 가 selectFinishes(query, roles) 를 안 부른다");
+    else if (!/selectFinishes\(query, roles\)\s*\.catch\(/.test(server)) {
+      bad.push("selectFinishes 호출에 .catch 그물이 없다 — roles 가 잘못되면 펼치기 전체가 500 이 된다");
+    }
+
+    if (bad.length) throw new Error(bad.slice(0, 5).join(" / "));
+    out("응답에 finishes 가 실리고 실제 역할이 전부 배정됨 · 기존 필드(structures·colorsDark·selection) 회귀 0");
+    out("재질 호출이 .catch 로 싸여 있다 — 재질 실패가 펼치기 전체를 안 넘어뜨린다 (정적)");
+    out("재질 수치는 응답에 없다 — 이 단계는 이름만 보낸다");
+    out("S17_G9_OK");
+  },
+
+  /*
+   * **두 LLM 호출이 서로를 기다리지 않는다.**
+   *
+   * `/api/expand` 는 이제 모델을 두 번 부른다 — 구조 선택과 재질 배정. 순서대로 부르면 지연이
+   * **합**이 되어 펼치기가 두 배로 느려진다. 둘은 서로의 결과를 안 쓰므로 기다릴 이유가 없다.
+   *
+   * **실측은 스텁으로 한다.** 진짜 Ollama 는 모델 하나를 두 요청이 나눠 쓰므로 내부적으로
+   * 줄을 설 수 있다 — 그러면 이 병렬이 벽시계 이득을 못 낸다. 이 게이트가 무는 것은
+   * **우리 코드가 불필요하게 직렬화하지 않는다**는 것뿐이고, 그것이 우리가 통제하는 전부다.
+   *
+   * **주 신호는 시간이 아니라 겹침 수다.** 처음엔 시간만 봤고 리뷰가 흔들릴 수 있다고 지적했다 —
+   * 바쁜 기계에서는 진짜 병렬도 문턱을 넘을 수 있고, 반대로 스텁이 빠르면 하한 아래로 내려간다.
+   * 스텁이 **같은 순간에 떠 있던 요청 수**를 직접 세면 그 판정은 부하와 무관하다.
+   * 시간은 보조 신호로 남긴다 — 겹침이 2인데 시간이 합에 가까우면 다른 곳에 직렬화가 있다는 뜻이다.
+   */
+  "S17-G10": async () => {
+    const bad = [];
+    const seed = JSON.parse(read("data/palettes.json")).palettes[0];
+    const DELAY = 600;
+    const stub = await stubOllama({ chatDelayMs: DELAY, reply: JSON.stringify({ assignments: {}, ids: [] }) });
+
+    try {
+      await withServer(4952, { OLLAMA_HOST: `127.0.0.1:${stub.port}` }, async (get) => {
+        const started = Date.now();
+        const res = await get(`/api/expand?seed=${encodeURIComponent(seed.id)}&q=${encodeURIComponent("네온")}`);
+        const took = Date.now() - started;
+        if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+        await res.json();
+
+        if (stub.calls() !== 2) bad.push(`모델을 ${stub.calls()}회 불렀다 — 구조·재질 둘이어야 한다`);
+
+        // ① 주 신호 — 두 요청이 실제로 같은 순간에 떠 있었는가. 부하와 무관하다.
+        if (stub.maxInFlight() !== 2) {
+          bad.push(`같은 순간에 떠 있던 요청이 최대 ${stub.maxInFlight()}개 — 둘이 겹치지 않았다`);
+        }
+
+        // ② 보조 신호 — 겹쳤다면 시간도 합보다 최대에 가까워야 한다.
+        if (took >= DELAY * 2) bad.push(`${took}ms 걸렸다 — 겹쳤다는데 시간은 직렬이다. 다른 곳에 직렬화가 있다`);
+        // 양성 대조 — 지연이 실제로 걸렸는가. 안 걸렸으면 위 검사가 아무것도 안 잰다.
+        if (took < DELAY) bad.push(`${took}ms 는 지연 ${DELAY}ms 보다 짧다 — 스텁 지연이 안 걸렸다`);
+        out(`동시에 떠 있던 요청 최대 ${stub.maxInFlight()}개 · 전체 ${took}ms (각 ${DELAY}ms · 직렬이면 ${DELAY * 2}ms 이상)`);
+      });
+    } finally {
+      stub.close();
+    }
+
+    if (bad.length) throw new Error(bad.join(" / "));
+    out("모델 호출 2회가 서로를 안 기다린다");
+    out("S17_G10_OK");
+  },
+
+  /*
+   * **재질 배정을 바꾸는 쿼리 파라미터를 만들지 않는다.** `mode` 와 같은 규율이다(S15-G11).
+   *
+   * 만드는 순간 화면의 조작이 `/api/expand` 를 다시 부를 경로가 생기고, `q` 가 붙어 있으면
+   * 그 요청이 **`selectStructures` 를 다시 돌린다** — 같은 질의인데 보이는 다섯이 바뀐다.
+   *
+   * 질의가 없으면 배정도 폴백이어야 한다. 여기서도 모델을 안 부른다.
+   */
+  "S17-G11": async () => {
+    const bad = [];
+    const seed = JSON.parse(read("data/palettes.json")).palettes[0];
+    const other = JSON.parse(read("data/palettes.json")).palettes[1];
+    const stub = await stubOllama({ reply: JSON.stringify({ assignments: {}, ids: [] }) });
+
+    try {
+      await withServer(4953, { OLLAMA_HOST: `127.0.0.1:${stub.port}` }, async (get) => {
+        const body = async (qs) => {
+          const res = await get(`/api/expand?${qs}`);
+          if (res.status !== 200) throw new Error(`HTTP ${res.status} — ${qs}`);
+          return JSON.stringify(await res.json());
+        };
+
+        const base = await body(`seed=${encodeURIComponent(seed.id)}`);
+        for (const extra of ["finish=metal", "finishes=matte", "assign=emissive", "finish="]) {
+          const got = await body(`seed=${encodeURIComponent(seed.id)}&${extra}`);
+          if (got !== base) bad.push(`${extra} 를 붙였더니 응답이 달라졌다 — 배정이 파라미터로 조작된다`);
+        }
+        // 양성 대조 — 실제로 응답을 바꾸는 파라미터는 달라져야 한다.
+        if ((await body(`seed=${encodeURIComponent(other.id)}`)) === base) {
+          bad.push("씨앗을 바꿨는데 응답이 같다 — 이 비교가 아무것도 검사하지 않는다");
+        }
+
+        // 질의가 없으면 모델을 안 부른다 — 구조도 재질도.
+        if (stub.calls() !== 0) bad.push(`질의가 없는데 모델을 ${stub.calls()}회 불렀다`);
+        const parsed = JSON.parse(base);
+        if (parsed.finishes?.from !== "fallback") bad.push(`질의 없는데 finishes.from=${parsed.finishes?.from}`);
+      });
+    } finally {
+      stub.close();
+    }
+
+    // 정적 대조 — handleExpand 가 재질 파라미터를 읽고 있으면 다음 사람이 그것을 쓰게 된다.
+    const server = stripComments(read("server.js"));
+    const from = server.indexOf("async function handleExpand");
+    if (from < 0) throw new Error("handleExpand 를 못 찾았다 — 이 검사가 공허하다");
+    const head = server.slice(from, server.indexOf("function dispatch", from));
+    if (/params\.get\(\s*['"`](finish|finishes|assign)/.test(head)) {
+      bad.push("handleExpand 가 재질 파라미터를 읽는다");
+    }
+
+    if (bad.length) throw new Error(bad.join(" / "));
+    out("재질 파라미터 4가지가 응답을 안 바꾼다 · 양성 대조(seed 변경) 통과 · handleExpand 가 안 읽는다");
+    out("질의가 없으면 모델 호출 0회이고 배정도 폴백");
+    out("S17_G11_OK");
+  },
+
+  /*
+   * **화면이 재질 이름을 그린다.** 정적 검사다 — 회귀 스모크지 동작 증명이 아니다.
+   * S13-G7·S15-G13 이 같은 이유로 같은 말을 한다. 실제 동작은 브라우저에서 따로 본다.
+   *
+   * 이름은 **카탈로그에서 온다.** 코드에 한글 이름을 박으면 `data/finishes.json` 을 고쳐도
+   * 화면이 안 따라오고, 그 어긋남은 아무도 안 알려 준다.
+   */
+  "S17-G12": async () => {
+    const bad = [];
+    const ui = stripComments(read("public/ui.js"));
+    const app = stripComments(read("public/app.js"));
+    const css = read("public/app.css");
+    const catalog = JSON.parse(read("data/finishes.json")).finishes;
+
+    const between = (src, a, b, what) => {
+      const i = src.indexOf(a);
+      if (i < 0) throw new Error(`${what} 를 못 찾았다 — 이 검사가 공허하다`);
+      const j = src.indexOf(b, i + a.length);
+      return src.slice(i, j > 0 ? j : undefined);
+    };
+
+    // 카드가 배정과 이름표를 받는다.
+    const card = between(ui, "export function structureCard", "export function paletteCard", "structureCard");
+    if (!/function structureCard\(\s*structure\s*,\s*mode\s*=\s*"light"\s*,\s*finishes/.test(card)) {
+      bad.push("structureCard 가 finishes 를 인자로 안 받는다");
+    }
+    if (!/struct__finishes/.test(card)) bad.push("재질 줄(.struct__finishes)이 없다");
+
+    // **이름을 코드에 박지 않는다.** 카탈로그의 한글 이름이 소스에 있으면 그 자리가 굳는다.
+    for (const f of catalog) {
+      if (new RegExp(`["'\`]${f.name}["'\`]`).test(ui) || new RegExp(`["'\`]${f.name}["'\`]`).test(app)) {
+        bad.push(`재질 이름 "${f.name}" 이 코드에 박혀 있다 — 카탈로그에서 읽어야 한다`);
+      }
+    }
+
+    // 화면이 응답의 finishes 를 카드에 넘긴다.
+    const sec = between(app, "function expansionSection", "function renderStatus", "expansionSection");
+    if (!/data\.finishes/.test(sec)) bad.push("펼침 영역이 data.finishes 를 안 읽는다");
+    if (!/finishBadge|expand__finish/.test(sec)) bad.push("재질 배정 출처 배지가 없다");
+
+    // JS 가 쓰는 클래스가 전부 스타일시트에 있다. S15-G13 이 같은 대조를 한다.
+    const used = [...new Set([...(app.match(/expand__finish[\w-]*/g) ?? []), ...(ui.match(/struct__finishes[\w-]*/g) ?? [])])];
+    if (used.length < 2) bad.push(`재질 관련 클래스가 ${used.length}개뿐이다`);
+    const missing = used.filter((cls) => !new RegExp(`\\.${cls}(?![\\w-])`).test(css));
+    if (missing.length) bad.push(`화면이 쓰는데 스타일시트에 없는 클래스: ${missing.join(", ")}`);
+
+    if (bad.length) throw new Error(bad.join(" / "));
+    out(`structureCard 가 배정을 받아 재질 줄을 그리고, 이름 ${catalog.length}개가 코드에 안 박혀 있다`);
+    out(`클래스 대조: ${used.join(" · ")} 가 전부 app.css 에 있다`);
+    out("S17_G12_OK");
   },
 };
 

@@ -295,7 +295,17 @@ const gates = {
     const stub = await stubOllama({ chatDelayMs: 8000, reply: JSON.stringify({ ids: [] }) });
     const bad = [];
     try {
-      await withServer(4295, { OLLAMA_HOST: `127.0.0.1:${stub.port}`, STRUCTURE_TIMEOUT_MS: "700" }, async (get) => {
+      /*
+       * **두 타임아웃을 함께 낮춘다.** 이 게이트가 무는 것은 "느린 모델이 펼치기를 막지 않는다"
+       * 인데, 17단계에서 `/api/expand` 가 LLM 을 **둘** 부르기 시작했다(구조 선택 · 재질 배정).
+       * 둘을 나란히 부르므로 응답은 **둘 중 느린 쪽**에 묶인다 — 구조 쪽만 낮추면 재질 쪽
+       * 기본값(20초)이 남아 이 게이트가 8초를 기다렸다(실측, 그래서 실패했다).
+       *
+       * **게이트를 푼 것이 아니라 대상이 둘이 된 것에 맞췄다.** 여전히 요청 전체가 4초 안에
+       * 끝나는지를 본다 — 강도는 그대로다. 하나만 낮춰서 통과시키는 쪽이 오히려 느슨해진다.
+       */
+      const slow = { OLLAMA_HOST: `127.0.0.1:${stub.port}`, STRUCTURE_TIMEOUT_MS: "700", FINISH_TIMEOUT_MS: "700" };
+      await withServer(4295, slow, async (get) => {
         const started = Date.now();
         const res = await ask(get, "느린 모델");
         const took = Date.now() - started;

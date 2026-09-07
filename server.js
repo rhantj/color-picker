@@ -26,6 +26,8 @@ import {
 import { ratioFor } from "./public/ratio.js";
 import { expandAll, loadStructures } from "./src/expand.js";
 import { PICK_COUNT, selectStructures } from "./src/structure.js";
+import { selectFinishes } from "./src/finish.js";
+import { loadFinishes } from "./src/material.js";
 import { loadSeeds, seedLabel } from "./src/seeds.js";
 import { FORMATS } from "./src/export.js";
 
@@ -404,9 +406,41 @@ async function handleExpand(res, params) {
     colorsDark: darkById.get(st.id) ?? st.colors,
   }));
 
-  // 질의가 있을 때만 LLM 이 고른다. 없으면 selectStructures 가 부르지 않고 카탈로그 순서로 돌려준다.
+  // 질의가 있을 때만 LLM 이 고른다. 없으면 두 함수 모두 부르지 않고 기본값으로 돌려준다.
   const query = params.get("q") ?? "";
-  const picked = await selectStructures(query, structureCatalog, PICK_COUNT);
+
+  // **역할 이름은 파생 결과에서 모은다.** 손으로 적으면 구조가 늘 때 조용히 빠진다.
+  // 두 모드의 역할 이름이 같다는 것은 16단계에서 전수로 확인했다(드리프트 0건).
+  const roles = [...new Set(structures.flatMap((st) => st.colors.map((c) => c.role)))];
+
+  /*
+   * **둘을 나란히 부른다.** 구조 선택과 재질 배정은 서로의 결과를 안 쓴다 — 순서대로 부르면
+   * 지연이 **합**이 되어 펼치기가 두 배로 느려진다. S17-G10 이 직렬화를 막는다.
+   *
+   * 진짜 Ollama 는 모델 하나를 두 요청이 나눠 쓰므로 내부적으로 줄을 설 수 있다. 그러면 이
+   * 병렬이 벽시계 이득을 못 낸다 — 우리가 통제하는 것은 **우리 코드가 불필요하게 기다리지
+   * 않는다**는 것까지다.
+   *
+   * **한쪽 실패가 다른 쪽을 넘어뜨리지 않게 재질 쪽에 그물을 친다.**
+   *
+   * 처음엔 주석에 "둘 다 던지지 않으므로 안전하다" 고 적어 뒀는데 **거짓이었다**(리뷰 지적).
+   * `selectFinishes` 는 모델·네트워크 실패로는 안 던지지만 `roles` 가 잘못되면 던진다 —
+   * 그건 호출부 잘못이라 그렇게 설계했고, 여기가 그 호출부다. 그것이 `Promise.all` 안에서
+   * 터지면 **구조·파생까지 함께 500** 이 된다. 재질 하나 때문에 펼치기 전체를 잃는 것은
+   * 균형이 안 맞는다.
+   *
+   * 삼키지는 않는다 — 사유를 `finishes.error` 로 실어 화면에 보이게 한다. 조용한 성공보다
+   * 시끄러운 폴백이 낫다.
+   */
+  const [picked, finishes] = await Promise.all([
+    selectStructures(query, structureCatalog, PICK_COUNT),
+    selectFinishes(query, roles).catch((err) => ({
+      assignments: {},
+      from: "fallback",
+      matched: 0,
+      error: `재질 배정을 준비하지 못했다 — ${err.message}`,
+    })),
+  ]);
 
   sendJson(res, 200, {
     seed: {
@@ -427,6 +461,25 @@ async function handleExpand(res, params) {
       // /api/status·재작성과 같은 경계. 실패 사유에 OLLAMA_HOST 나 스폰 상세가 들어가므로
       // 루프백 밖에 바인딩했다면 원문을 내보내지 않는다.
       error: picked.error ? (LOOPBACK_ONLY ? picked.error : "구조 선택을 쓸 수 없습니다") : null,
+    },
+    /*
+     * **재질 배정. 이름만 보낸다 — 수치는 안 보낸다.**
+     *
+     * base·metallic·roughness·emission 까지 실으면 두 모드 × 8구조 × 3~4색이라 응답이
+     * 3.8KB → 12KB 가 되는데, 화면이 그리는 것은 재질 이름뿐이다. 안 쓰는 것을 보내지 않는다
+     * (사용자 결정). 수치가 필요해지면 그때 별도로 붙인다. S17-G9 가 그 경계를 검사한다.
+     */
+    finishes: {
+      assignments: finishes.assignments,
+      // **id→이름 표를 함께 보낸다.** 화면이 한글 이름을 박으면 data/finishes.json 을 고쳐도
+      // 안 따라오고, 그 어긋남은 아무도 안 알려 준다. 원리·detail 은 프롬프트용이라 안 보낸다.
+      names: Object.fromEntries(loadFinishes().map((f) => [f.id, f.name])),
+      from: finishes.from,
+      matched: finishes.matched ?? 0,
+      model: finishes.model ?? null,
+      elapsedMs: finishes.elapsedMs ?? null,
+      // /api/status·재작성·구조 선택과 같은 경계. 루프백 밖에 바인딩했다면 원문을 안 내보낸다.
+      error: finishes.error ? (LOOPBACK_ONLY ? finishes.error : "재질 배정을 쓸 수 없습니다") : null,
     },
   });
 }

@@ -217,7 +217,17 @@ export function structureColors(structure, mode = "light") {
   return (mode === "dark" ? structure.colorsDark : null) ?? structure.colors;
 }
 
-export function structureCard(structure, mode = "light") {
+/**
+ * 파생 구조 카드.
+ *
+ * @param {object} structure 서버가 준 구조 하나
+ * @param {"light"|"dark"} mode 어두운 모드로 볼지 (15단계)
+ * @param {{assignments: Record<string,string>, names: Record<string,string>} | null} finishes
+ *   역할별 재질 배정과 재질 id→이름 표. **이름을 코드에 박지 않는다** — `data/finishes.json`
+ *   을 고쳐도 화면이 안 따라오면 그 어긋남을 아무도 안 알려 준다. 없으면 재질 줄을 안 그린다
+ *   (17-B 이전 응답을 받아도 화면이 깨지지 않게).
+ */
+export function structureCard(structure, mode = "light", finishes = null) {
   const card = el("article", "struct");
 
   const head = el("div", "struct__head");
@@ -237,7 +247,23 @@ export function structureCard(structure, mode = "light") {
     onInput: (next) => view.set(next),
   });
 
-  card.append(head, el("p", "struct__principle", structure.principle), view.node, control.node);
+  card.append(head, el("p", "struct__principle", structure.principle), view.node);
+
+  // 재질 줄. 역할마다 어떤 재질이 배정됐는지만 적는다 — 수치는 이 단계에 없다(사용자 결정).
+  if (finishes?.assignments) {
+    const line = el("div", "struct__finishes");
+    for (const c of colors) {
+      const id = finishes.assignments[c.role];
+      if (!id) continue;
+      const item = el("span", "struct__finish");
+      item.append(el("b", "struct__finish-role", c.role), document.createTextNode(" "));
+      item.append(el("span", "struct__finish-name", finishes.names?.[id] ?? id));
+      line.append(item);
+    }
+    if (line.childElementCount) card.append(line);
+  }
+
+  card.append(control.node);
   return card;
 }
 
