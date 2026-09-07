@@ -5,7 +5,7 @@
 // **이 파일은 구현보다 먼저 쓰였다.** 여덟 게이트가 전부 실패하는 것을 확인한 뒤에
 // src/store.js 와 server.js 를 고쳤다. 통과부터 하는 게이트는 무엇을 지키는지 알 수 없다.
 //
-// 18-A 는 서버·저장소까지다. 홈의 저장 버튼과 `/saved` 화면 표시는 18-B 다.
+// 18-A 가 서버·저장소(G1~G8), 18-B 가 홈의 저장 버튼과 `/saved` 화면 표시(G9~G12)다.
 //
 // **HTTP 로 검사한다.** 저장소 함수를 직접 부르면 `isTrustedWrite`·입력 검증·직렬화를 건너뛴다 —
 // 그것들이 이 단계에서 실제로 지켜야 하는 것의 절반이다. check-stage4·8·10 이 같은 이유로
@@ -18,6 +18,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expandSeed, loadStructures } from "../src/expand.js";
+import { savedFields } from "../public/ui.js";
+import { FORMATS } from "../src/export.js";
 
 const out = (line = "") => process.stdout.write(Buffer.from(line + "\n", "utf8"));
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -89,6 +91,10 @@ const expectColors = (seedId, structureId, mode) => {
   const st = expandSeed(seed, structureId, loadStructures(), mode === "dark" ? { mode } : undefined);
   return st ? st.colors.map((c) => `${c.role}:${c.hex}`).join(",") : null;
 };
+
+/** 주석을 걷어낸 소스. check-stage13·15·17 과 같은 예외(문자열 안 URL 스킴)를 같은 이유로 둔다. */
+const stripComments = (src) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
 
 const shapeColors = (colors) => (colors ?? []).map((c) => `${c.role}:${c.hex}`).join(",");
 
@@ -512,6 +518,328 @@ const GATES = {
     if (bad.length) throw new Error(bad.slice(0, 5).join(" / "));
     out("2색 경로가 그대로다 — 숫자 70 → [70,30] · 범위 밖 6가지 거부 · 배열도 길이가 맞으면 받는다");
     out("S18_G8_OK");
+  },
+
+  /*
+   * **홈이 저장 버튼을 만들고, 색을 안 보낸다.**
+   *
+   * `S18-G1` 이 서버 쪽에서 "색을 받아도 무시한다" 를 보고, 이 게이트가 화면 쪽에서
+   * "애초에 안 보낸다" 를 본다. 둘 중 하나만 있으면 반쪽이다 — 서버가 무시해도 화면이 색을
+   * 실어 보내면 다음 사람이 그것을 쓰려 들고, 화면이 안 보내도 서버가 받으면 다른 클라이언트가 넣는다.
+   *
+   * **정적 검사다.** 회귀 스모크지 동작 증명이 아니다. S13-G7·S15-G13·S17-G12 가 같은 이유로
+   * 같은 말을 한다. 실제 동작은 브라우저에서 따로 본다.
+   */
+  "S18-G9": async () => {
+    const bad = [];
+    const ui = stripComments(read("public/ui.js"));
+    const app = stripComments(read("public/app.js"));
+    const css = read("public/app.css");
+
+    const between = (src, a, b, what) => {
+      const i = src.indexOf(a);
+      if (i < 0) throw new Error(`${what} 를 못 찾았다 — 이 검사가 공허하다`);
+      const j = src.indexOf(b, i + a.length);
+      return src.slice(i, j > 0 ? j : undefined);
+    };
+
+    // 카드가 저장 버튼을 만들고, 지금 맞춘 비율을 넘긴다.
+    const card = between(ui, "export function structureCard", "export function paletteCard", "structureCard");
+    if (!/struct__save/.test(card)) bad.push("카드에 저장 버튼(.struct__save)이 없다");
+    if (!/onSave/.test(card)) bad.push("카드가 onSave 를 안 받는다");
+    if (!/control\.shares\(\)/.test(card)) bad.push("저장이 지금 맞춘 비율(control.shares())을 안 읽는다");
+
+    // 저장 요청이 무엇을 싣는가.
+    const sec = between(app, "function expansionSection", "function renderStatus", "expansionSection");
+    const call = between(sec, "/api/saved/derived", "});", "저장 요청");
+    for (const need of ["seedId", "structureId", "mode", "shares"]) {
+      if (!new RegExp(`\\b${need}\\b`).test(call)) bad.push(`저장 요청에 ${need} 가 없다`);
+    }
+    // **색을 안 보낸다.** 이 검사가 이 게이트의 요점이다.
+    for (const forbidden of ["colors", "hex", "colorsDark", "name:"]) {
+      if (new RegExp(`\\b${forbidden.replace(":", "")}\\s*:`).test(call)) {
+        bad.push(`저장 요청에 ${forbidden} 를 싣는다 — 화면이 색을 보내면 안 된다`);
+      }
+    }
+
+    // JS 가 쓰는 클래스가 스타일시트에 있다. S15-G13·S17-G12 가 같은 대조를 한다.
+    const used = [...new Set(ui.match(/struct__save[\w-]*/g) ?? [])];
+    if (used.length === 0) bad.push("저장 버튼 클래스가 없다");
+    const missing = used.filter((cls) => !new RegExp(`\\.${cls}(?![\\w-])`).test(css));
+    if (missing.length) bad.push(`화면이 쓰는데 스타일시트에 없는 클래스: ${missing.join(", ")}`);
+
+    if (bad.length) throw new Error(bad.join(" / "));
+    out(`카드가 저장 버튼을 만들고 지금 맞춘 비율을 넘긴다 · 요청에 씨앗·구조·모드·비율만 실린다`);
+    out(`클래스 대조: ${used.join(" · ")} 가 전부 app.css 에 있다`);
+    out("S18_G9_OK");
+  },
+
+  /*
+   * **저장 화면이 두 종류를 다르게 그리고, 어느 쪽에서도 `undefined` 가 안 샌다.**
+   *
+   * 지금 `/saved` 는 코퍼스 항목만 있다고 가정한다 — `entry.type`·`hueRelation`·`summary` 를
+   * 그냥 읽는다. 파생 항목이 섞이면 화면에 **"undefined형"** 이 뜬다.
+   *
+   * **정적 검사로는 이것을 못 본다.** 그래서 무엇을 보여줄지 정하는 부분을 `savedFields` 라는
+   * 순수 함수로 빼고 여기서 직접 부른다 — 17단계에서 `structureColors` 를 뺀 것과 같은 이유다
+   * (그때 정적 검사가 `dark`/`light` 를 뒤바꾼 변형을 못 잡았다).
+   *
+   * **필드가 통째로 빠진 항목도 넣는다.** 옛 저장이나 손상된 파일이 그런 모양일 수 있고,
+   * 그때 화면이 "undefined" 를 보여주는 것이 이 게이트가 막는 것이다.
+   */
+  "S18-G10": async () => {
+    const bad = [];
+
+    const corpus = {
+      kind: undefined, // 옛 항목에는 kind 가 없다. 그것도 코퍼스로 읽혀야 한다.
+      name: "자홍 × 진파랑",
+      type: "D",
+      hueRelation: "보색",
+      toneRelation: "톤 대비",
+      summary: "요약 문장",
+      colors: [{ hex: "#b73f74", ratio: 70 }, { hex: "#005b8d", ratio: 30 }],
+    };
+    const derived = {
+      kind: "derived",
+      name: "보색대비",
+      principle: "원리 문장",
+      source: "1절 기법표",
+      seedId: SEED,
+      seedLabel: "자홍 × 진파랑",
+      structureId: STRUCT,
+      mode: "dark",
+      colors: [{ role: "바탕", hex: "#1f282e", ratio: 40 }],
+    };
+
+    const shown = (fields) => [fields.title, fields.badge, fields.text, ...fields.coords.flat()].join(" | ");
+
+    const a = savedFields(corpus);
+    const b = savedFields(derived);
+
+    if (a.kind !== "palette") bad.push(`코퍼스 항목의 kind 가 ${a.kind}`);
+    if (b.kind !== "derived") bad.push(`파생 항목의 kind 가 ${b.kind}`);
+    // 둘이 실제로 달라야 한다. 같으면 갈랐다고 말만 하는 것이다.
+    if (shown(a) === shown(b)) bad.push("두 종류가 똑같이 그려진다");
+    // 코퍼스 전용 낱말이 파생 쪽에 나오면 안 된다(그 반대도).
+    if (/형|색상각/.test(shown(b))) bad.push(`파생에 코퍼스 전용 표기가 나온다 — ${shown(b)}`);
+    if (!/자홍/.test(shown(b))) bad.push("파생에 씨앗 이름이 안 나온다");
+    if (!/어두운/.test(shown(b))) bad.push("파생에 모드가 안 나온다");
+    if (!/보색/.test(shown(a))) bad.push("코퍼스에 색상각이 안 나온다");
+
+    // **필드가 빠져도 undefined 가 안 샌다.**
+    const holes = [
+      ["빈 객체", {}],
+      ["kind 만 있는 파생", { kind: "derived" }],
+      ["null", null],
+      ["colors 만", { colors: [] }],
+      ["파생인데 이름 없음", { kind: "derived", seedId: SEED, mode: "light" }],
+      ["코퍼스인데 유형 없음", { name: "x" }],
+    ];
+    for (const [label, entry] of holes) {
+      let fields;
+      try {
+        fields = savedFields(entry);
+      } catch (err) {
+        bad.push(`${label} 에서 던졌다: ${err.message}`);
+        continue;
+      }
+      const text = shown(fields);
+      if (/undefined|null|\[object/.test(text)) bad.push(`${label}: 화면에 "${text}" 가 나간다`);
+      if (!fields.title) bad.push(`${label}: 제목이 비었다`);
+      /*
+       * **색도 정규화돼야 한다.** 표시 문자열만 막으면 화면이 `entry.colors` 를 직접 읽다가
+       * 던지고, 그 예외가 목록 전체를 비운다 — 리뷰가 실제로 그것을 찾았다.
+       * 여기서 무는 것은 "언제나 배열" 과 "그릴 수 있는 것만 남는다" 둘이다.
+       */
+      if (!Array.isArray(fields.colors)) bad.push(`${label}: colors 가 배열이 아니다`);
+      else {
+        for (const c of fields.colors) {
+          if (!/^#[0-9a-f]{6}$/i.test(c.hex ?? "")) bad.push(`${label}: 못 그릴 헥스 ${c.hex} 가 남았다`);
+          if (!Number.isInteger(c.ratio)) bad.push(`${label}: 못 그릴 비율 ${c.ratio} 가 남았다`);
+        }
+      }
+      for (const [key, value] of fields.coords) {
+        if (!key || !value) bad.push(`${label}: 좌표에 빈 값 (${key}=${value})`);
+      }
+    }
+
+    /*
+     * **양성 대조 — 걸러 낸다는 것이 실제로 일어나는가.** 위 검사는 "남은 것이 멀쩡하다" 만
+     * 보므로 아무것도 안 걸러도 통과할 수 있다. 못 그릴 색을 섞어 넣고 실제로 빠지는지 본다.
+     */
+    const dirty = savedFields({
+      kind: "derived",
+      colors: [
+        { hex: "#ff0000", ratio: 50, role: "바탕" },
+        { hex: "zzz", ratio: 50 }, //         헥스가 아니다
+        { hex: "#00ff00", ratio: 12.5 }, //   비율이 정수가 아니다
+        null, //                              항목 자체가 없다
+      ],
+    });
+    if (dirty.colors.length !== 1) bad.push(`못 그릴 색을 안 걸렀다 — ${dirty.colors.length}개 남음`);
+    // 그리고 멀쩡한 것은 안 걸러야 한다. 아니면 "전부 버린다" 로 위 검사가 공허해진다.
+    const clean = savedFields({ colors: [{ hex: "#ff0000", ratio: 60 }, { hex: "#0000ff", ratio: 40 }] });
+    if (clean.colors.length !== 2) bad.push(`멀쩡한 색을 걸렀다 — ${clean.colors.length}개 남음`);
+
+    // 자체 대조 — 검사가 살아 있는가. 일부러 undefined 를 넣은 문자열은 잡혀야 한다.
+    if (!/undefined/.test(String(`${undefined}형`))) bad.push("판정기 자체 대조 실패");
+
+    if (bad.length) throw new Error(bad.slice(0, 5).join(" / "));
+    out(`코퍼스·파생이 다르게 그려지고, 필드가 빠진 ${holes.length}가지에서도 undefined 가 안 샌다`);
+    out(`  코퍼스: ${shown(a)}`);
+    out(`  파생:   ${shown(b)}`);
+    out("S18_G10_OK");
+  },
+
+  /*
+   * **`/saved` 가 그 순수 함수를 실제로 쓰고, 다색 항목을 다색 슬라이더로 그린다.**
+   *
+   * `S18-G10` 이 함수가 맞게 도는지 보고, 이 게이트가 그것이 화면에 닿는지 본다. 둘 중 하나만
+   * 있으면 함수는 맞는데 화면이 안 쓰는 상태가 조용히 생긴다 — 17단계에서 리뷰가 정확히 그
+   * 부류를 지적했다(`structureColors` 를 부르기만 하고 반환을 버리는 변형).
+   *
+   * 그리고 비율 저장이 **배열로** 나가야 한다. 지금 `/saved` 는 `ratio: next[0]` 로 숫자 하나를
+   * 보내는데, 3~4색에서는 그것이 첫 색의 지분일 뿐이라 나머지를 잃는다.
+   */
+  "S18-G11": async () => {
+    const bad = [];
+    const savedJs = stripComments(read("public/saved.js"));
+    const ui = stripComments(read("public/ui.js"));
+
+    if (!/savedFields/.test(savedJs)) bad.push("saved.js 가 savedFields 를 안 쓴다");
+    // 코퍼스 전용 필드를 화면이 직접 읽으면 파생에서 undefined 가 샌다.
+    for (const direct of ["entry.type", "entry.hueRelation", "entry.toneRelation", "entry.summary"]) {
+      if (savedJs.includes(direct)) bad.push(`saved.js 가 ${direct} 를 직접 읽는다 — savedFields 를 거쳐야 한다`);
+    }
+    // 다색 슬라이더.
+    if (!/shareControl/.test(savedJs)) bad.push("saved.js 가 다색 슬라이더(shareControl)를 안 쓴다");
+    // 비율을 배열로 보낸다.
+    if (/ratio:\s*next\[0\]/.test(savedJs)) bad.push("비율을 숫자 하나로 보낸다 — 다색에서 나머지를 잃는다");
+
+    // shareControl 이 저장 시점을 갖는가. 없으면 슬라이더를 놓아도 저장이 안 된다.
+    const share = ui.slice(ui.indexOf("export function shareControl"), ui.indexOf("export function savedFields"));
+    if (!/onCommit/.test(share)) bad.push("shareControl 에 저장 시점(onCommit)이 없다");
+    if (!/addEventListener\("change"/.test(share)) bad.push("shareControl 이 슬라이더를 놓는 순간을 안 잡는다");
+    /*
+     * **실패하면 슬라이더도 되돌린다.** 스와치만 되돌리면 화면에 두 비율이 동시에 보이고,
+     * 다음 조작이 되돌아가지 않은 값을 기준으로 계산된다. `ratioControl` 이 2색에서 `set` 을
+     * 주는 것과 같은 이유인데 `shareControl` 에는 없었다(리뷰 지적).
+     */
+    if (!/set:\s*\(next\)/.test(share)) bad.push("shareControl 이 되돌리기(set)를 안 준다");
+    if (!/if \(!ok\) control\.set/.test(savedJs)) bad.push("다색 경로가 실패해도 슬라이더를 안 되돌린다");
+
+    // 색이 없는 항목에서 화면이 던지지 않는가. entry.colors 를 직접 읽으면 목록 전체가 사라진다.
+    if (/entry\.colors/.test(savedJs)) bad.push("saved.js 가 entry.colors 를 직접 읽는다 — savedFields 를 거쳐야 한다");
+    // 한 항목이 던져도 나머지가 그려지는가.
+    if (!/try \{[\s\S]{0,120}savedCard/.test(savedJs)) bad.push("항목 하나가 던지면 목록 전체가 사라진다");
+    // 커밋 경합 가드. 다색은 슬라이더가 여럿이라 응답이 순서대로 안 온다.
+    if (!/ticket/.test(savedJs)) bad.push("비율 저장에 경합 가드가 없다");
+
+    if (bad.length) throw new Error(bad.join(" / "));
+    out("saved.js 가 savedFields 를 거치고 코퍼스 전용 필드를 직접 안 읽는다");
+    out("다색 슬라이더로 그리고 비율을 배열로 보낸다 · shareControl 에 저장 시점이 있다");
+    out("S18_G11_OK");
+  },
+
+  /*
+   * **목록 API 가 화면이 그릴 것을 전부 준다.** `savedFields` 가 아무리 잘 갈라도 서버가
+   * 필드를 안 주면 화면이 빈다.
+   *
+   * 실제로 둘을 저장하고 목록을 받아, **화면이 읽는 필드가 전부 있는지** 본다.
+   */
+  "S18-G12": async () => {
+    const bad = [];
+    await withServer(4969, async (api) => {
+      const corpusId = palettes()[0].id;
+      await api.post("/api/saved", { paletteId: corpusId });
+      await api.post("/api/saved/derived", { seedId: SEED, structureId: STRUCT, mode: "dark" });
+
+      const list = await saved(api);
+      if (list.length !== 2) throw new Error(`목록이 ${list.length}개 — 이 검사가 공허하다`);
+
+      const derived = list.find((e) => e.kind === "derived");
+      const corpus = list.find((e) => e.kind !== "derived");
+      if (!derived || !corpus) throw new Error("두 종류가 다 안 들어왔다");
+
+      for (const key of ["name", "principle", "source", "seedId", "seedLabel", "structureId", "mode", "colors", "defaultRatio"]) {
+        if (derived[key] === undefined) bad.push(`파생 항목에 ${key} 가 없다`);
+      }
+      for (const key of ["name", "type", "hueRelation", "toneRelation", "summary", "colors", "defaultRatio"]) {
+        if (corpus[key] === undefined) bad.push(`코퍼스 항목에 ${key} 가 없다`);
+      }
+
+      // 화면이 그리면 undefined 가 나오는가 — 실제 항목으로 순수 함수를 돌려 본다.
+      for (const entry of list) {
+        const f = savedFields(entry);
+        const text = [f.title, f.badge, f.text, ...f.coords.flat()].join(" | ");
+        if (/undefined|\[object/.test(text)) bad.push(`실제 저장 항목에서 "${text}" 가 나온다`);
+      }
+
+      // 파생 색마다 역할 이름이 있어야 슬라이더 라벨이 선다.
+      for (const c of derived.colors) if (!c.role) bad.push("파생 색에 역할 이름이 없다");
+    });
+
+    if (bad.length) throw new Error(bad.slice(0, 5).join(" / "));
+    out("목록이 두 종류에 필요한 필드를 전부 주고, 실제 항목으로 그려도 undefined 가 안 나온다");
+    out("S18_G12_OK");
+  },
+
+  /*
+   * **내보내기가 파생을 조용히 망가뜨리지 않는다.**
+   *
+   * 내보내기(`src/export.js`)는 코퍼스 조합 전제로 쓰였다 — `paletteId` 로 변수 이름을 만들고,
+   * `rolesOf` 가 앞 두 색만 보고, 주석에 `type`·`색상각` 을 찍는다. 파생을 그대로 넣으면
+   * 실측으로 이렇게 나왔다:
+   *
+   *     --undefined-ground        paletteId 가 없어 **파생 항목마다 이름이 같아진다**
+   *     --undefined-undefined     3·4번째 색의 역할이 없다
+   *     보색대비 · undefined형     코퍼스 전용 필드가 주석에 그대로
+   *
+   * 18-B 가 저장 버튼을 만들면서 이 경로가 **버튼 한 번으로 닿게 됐다** — 전에는 `curl` 이
+   * 필요했다. 그래서 **빼고, 뺐다고 말한다.** 파생을 제대로 내보내는 것은 별도 작업(A2)이다.
+   *
+   * 양성 대조가 절반이다 — "안 망가진다" 는 **아무것도 안 내보내도** 통과한다.
+   */
+  "S18-G13": async () => {
+    const bad = [];
+    const derived = {
+      id: "save-d", kind: "derived", name: "보색대비", seedId: SEED, structureId: STRUCT, mode: "dark",
+      colors: [{ role: "바탕", hex: "#1f282e", ratio: 40 }, { role: "본문", hex: "#90c3df", ratio: 30 }, { role: "강조", hex: "#8d3200", ratio: 30 }],
+    };
+    const corpus = {
+      id: "save-c", paletteId: palettes()[0].id, name: palettes()[0].name, type: palettes()[0].type,
+      hueRelation: palettes()[0].hueRelation, toneRelation: palettes()[0].toneRelation, summary: "요약",
+      colors: palettes()[0].colors.map((c, i) => ({ name: c.name, hex: c.hex, ratio: i === 0 ? 70 : 30 })),
+    };
+
+    for (const [format, spec] of Object.entries(FORMATS)) {
+      const mixed = spec.build([derived, corpus]);
+      if (/undefined/.test(mixed)) bad.push(`${format}: 출력에 undefined 가 있다`);
+      // 파생의 헥스가 새어 나가면 이름 없는 변수로 나간 것이다.
+      for (const c of derived.colors) {
+        if (mixed.includes(c.hex)) bad.push(`${format}: 파생 색 ${c.hex} 가 내보내기에 실렸다`);
+      }
+      // 뺐다는 사실을 말하는가. 조용히 빼면 사용자는 다 나왔다고 믿는다.
+      if (!/파생|skippedDerived/.test(mixed)) bad.push(`${format}: 뺐다는 사실을 안 말한다`);
+      // 양성 대조 — 코퍼스 조합은 실제로 나온다.
+      if (!mixed.includes(corpus.colors[0].hex)) bad.push(`${format}: 코퍼스 색이 안 나온다 — 전부 빠졌다`);
+
+      // 파생만 있는 목록에서도 던지지 않는다.
+      const onlyDerived = spec.build([derived]);
+      if (/undefined/.test(onlyDerived)) bad.push(`${format}: 파생만 있을 때 undefined 가 있다`);
+      // 빈 목록도 그대로 돈다(회귀).
+      spec.build([]);
+    }
+
+    // JSON 은 숫자로도 말한다.
+    const json = JSON.parse(FORMATS.json.build([derived, corpus]));
+    if (json.count !== 1) bad.push(`JSON count 가 ${json.count} (코퍼스 1개여야 한다)`);
+    if (json.skippedDerived !== 1) bad.push(`JSON skippedDerived 가 ${json.skippedDerived}`);
+
+    if (bad.length) throw new Error(bad.slice(0, 5).join(" / "));
+    out(`CSS·JSON 둘 다 파생을 빼고 그 사실을 말한다 — 출력에 undefined 0건, 파생 색 0건`);
+    out(`양성 대조: 코퍼스 조합은 그대로 나온다 · JSON count 1 · skippedDerived 1`);
+    out("S18_G13_OK");
   },
 };
 

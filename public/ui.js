@@ -135,7 +135,7 @@ export function ratioControl({ colors, value, defaultValue, onInput, onCommit })
  *
  * 합이 100 이라는 것과 최소 지분은 redistribute() 가 지킨다(S13-G3). 여기서는 그리기만 한다.
  */
-export function shareControl({ colors, value, onInput }) {
+export function shareControl({ colors, value, onInput, onCommit }) {
   const box = el("div", "shares");
   const bounds = shareBounds(colors.length);
   const start = value ?? equalShares(colors.length);
@@ -168,6 +168,9 @@ export function shareControl({ colors, value, onInput }) {
       paint();
       onInput?.(shares.slice());
     });
+    // 놓는 순간에만 저장한다. `input` 마다 저장하면 슬라이더를 끄는 동안 요청이 수십 번 나간다.
+    // `ratioControl` 이 2색에서 같은 이유로 같은 자리를 쓴다.
+    slider.addEventListener("change", () => onCommit?.(shares.slice()));
 
     row.append(swatch, label, slider, readout);
     return { row, slider, readout, color };
@@ -190,11 +193,84 @@ export function shareControl({ colors, value, onInput }) {
     shares = equalShares(colors.length);
     paint();
     onInput?.(shares.slice());
+    onCommit?.(shares.slice());
   });
 
   paint();
   box.append(...rows.map((r) => r.row), reset);
-  return { node: box, shares: () => shares.slice() };
+  /*
+   * `set` 은 **실패 롤백을 위한 것**이다. 저장이 실패했을 때 스와치만 되돌리고 슬라이더를 그대로
+   * 두면 화면에 서로 다른 두 비율이 동시에 보이고, 사용자가 다시 만질 때 `redistribute` 가
+   * **되돌아가지 않은 값**을 기준으로 계산한다. `ratioControl` 이 2색에서 같은 이유로 같은 것을 준다.
+   */
+  return {
+    node: box,
+    shares: () => shares.slice(),
+    set: (next) => {
+      shares = next.slice();
+      paint();
+    },
+  };
+}
+
+/**
+ * 저장된 항목 하나를 **무엇으로 그릴지** 정한다. DOM 을 안 만지는 순수 함수다.
+ *
+ * **저장에는 두 종류가 있다.** 코퍼스 조합(`type`·`색상각`·`요약`)과 파생 팔레트
+ * (`구조 이름`·`원리`·`씨앗`·`모드`). 화면이 코퍼스 필드를 그냥 읽으면 파생 항목에서
+ * **"undefined형"** 이 뜬다.
+ *
+ * **함수로 뺀 이유는 게이트다.** `/saved` 는 브라우저 화면이라 정적 검사밖에 못 하는데,
+ * 정적 검사는 "무엇이 화면에 나가는가" 를 못 본다. 순수 함수면 게이트가 그냥 불러서 대조한다 —
+ * 17단계에서 `structureColors` 를 뺀 것과 같은 이유이고, 그때 정적 검사가 `dark`/`light` 를
+ * 뒤바꾼 변형을 못 잡았다. `S18-G10` 이 필드가 빠진 항목까지 넣어 본다.
+ *
+ * **빈 자리를 문자열로 채운다.** 옛 저장이나 손상된 파일은 필드가 없을 수 있고, 그때
+ * `undefined` 가 화면에 나가는 것이 이 함수가 막는 것이다.
+ *
+ * **색도 함께 정규화한다.** 표시 문자열만 막아 두면 화면이 `entry.colors` 를 직접 읽다가
+ * 던진다 — `colors` 가 없는 항목 하나가 `/saved` 목록을 **통째로** 비웠다(리뷰 지적, 재현 확인).
+ * 막을 것은 "undefined 가 화면에 나가는 것" 만이 아니라 **"한 항목이 나머지를 죽이는 것"** 이다.
+ *
+ * @returns {{kind:"palette"|"derived", title:string, badge:string, text:string,
+ *            coords:[string,string][], colors:{hex:string, ratio:number, role?:string}[]}}
+ */
+export function savedFields(entry) {
+  const e = entry ?? {};
+  const or = (value, fallback) => (typeof value === "string" && value.trim() ? value : fallback);
+
+  // 그릴 수 있는 색만 남긴다. 헥스가 없거나 비율이 정수가 아니면 스와치도 슬라이더도 못 만든다.
+  const colors = (Array.isArray(e.colors) ? e.colors : []).filter(
+    (c) => c && typeof c.hex === "string" && /^#[0-9a-fA-F]{6}$/.test(c.hex) && Number.isInteger(c.ratio),
+  );
+
+  if (e.kind === "derived") {
+    return {
+      kind: "derived",
+      title: or(e.name, "이름 없는 구조"),
+      // 모드가 곧 이 항목의 정체다 — 같은 구조라도 밝은 것과 어두운 것은 색이 다르다.
+      badge: e.mode === "dark" ? "어두운 배경" : "밝은 배경",
+      text: or(e.principle, ""),
+      coords: [
+        ["씨앗", or(e.seedLabel, or(e.seedId, "모름"))],
+        ["출처", or(e.source, "모름")],
+      ],
+      colors,
+    };
+  }
+
+  // kind 가 없는 옛 항목은 코퍼스 조합이다. 파생은 이 단계부터 늘 kind 를 붙인다.
+  return {
+    kind: "palette",
+    title: or(e.name, "이름 없는 조합"),
+    badge: e.type ? `${e.type}형` : "유형 모름",
+    text: or(e.summary, ""),
+    coords: [
+      ["색상각", or(e.hueRelation, "모름")],
+      ["톤", or(e.toneRelation, "모름")],
+    ],
+    colors,
+  };
 }
 
 /**
@@ -227,7 +303,7 @@ export function structureColors(structure, mode = "light") {
  *   을 고쳐도 화면이 안 따라오면 그 어긋남을 아무도 안 알려 준다. 없으면 재질 줄을 안 그린다
  *   (17-B 이전 응답을 받아도 화면이 깨지지 않게).
  */
-export function structureCard(structure, mode = "light", finishes = null) {
+export function structureCard(structure, mode = "light", finishes = null, onSave = null) {
   const card = el("article", "struct");
 
   const head = el("div", "struct__head");
@@ -264,6 +340,36 @@ export function structureCard(structure, mode = "light", finishes = null) {
   }
 
   card.append(control.node);
+
+  /*
+   * 저장 버튼. **색을 안 보낸다** — 호출부는 씨앗·구조·모드만 알면 되고 서버가 색을 다시
+   * 계산한다(`src/store.js` 규칙 4, `S18-G1`). 여기서 넘기는 것은 **지금 맞춘 비율**뿐이다.
+   *
+   * 비율을 안 넘기면 슬라이더로 맞춘 것이 저장에 안 실린다 — 이 사이트가 "같은 두 헥스도
+   * 비율이 바뀌면 다른 색" 이라고 말해 온 것을 저장이 배신하게 된다.
+   */
+  if (onSave) {
+    const box = el("div", "struct__save");
+    const button = el("button", "struct__save-button", "이 배색 저장");
+    button.type = "button";
+    const feedback = el("span", "struct__save-feedback");
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      feedback.textContent = "저장 중…";
+      try {
+        await onSave(control.shares());
+        feedback.textContent = "저장됨";
+      } catch (err) {
+        // 실패를 삼키면 사용자는 저장된 줄 안다.
+        feedback.textContent = err.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+    box.append(button, feedback);
+    card.append(box);
+  }
+
   return card;
 }
 

@@ -779,7 +779,7 @@ S17-G12 화면이 재질 이름을 카탈로그에서 받아 그린다 — 코�
     CHECK: node scripts/check-stage17.mjs S17-G12
     EXPECT: S17_G12_OK
 
-## 18단계 — 파생 팔레트 저장 · 18-A (완료)
+## 18단계 — 파생 팔레트 저장 (완료)
 
 13단계가 파생 팔레트를 화면에 그렸지만 **저장은 미뤘다** — `normalizeRatio` 가 2색 전제였기
 때문이다. 그래서 펼쳐서 나온 여덟 장 중 마음에 드는 것을 **남길 방법이 없었다.** 이 단계가 그것을 연다.
@@ -799,7 +799,18 @@ S17-G12 화면이 재질 이름을 카탈로그에서 받아 그린다 — 코�
 **하한은 `public/ratio.js` 와 같은 값을 독립적으로 적는다.** 읽어 오면 그쪽을 낮췄을 때 서버
 검증도 함께 느슨해진다. 이 저장소가 같은 부류로 세 번 뚫렸다.
 
-**18-A 는 서버·저장소까지다.** 홈의 저장 버튼과 `/saved` 화면 표시는 18-B 다.
+**두 번에 나눠 넣었다.** 18-A 가 서버·저장소(G1~G8), 18-B 가 홈의 저장 버튼과 `/saved`
+화면 표시(G9~G12)다.
+
+**`/saved` 는 코퍼스 항목만 있다고 가정하고 있었다.** `entry.type`·`hueRelation`·`summary` 를
+그냥 읽어서, 파생 항목이 섞이면 화면에 **"undefined형"** 이 떴다. 무엇을 보여줄지를
+`savedFields` 라는 **순수 함수**로 빼고 `S18-G10` 이 필드가 빠진 항목까지 넣어 검사한다 —
+정적 검사로는 "무엇이 화면에 나가는가" 를 못 보기 때문이다. 17단계에서 `structureColors` 를
+뺀 것과 같은 이유다.
+
+**비율은 언제나 배열로 보낸다.** 예전 `/saved` 는 `ratio: next[0]` 로 숫자 하나를 보냈는데
+3~4색에서는 첫 색의 지분일 뿐이라 나머지를 잃는다. 그리고 3색 이상은 색마다 슬라이더가 있는
+`shareControl` 로 그린다 — 거기에 저장 시점(`onCommit`)을 새로 붙였다.
 
 S18-G1 화면이 준 색을 서버가 안 믿는다 — 색을 실어 보내도 무시되고 서버 계산과 일치한다
     CHECK: node scripts/check-stage18.mjs S18-G1
@@ -833,7 +844,42 @@ S18-G8 2색 저장 경로가 하나도 안 바뀐다 — 숫자 하나를 받던
     CHECK: node scripts/check-stage18.mjs S18-G8
     EXPECT: S18_G8_OK
 
+S18-G9 홈이 저장 버튼을 만들고 씨앗·구조·모드·비율만 보낸다 — 색을 안 보낸다 (정적 검사)
+    CHECK: node scripts/check-stage18.mjs S18-G9
+    EXPECT: S18_G9_OK
+
+S18-G10 저장 화면이 두 종류를 다르게 그리고, 필드가 빠져도 undefined 가 안 샌다 (순수 함수)
+    CHECK: node scripts/check-stage18.mjs S18-G10
+    EXPECT: S18_G10_OK
+
+S18-G11 `/saved` 가 그 함수를 실제로 쓰고 다색을 다색 슬라이더로 그린다 — 비율을 배열로 보낸다 (정적 검사)
+    CHECK: node scripts/check-stage18.mjs S18-G11
+    EXPECT: S18_G11_OK
+
+S18-G12 목록 API 가 두 종류에 필요한 필드를 전부 주고, 실제 항목으로 그려도 undefined 가 없다
+    CHECK: node scripts/check-stage18.mjs S18-G12
+    EXPECT: S18_G12_OK
+
+S18-G13 내보내기가 파생을 조용히 망가뜨리지 않는다 — 빼고, 뺐다고 말한다 (양성 대조 포함)
+    CHECK: node scripts/check-stage18.mjs S18-G13
+    EXPECT: S18_G13_OK
+
 ### 알려진 한계
+
+- **내보내기(`/api/export`)는 코퍼스 조합만 다룬다.** 파생 팔레트는 형태가 달라
+  (`paletteId` 없음 · 색 3~4개 · `type`·`색상각` 없음) 그대로 내보내면 조용히 망가진다 —
+  실측으로 `--undefined-ground`(파생마다 이름이 같아져 서로 덮어씀) · `--undefined-undefined`
+  (3·4번째 역할이 없음) · `보색대비 · undefined형` 이 나왔다. **18-B 가 저장 버튼을 만들면서
+  이 경로가 버튼 한 번으로 닿게 됐다** — 전에는 `curl` 이 필요했다. 그래서 빼고, 뺐다고 말한다.
+  제대로 내보내는 것은 `docs/com/open-work.md` 의 **A2** 다.
+
+- **`S18-G9`·`S18-G11` 의 정적 부분은 표기만 본다.** 저장 요청 본문을 별도 변수로 조립해
+  호출부 밖에서 `colors` 를 주입하면 `S18-G9` 를 우회한다. 같은 게이트의 다른 검사와
+  `S18-G1`(서버가 색을 무시한다)이 실질 방어이고, 정적 부분은 의도를 코드에 남기는 쪽이다.
+
+- **`savedFields` 는 문자열 길이를 안 자른다.** 저장 시점에 `store.js` 가 자르므로 정상 경로로는
+  긴 값이 안 들어오지만, 손상된 파일에는 있을 수 있다. 그때 레이아웃이 깨진다(XSS 는 아니다 —
+  전부 `textContent` 로 들어간다).
 - **`clip` 은 값을 문자열로 강제 변환한다.** `String(["complementary"]) === "complementary"` 라
   배열 하나짜리가 그대로 통과했다 — `S18-G3` 이 그것으로 이 코드를 뚫었다. 이제 `saveDerived` 가
   `typeof` 를 먼저 본다. **17단계에서 리뷰가 `Object.hasOwn` 의 키 강제 변환으로 같은 부류를

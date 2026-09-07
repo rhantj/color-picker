@@ -1,6 +1,6 @@
 // 추천 받은 조합 화면.
 
-import { api, el, formatWhen, ratioControl, refreshRuntime, swatchView } from "./ui.js";
+import { api, el, formatWhen, ratioControl, refreshRuntime, savedFields, shareControl, swatchView } from "./ui.js";
 
 const list = document.getElementById("list");
 
@@ -16,7 +16,7 @@ const NOTE_MAX = 200;
  * 값이 실제로 바뀐 경우에만 보낸다. 그냥 지나쳐 포커스만 스친 것으로 쓰기를 만들지 않는다.
  * **빈 값은 지우기다** — 홈에서 못 하던 것이 여기서 열린다.
  */
-function noteField(entry) {
+function noteField(entry, title) {
   const wrap = el("div", "card__note-edit");
 
   const input = el("input", "card__note-input");
@@ -24,7 +24,9 @@ function noteField(entry) {
   input.maxLength = NOTE_MAX;
   input.value = entry.note ?? "";
   input.placeholder = "메모 (선택) — 어디에 쓸 색인지";
-  input.setAttribute("aria-label", `${entry.name} 조합의 메모`);
+  // 제목은 savedFields 가 정규화한 것을 쓴다. entry.name 을 직접 읽으면 이름 없는 항목에서
+  // "undefined 조합의 메모" 가 스크린리더에 나간다 — 눈에 안 보여서 더 오래 남는다.
+  input.setAttribute("aria-label", `${title} 조합의 메모`);
 
   const status = el("span", "card__note-status");
 
@@ -73,47 +75,99 @@ function savedCard(entry, onRemoved) {
   const root = el("article", "card");
   const body = el("div", "card__body");
 
+  /*
+   * **저장에는 두 종류가 있다** — 코퍼스 조합과 파생 팔레트. 무엇을 보여줄지는 `savedFields`
+   * 한 곳에서 정한다. 여기서 `entry.type` 같은 코퍼스 전용 필드를 직접 읽으면 파생 항목에서
+   * **"undefined형"** 이 뜬다. `S18-G10` 이 필드가 빠진 항목까지 넣어 그것을 검사한다.
+   */
+  const fields = savedFields(entry);
+
   const head = el("div", "card__head");
-  head.append(el("h3", "card__name", entry.name), el("span", "badge badge--rank", `${entry.type}형`));
+  head.append(el("h3", "card__name", fields.title), el("span", "badge badge--rank", fields.badge));
 
   const coords = el("div", "card__coords");
-  for (const [key, value] of [
-    ["색상각", entry.hueRelation],
-    ["톤", entry.toneRelation],
-  ]) {
+  for (const [key, value] of fields.coords) {
     const item = el("span", null, `${key} `);
     item.append(el("b", null, value));
     coords.append(item);
   }
 
-  body.append(head, coords, el("p", "card__text", entry.summary));
-  body.append(noteField(entry));
+  body.append(head, coords, el("p", "card__text", fields.text));
+  body.append(noteField(entry, fields.title));
 
   // 저장된 조합도 비율을 다시 만질 수 있다. 저장은 슬라이더에서 손을 뗐을 때 한 번만 한다.
   // 마지막으로 서버가 받아들인 값. 실패 롤백이 여기로 돌아간다 —
   // 최초 로드 값으로 돌리면 그 사이 성공한 변경이 화면에서 사라져 서버와 어긋난다.
-  let current = entry.colors.map((c) => c.ratio);
-  const view = swatchView(entry.colors, current);
+  /*
+   * **색은 `savedFields` 가 정규화한 것을 쓴다.** `entry.colors` 를 직접 읽으면 그 필드가 없는
+   * 항목에서 던지고, 그 예외가 `load()` 의 catch 로 튀어 **목록 전체가 사라진다**(리뷰 지적).
+   * 그릴 색이 모자라면 비율 조작을 통째로 뺀다 — 나머지(제목·메모·삭제)는 그대로 보인다.
+   */
+  const colors = fields.colors;
+  let current = colors.map((c) => c.ratio);
+  const view = swatchView(colors, current);
   const status = el("span", "ratio__status");
-  const control = ratioControl({
-    colors: entry.colors,
-    value: current[0],
-    defaultValue: (entry.defaultRatio ?? current)[0],
-    onInput: (next) => view.set(next),
-    onCommit: async (next) => {
-      status.textContent = "저장 중…";
-      try {
-        await api("/api/saved/ratio", { id: entry.id, ratio: next[0] });
-        current = next;
-        status.textContent = `${next[0]} : ${next[1]} 로 저장됨`;
-      } catch (err) {
-        status.textContent = err.message;
-        view.set(current); // 실패하면 마지막으로 확인된 값으로 돌린다
-        control.set(current[0]);
-      }
-    },
-  });
-  body.append(control.node, status);
+
+  /*
+   * **비율은 언제나 배열로 보낸다.** 예전에는 `ratio: next[0]` 로 숫자 하나를 보냈는데,
+   * 그건 2색에서만 성립한다 — 3~4색에서는 첫 색의 지분일 뿐이라 나머지를 잃는다.
+   * 서버는 두 형태를 다 받지만(S18-G8) 화면이 굳이 두 갈래를 쓸 이유가 없다.
+   */
+  /*
+   * **응답이 순서대로 안 온다.** 다색 슬라이더는 색마다 하나씩 있어서, A 를 놓고 응답이 오기 전에
+   * B 를 놓으면 요청 둘이 동시에 떠 있다. 늦게 보낸 것이 먼저 도착하면 `current` 가 옛 값으로
+   * 덮여, 그 뒤 실패 롤백이 **사용자가 의도하지 않은 값**으로 되돌린다.
+   *
+   * 표를 뽑아 마지막 것만 반영한다. 같은 파일의 `noteField` 가 `pending` 으로 같은 문제를
+   * 이미 막고 있었는데 비율 쪽에는 없었다(리뷰 지적).
+   */
+  let ticket = 0;
+  const commit = async (next, label) => {
+    const mine = ++ticket;
+    status.textContent = "저장 중…";
+    try {
+      await api("/api/saved/ratio", { id: entry.id, ratio: next });
+      if (mine !== ticket) return true; // 더 최근 조작이 있다. 이 응답은 버린다.
+      current = next;
+      status.textContent = `${label} 로 저장됨`;
+      return true;
+    } catch (err) {
+      if (mine !== ticket) return false;
+      status.textContent = err.message;
+      view.set(current); // 실패하면 마지막으로 확인된 값으로 돌린다
+      return false;
+    }
+  };
+
+  // 2색은 기존 슬라이더 하나(한쪽을 올리면 반대쪽이 줄어드는 것이 눈에 보인다).
+  // 3색 이상은 색마다 슬라이더가 있어야 한다 — 파생 팔레트가 그렇다(13단계).
+  let control = null;
+  if (colors.length === 2) {
+    control = ratioControl({
+      colors,
+      value: current[0],
+      defaultValue: (entry.defaultRatio ?? current)[0],
+      onInput: (next) => view.set(next),
+      onCommit: async (next) => {
+        const ok = await commit(next, `${next[0]} : ${next[1]}`);
+        if (!ok) control.set(current[0]);
+      },
+    });
+  } else if (colors.length > 2) {
+    control = shareControl({
+      colors,
+      value: current,
+      onInput: (next) => view.set(next),
+      onCommit: async (next) => {
+        const ok = await commit(next, next.join(" : "));
+        // 실패하면 슬라이더도 되돌린다. 스와치만 되돌리면 화면에 두 비율이 동시에 보이고,
+        // 다음 조작이 되돌아가지 않은 값을 기준으로 계산된다.
+        if (!ok) control.set(current);
+      },
+    });
+  }
+  if (control) body.append(control.node, status);
+  else body.append(el("p", "card__text", "색을 읽을 수 없어 비율을 조정할 수 없습니다."));
 
   const meta = el("div", "card__meta");
   meta.append(el("span", null, `저장 ${formatWhen(entry.savedAt)}`));
@@ -160,7 +214,18 @@ async function load() {
       list.append(el("p", "empty", EMPTY_TEXT));
       return;
     }
-    for (const entry of saved) list.append(savedCard(entry, dropCard));
+    /*
+     * **한 항목이 나머지를 죽이지 않게 한다.** `savedFields` 가 표시와 색을 정규화하지만,
+     * 여기서 한 겹 더 두는 이유는 **다음에 무엇이 던질지 모르기 때문**이다. 실제로 `colors` 가
+     * 없는 항목 하나가 목록 전체를 비웠다. 조용히 넘기지 않고 그 자리에 무슨 일인지 남긴다.
+     */
+    for (const entry of saved) {
+      try {
+        list.append(savedCard(entry, dropCard));
+      } catch (err) {
+        list.append(el("p", "empty", `이 항목을 그리지 못했습니다 — ${err.message}`));
+      }
+    }
   } catch (err) {
     list.replaceChildren(el("p", "empty", `불러오지 못했습니다 — ${err.message}`));
   }

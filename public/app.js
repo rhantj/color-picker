@@ -278,9 +278,22 @@ function expansionSection(seedId, query) {
 
       // 두 격자를 한 자리에서 다시 그린다. 접힘 상태(restGrid.hidden)는 replaceChildren 이
       // 건드리지 않으므로 모드를 바꿔도 펼쳐 둔 나머지가 도로 접히지 않는다.
+      /*
+       * 카드마다 저장 버튼을 붙인다.
+       *
+       * **색을 안 보낸다.** 씨앗 id·구조 id·모드만 보내면 서버가 색을 다시 계산한다 —
+       * 파생은 결정적이라(S11-G3) 늘 같은 답이 나온다. `src/store.js` 규칙 4 가 그것을 적어 뒀고
+       * `S18-G1` 이 거짓 색을 실어 보내 확인한다.
+       *
+       * **지금 맞춘 비율은 보낸다.** 색은 코퍼스(또는 파생 규칙)가 아는 사실이지만 비율은
+       * 사용자의 판단이고, 그것을 안 보내면 슬라이더로 맞춘 것이 저장에서 사라진다.
+       */
+      const saveDerived = (st) => (shares) =>
+        api("/api/saved/derived", { seedId, structureId: st.id, mode, shares });
+
       redraw = () => {
-        grid.replaceChildren(...chosen.map((st) => structureCard(st, mode, fin)));
-        restGrid?.replaceChildren(...rest.map((st) => structureCard(st, mode, fin)));
+        grid.replaceChildren(...chosen.map((st) => structureCard(st, mode, fin, saveDerived(st))));
+        restGrid?.replaceChildren(...rest.map((st) => structureCard(st, mode, fin, saveDerived(st))));
       };
       redraw();
       loaded = true;

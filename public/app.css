@@ -1510,6 +1510,43 @@ a.action--primary:hover {
   color: var(--accent-ink);
 }
 
+/* 파생 카드의 저장 버튼. 카드 안에서 가장 마지막 동작이라 아래에 두고, 비율 슬라이더보다
+   물러서 있지 않게 한다 — 이건 사용자가 실제로 누르는 것이다. */
+.struct__save {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.struct__save-button {
+  min-height: 30px;
+  padding: 5px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.struct__save-button:hover {
+  background: var(--surface);
+  border-color: var(--accent-ink);
+}
+.struct__save-button[disabled] {
+  border-color: var(--line-strong);
+  background: var(--surface-sunken);
+  /* 배경만 바꾸면 글자가 안 읽힌다. 저장 중에도 무엇을 누른 건지 보여야 한다. */
+  color: var(--ink-muted);
+  cursor: progress;
+}
+.struct__save-feedback {
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
 /* 카드 안의 재질 줄. 역할과 재질 이름만 — 수치는 이 단계에 없다.
    원리(.struct__principle)보다 물러서 있어야 한다. 그쪽이 이 구조가 무엇인지를 말하고,
    이건 그 위에 무엇을 입혔는지를 말한다. */

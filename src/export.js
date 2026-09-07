@@ -9,6 +9,27 @@
 
 const ROLE = { ground: "ground", accent: "accent", equal: "tone" };
 
+/**
+ * **내보내기는 코퍼스 조합만 다룬다.** 파생 팔레트(18단계)는 형태가 다르다 —
+ * `paletteId` 도 `type`·`색상각` 도 없고 색이 3~4개다.
+ *
+ * 그대로 내보내면 **조용히 망가진다**(실측):
+ *   - `--undefined-ground` — `paletteId` 가 없어 변수 이름이 전부 같아지고 서로 덮어쓴다
+ *   - `--undefined-undefined` — `rolesOf` 가 앞 두 색만 보므로 3·4번째 역할이 없다
+ *   - `보색대비 · undefined형` — 코퍼스 전용 필드가 주석에 그대로 찍힌다
+ *   - 출처를 『배색사전』이라고 적는다 — 파생은 거기서 온 것이 아니다
+ *
+ * **빼고, 뺐다고 말한다.** 조용히 빼면 사용자는 저장한 것이 다 나왔다고 믿는다.
+ * 파생을 제대로 내보내는 것은 별도 작업이다(`docs/com/open-work.md` 의 A2) —
+ * 엔진 수치를 어떤 형식으로 줄지가 함께 정해져야 한다.
+ */
+export const isExportable = (entry) => entry?.kind !== "derived";
+
+const split = (entries) => {
+  const list = Array.isArray(entries) ? entries : [];
+  return { kept: list.filter(isExportable), skipped: list.length - list.filter(isExportable).length };
+};
+
 export function rolesOf(colors) {
   const [a, b] = colors.map((c) => c.ratio);
   if (a === b) return [ROLE.equal + "-1", ROLE.equal + "-2"];
@@ -62,11 +83,19 @@ export const safeComment = (text) => {
    면적도 변수로 낸다. 그래야 폭·크기에 그대로 꽂아 쓸 수 있다. */
 
 export function toCss(entries) {
-  if (entries.length === 0) {
-    return "/* 저장한 조합이 없습니다. 홈에서 추천을 받고 '조합 저장' 을 누르세요. */\n";
+  const { kept, skipped } = split(entries);
+  // 뺐다는 사실을 맨 위에 적는다. 파일을 받은 사람이 "왜 이것만 있지" 를 묻지 않게.
+  const skippedNote = skipped
+    ? `/* 파생 팔레트 ${skipped}개는 아직 이 형식으로 못 내보냅니다 — 저장 화면에서 볼 수 있습니다. */\n\n`
+    : "";
+
+  if (kept.length === 0) {
+    return skipped
+      ? `${skippedNote}/* 내보낼 코퍼스 조합이 없습니다. */\n`
+      : "/* 저장한 조합이 없습니다. 홈에서 추천을 받고 '조합 저장' 을 누르세요. */\n";
   }
 
-  const blocks = entries.map((entry) => {
+  const blocks = kept.map((entry) => {
     const roles = rolesOf(entry.colors);
     const head = [
       `  /* ${safeComment(entry.name)} · ${entry.type}형 · ${safeComment(entry.hueRelation)} / ${safeComment(entry.toneRelation)}`,
@@ -83,7 +112,7 @@ export function toCss(entries) {
     return [...head, ...vars].join("\n");
   });
 
-  return [
+  return skippedNote + [
     "/* 톤먼저 — 저장한 색 조합",
     "   면적(-area)이 색의 일부입니다. 같은 두 헥스도 비율이 바뀌면 다른 색이 됩니다.",
     "   출처: 와다 산조 『배색사전』 */",
@@ -98,13 +127,17 @@ export function toCss(entries) {
 /* ── JSON ───────────────────────────────────────────────── */
 
 export function toJson(entries) {
+  const { kept, skipped } = split(entries);
   return JSON.stringify(
     {
       generatedBy: "톤먼저 (colorpicker)",
       source: "와다 산조 『배색사전』",
       note: "ratio 는 면적 비율입니다. 같은 두 헥스도 비율이 바뀌면 다른 색이 되므로 함께 씁니다.",
-      count: entries.length,
-      palettes: entries.map((entry) => {
+      count: kept.length,
+      // 뺀 것이 있으면 숫자로 말한다. 0 일 때도 필드를 둬서 "이 형식은 파생을 다룬다" 로
+      // 오해할 자리를 없앤다.
+      skippedDerived: skipped,
+      palettes: kept.map((entry) => {
         const roles = rolesOf(entry.colors);
         return {
           id: entry.paletteId,
