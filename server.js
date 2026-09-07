@@ -28,7 +28,7 @@ import { ratioFor } from "./public/ratio.js";
 import { expandAll, expandSeed, loadStructures } from "./src/expand.js";
 import { PICK_COUNT, selectStructures } from "./src/structure.js";
 import { selectFinishes } from "./src/finish.js";
-import { loadFinishes } from "./src/material.js";
+import { DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, loadFinishes } from "./src/material.js";
 import { loadSeeds, seedLabel } from "./src/seeds.js";
 import { FORMATS } from "./src/export.js";
 
@@ -309,6 +309,27 @@ const resolveDerived = (seedId, structureId, mode) => {
   };
 };
 
+/**
+ * 저장소에 넘기는 재질 규칙. **`src/store.js` 가 `src/material.js` 를 직접 읽지 않게** 밖에서
+ * 넣는다 — `ratioFor` 를 넣는 것과 같은 자리다. 저장소는 파일 두 개를 다루는 곳이지 색·재질
+ * 규칙을 아는 곳이 아니다.
+ *
+ * **`defaultFor` 는 모르는 역할에 던지지 않고 물러선다.** 이 저장소는 "모르면 던진다" 를
+ * 원칙으로 쓰지만(`applyFinish`·`evForRole`·`assertRoles`) 여기서는 안 던진다 — 저장은
+ * 사용자의 동작이고, **역할 이름 하나가 새로 생겼다는 이유로 저장이 실패하면 안 된다.**
+ *
+ * 도달 가능성: `saveDerived` 가 넘기는 역할은 `expand.js` 의 구조 정의에서 오고,
+ * 그것이 `DEFAULT_FINISH_BY_ROLE` 과 일치하는지는 `S16-G11` 이 검사한다. 그래서 지금
+ * 이 폴백은 **이론상 도달하지 않는다.** 남겨 두는 것은 그 게이트를 안 돌리고 역할을 늘리는
+ * 경우의 안전망이고, 그때 조용히 무광이 되는 것이 저장이 통째로 실패하는 것보다 낫다고 봤다.
+ * (리뷰가 "감추는 것 아닌가" 를 물었고, 그 판단 근거를 여기 적는다.)
+ */
+const MATERIALS = {
+  finishes: [...MATERIAL_FINISHES],
+  defaultFor: (role) =>
+    Object.hasOwn(DEFAULT_FINISH_BY_ROLE, role) ? DEFAULT_FINISH_BY_ROLE[role] : MATERIAL_FINISHES[0],
+};
+
 async function handleWrite(req, res, pathname) {
   if (!isTrustedWrite(req)) {
     return sendJson(res, 403, { error: "이 화면에서 보낸 요청이 아니다" });
@@ -329,7 +350,7 @@ async function handleWrite(req, res, pathname) {
       return sendJson(res, 200, await savePalette(body, paletteById, ratioFor));
     }
     if (pathname === "/api/saved/derived") {
-      return sendJson(res, 200, await saveDerived(body, resolveDerived, ratioFor));
+      return sendJson(res, 200, await saveDerived(body, resolveDerived, ratioFor, MATERIALS));
     }
     if (pathname === "/api/saved/ratio") {
       // 옛 항목에 defaultRatio 가 없으면 코퍼스에서 채워 넣도록 조회 함수를 넘긴다.

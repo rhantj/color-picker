@@ -288,8 +288,24 @@ function expansionSection(seedId, query) {
        * **지금 맞춘 비율은 보낸다.** 색은 코퍼스(또는 파생 규칙)가 아는 사실이지만 비율은
        * 사용자의 판단이고, 그것을 안 보내면 슬라이더로 맞춘 것이 저장에서 사라진다.
        */
-      const saveDerived = (st) => (shares) =>
-        api("/api/saved/derived", { seedId, structureId: st.id, mode, shares });
+      /*
+       * **재질 배정도 함께 보낸다.** 색과 달리 서버가 다시 계산할 수 없다 — LLM 이 정하는
+       * 것이라 재계산하면 사용자가 화면에서 본 것과 다른 재질이 나온다. 그래서 화면이 보내고
+       * 서버가 검증한다(`S19-G1`).
+       *
+       * **이 구조의 역할만 골라 보낸다.** 배정 표는 일곱 역할 전부를 담고 있지만 구조마다
+       * 쓰는 것이 다르다(3~4개). 통째로 보내면 서버가 어차피 거르지만, 화면이 무엇을 저장하는지
+       * 스스로 알고 보내는 편이 맞다.
+       */
+      const saveDerived = (st) => (shares) => {
+        const roles = st.colors.map((c) => c.role);
+        const finishes = {};
+        for (const role of roles) {
+          const id = fin?.assignments?.[role];
+          if (id) finishes[role] = id;
+        }
+        return api("/api/saved/derived", { seedId, structureId: st.id, mode, shares, finishes });
+      };
 
       redraw = () => {
         grid.replaceChildren(...chosen.map((st) => structureCard(st, mode, fin, saveDerived(st))));

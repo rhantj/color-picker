@@ -12,7 +12,13 @@
 //      셋만 받으면 서버가 색을 다시 계산할 수 있다. 그래서 여기서도 화면이 색을 보내지 않는다.
 //      S18-G1 이 색을 실어 보내는 요청으로 그것을 확인한다.
 //
-//      면적 비율만 예외인 이유: 색은 코퍼스가 아는 사실이지만 **비율은 사용자의 판단**이다.
+//      **재질 배정도 예외다.** 색과 달리 다시 계산할 수 없다 — 로컬 LLM 이 정하는 것이라
+//      같은 질의라도 답이 달라질 수 있고, 재계산하면 저장할 때 본 것과 다른 재질이 나온다.
+//      그래서 **받되 검증한다** — 값이 실재하는 재질인지, 역할이 그 구조에 실제로 있는지.
+//      비율과 같은 부류다: 판단이라 받고, 형태는 강제한다.
+//
+//      **둘이 예외인 이유는 하나다.** 색은 코퍼스(또는 파생 규칙)가 아는 사실이지만
+//      **비율과 재질은 판단**이다 — 코퍼스에 답이 없고 서버가 다시 만들어 낼 수도 없다.
 //      같은 두 헥스도 비율이 바뀌면 다른 색이 되므로, 그 결정을 사용자에게서 받는 것이 이 도구의 요점이다.
 //      대신 형태는 강제한다 — 정수, 10~90. 0 이나 100 은 한 색을 없애는 것이라 2색 조합이 아니게 된다.
 
@@ -210,6 +216,38 @@ export function listSaved() {
 }
 
 /**
+ * 화면이 보낸 재질 배정을 **걸러 낸다.**
+ *
+ * 무는 것 셋 — 역할이 그 구조에 실제로 있는가 · 값이 문자열인가 · 실재하는 재질인가.
+ * `Object.hasOwn` 으로 먼저 거르는 이유는 `__proto__` 같은 이름이 프로토타입에서 값을 물고
+ * 나오기 때문이다(17단계에서 같은 것을 겪었다).
+ *
+ * **거부가 아니라 걸러내기다.** 모르는 것만 버리고 나머지는 살린다 — 하나 틀렸다고 저장을
+ * 통째로 막으면 사용자가 이유도 모른 채 저장을 못 한다. 버린 자리는 호출부가 기본 배정으로
+ * 채운다(`parseAssignment` 가 LLM 응답에 하는 것과 같은 선택이다).
+ *
+ * 프로토타입 없는 객체로 모은다. `picked["__proto__"] = "matte"` 가 객체 리터럴에서는
+ * **own 속성이 아니라 프로토타입 대입**이 되어 조용히 사라진다.
+ *
+ * **`wanted.has(role)` 을 지우는 변형은 게이트가 안 잡는다. 구멍이 아니라 이중 방어다** —
+ * `saveDerived` 의 최종 조립 루프가 `roles` 만 순회하므로 여기 남은 여분 키가 저장에 닿지
+ * 않는다(리뷰가 같은 판정을 냈다). 그래도 두는 것은 **이 함수가 무엇을 돌려주는지가 계약**이기
+ * 때문이다 — 호출부가 하나뿐이라는 사실이 언제까지나 참이라는 보장은 없다.
+ */
+function pickFinishes(input, roles, valid) {
+  const picked = Object.create(null);
+  if (!input || typeof input !== "object" || Array.isArray(input)) return picked;
+
+  const wanted = new Set(roles);
+  for (const [role, id] of Object.entries(input)) {
+    if (!wanted.has(role) || Object.hasOwn(picked, role)) continue;
+    if (typeof id !== "string" || !valid.includes(id)) continue;
+    picked[role] = id;
+  }
+  return picked;
+}
+
+/**
  * 앞의 항목에서 **무엇을 이어받을지** 정한다. 두 저장 경로(`savePalette`·`saveDerived`)가
  * 같은 규칙을 쓰게 하는 자리다.
  *
@@ -306,11 +344,13 @@ export function savePalette(input, lookup, ratioFor) {
  *   저장소가 `src/expand.js` 를 직접 읽지 않게 밖에서 넣는다.
  * @param {(palette:{colors:unknown[]}) => number[]} ratioFor 기본 면적 규칙. `savePalette` 와
  *   같은 자리다 — 면적 규칙은 `public/ratio.js` 한 곳에 있고, 저장소가 그것을 다시 적지 않는다.
+ * @param {{finishes: string[], defaultFor: (role:string) => string}} materials 재질 목록과
+ *   역할별 기본값. 같은 이유로 밖에서 받는다 — 저장소가 `src/material.js` 를 직접 읽지 않는다.
  *
  * **같은 씨앗·구조·모드는 하나다.** 다시 저장하면 덮어쓰고, 안 보낸 비율·메모는 앞의 것을
  * 이어받는다(`S5-G5`·`S8-G2` 와 같은 규칙). **모드가 다르면 다른 항목**이다 — 색이 다르기 때문이다.
  */
-export function saveDerived(input, resolve, ratioFor) {
+export function saveDerived(input, resolve, ratioFor, materials) {
   /*
    * **문자열인지 먼저 본다.** `clip` 은 `String(value)` 로 강제 변환하므로 배열 하나짜리가
    * 그대로 통과한다 — `String(["complementary"]) === "complementary"` (실측). `S18-G3` 이
@@ -353,6 +393,30 @@ export function saveDerived(input, resolve, ratioFor) {
     const merged = mergeWithPrevious(previous, { adjusted, defaults, note: input.note });
     const ratio = merged.ratio;
 
+    /*
+     * **재질 배정.** 화면이 보낸 것에서 쓸 수 있는 것만 남기고, 빈 자리는 앞의 항목 → 기본 배정
+     * 순서로 채운다. 비율·메모와 같은 규칙이다(S5-G5·S8-G2·S18-G4).
+     *
+     * **이어받기 조건까지 비율과 같게 맞춘다.** 비율은 `previous.ratioAdjusted` 가 참일 때만
+     * 이어받는다 — 앞의 값이 그때도 "기본값 그대로" 였다면 이어받지 않고 **지금의 기본값을
+     * 다시 쓴다.** 그래야 규칙이 나중에 바뀌어도 사용자가 안 건드린 옛 저장이 새 규칙을 따라간다.
+     *
+     * 배정에는 그 구분이 없어서, 한 번 기본값으로 채워진 자리가 **영구히 굳었다**(리뷰 지적).
+     * `DEFAULT_FINISH_BY_ROLE` 을 고쳐도 옛 저장은 새 기본을 못 받는다 — 같은 상황에서 비율은
+     * 받는데 배정만 안 받는 비대칭이었다. `finishesAdjusted` 를 두어 규칙을 하나로 만든다.
+     *
+     * "손댔다" 의 정의는 **지금의 기본과 다른가**다. 화면이 LLM 배정을 보내든 사용자가 고르든
+     * 결과가 기본과 같다면 그것은 판단이 아니라 우연히 같은 값이고, 굳혀 둘 이유가 없다.
+     */
+    const roles = found.colors.map((c) => c.role);
+    const sent = pickFinishes(input.finishes, roles, materials.finishes);
+    const inheritFinishes = previous?.finishesAdjusted ? previous.finishes : null;
+    const finishes = {};
+    for (const role of roles) {
+      finishes[role] = sent[role] ?? inheritFinishes?.[role] ?? materials.defaultFor(role);
+    }
+    const finishesAdjusted = roles.some((role) => finishes[role] !== materials.defaultFor(role));
+
     const entry = {
       id: newId("save"),
       savedAt: now(),
@@ -368,6 +432,11 @@ export function saveDerived(input, resolve, ratioFor) {
       principle: found.principle,
       source: found.source,
       colors: found.colors.map((c, i) => ({ role: c.role, hex: c.hex, ratio: ratio[i] })),
+      // 역할 → 재질 id. 엔진 수치는 여기서 안 만든다 — `applyFinish` 가 결정적이라 내보낼 때
+      // 색과 재질로 다시 만들 수 있고, 그래야 엔진 규칙을 고쳤을 때 옛 저장에도 반영된다.
+      finishes,
+      // 기본 배정 그대로인지 손댄 것인지. `ratioAdjusted` 와 같은 자리·같은 뜻이다.
+      finishesAdjusted,
       ratioAdjusted: merged.ratioAdjusted,
       defaultRatio: defaults,
       note: merged.note,
