@@ -812,9 +812,49 @@ const GATES = {
       colors: palettes()[0].colors.map((c, i) => ({ name: c.name, hex: c.hex, ratio: i === 0 ? 70 : 30 })),
     };
 
+    /*
+     * **형식마다 다루는 대상이 다르다(20단계).** 여기서 그것을 갈라 본다.
+     *
+     *   css · json      — 코퍼스만. 파생을 빼고 뺐다고 말한다  ← 이 게이트가 무는 것
+     *   unreal · unity  — 파생만. 코퍼스를 빼고 뺐다고 말한다  ← S20-G3 이 문다
+     *
+     * 원래 이 루프는 `FORMATS` 전부를 돌며 "파생을 뺐는가" 를 물었다. 20단계가 정반대
+     * 성질의 형식을 더하면서 그 물음이 엔진 형식에는 거짓이 됐다.
+     *
+     * **코퍼스 형식 목록을 여기 다시 적고, 실제와 어긋나면 실패시킨다.** 그냥 목록만 적으면
+     * 나중에 코퍼스 형식이 하나 늘었을 때 이 게이트가 조용히 그것을 안 본다 — 검사에서
+     * 빠지는 것이 아무 신호 없이 일어난다.
+     */
+    const CORPUS_FORMATS = ["css", "json"];
+    const ENGINE_FORMATS = ["unreal", "unity"];
+    const known = [...CORPUS_FORMATS, ...ENGINE_FORMATS].sort();
+    const actual = Object.keys(FORMATS).sort();
+    if (String(known) !== String(actual)) {
+      bad.push(`형식 목록이 바뀌었다 — 이 게이트가 아는 것 [${known}] · 실제 [${actual}]. 어느 쪽인지 정하고 여기 적어라`);
+    }
+
+    // **모든 형식에 걸리는 것** — 무엇을 담든 undefined 를 뱉거나 던지지 않는다.
     for (const [format, spec] of Object.entries(FORMATS)) {
+      for (const [what, list] of [["섞인 목록", [derived, corpus]], ["파생만", [derived]], ["코퍼스만", [corpus]], ["빈 목록", []]]) {
+        let text;
+        try {
+          text = spec.build(list);
+        } catch (err) {
+          bad.push(`${format}: ${what} 에서 던졌다 — ${err.message}`);
+          continue;
+        }
+        if (/undefined/.test(text)) bad.push(`${format}: ${what} 출력에 undefined 가 있다`);
+      }
+    }
+
+    // **코퍼스 형식에만 걸리는 것** — 파생을 빼고, 뺐다고 말하고, 코퍼스는 실제로 낸다.
+    for (const format of CORPUS_FORMATS) {
+      const spec = FORMATS[format];
+      if (!spec) {
+        bad.push(`${format}: 형식이 사라졌다`);
+        continue;
+      }
       const mixed = spec.build([derived, corpus]);
-      if (/undefined/.test(mixed)) bad.push(`${format}: 출력에 undefined 가 있다`);
       // 파생의 헥스가 새어 나가면 이름 없는 변수로 나간 것이다.
       for (const c of derived.colors) {
         if (mixed.includes(c.hex)) bad.push(`${format}: 파생 색 ${c.hex} 가 내보내기에 실렸다`);
@@ -823,12 +863,6 @@ const GATES = {
       if (!/파생|skippedDerived/.test(mixed)) bad.push(`${format}: 뺐다는 사실을 안 말한다`);
       // 양성 대조 — 코퍼스 조합은 실제로 나온다.
       if (!mixed.includes(corpus.colors[0].hex)) bad.push(`${format}: 코퍼스 색이 안 나온다 — 전부 빠졌다`);
-
-      // 파생만 있는 목록에서도 던지지 않는다.
-      const onlyDerived = spec.build([derived]);
-      if (/undefined/.test(onlyDerived)) bad.push(`${format}: 파생만 있을 때 undefined 가 있다`);
-      // 빈 목록도 그대로 돈다(회귀).
-      spec.build([]);
     }
 
     // JSON 은 숫자로도 말한다.
@@ -837,7 +871,8 @@ const GATES = {
     if (json.skippedDerived !== 1) bad.push(`JSON skippedDerived 가 ${json.skippedDerived}`);
 
     if (bad.length) throw new Error(bad.slice(0, 5).join(" / "));
-    out(`CSS·JSON 둘 다 파생을 빼고 그 사실을 말한다 — 출력에 undefined 0건, 파생 색 0건`);
+    out(`CSS·JSON 둘 다 파생을 빼고 그 사실을 말한다 — 파생 색 0건`);
+    out(`형식 ${Object.keys(FORMATS).length}가지 × 목록 4가지에서 undefined 0건 · 던짐 0건`);
     out(`양성 대조: 코퍼스 조합은 그대로 나온다 · JSON count 1 · skippedDerived 1`);
     out("S18_G13_OK");
   },

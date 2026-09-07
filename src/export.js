@@ -1,11 +1,24 @@
 // 저장된 조합을 밖으로 가져갈 형식.
 //
+// **형식이 다루는 대상이 갈린다.** 코퍼스 조합과 파생 팔레트는 형태가 달라서 한 형식이
+// 둘 다 담으려 하면 조용히 망가진다(18-B 에서 실측했다).
+//
+//   css · json      — 코퍼스 조합만. 파생은 빼고 **뺐다고 말한다**
+//   unreal · unity  — 파생 팔레트만. 코퍼스는 빼고 **뺐다고 말한다**
+//
+// 코퍼스를 엔진 형식에서 빼는 이유는 데이터가 없어서다. 코퍼스 항목에는 재질 배정이 없고
+// (LLM 이 배정한 적이 없다), 역할 이름도 `바탕`/`강조`/`대등` 인데 `대등` 은 재질 엔진의
+// 역할 표에 없다. 기본 재질을 붙여 내보내면 **배색사전이 한 적 없는 주장을 지어내는 것**이다 —
+// 와다 산조의 색 쌍이 빛을 내게 된다.
+//
 // 헥스 두 개만 내보내면 이 사이트가 계속 말해온 것을 잃는다 — **면적과 서열**이다.
 // "같은 두 헥스도 비율이 바뀌면 다른 색" 이라고 해 놓고 비율 없이 내보내면 앞뒤가 안 맞는다.
 // 그래서 색마다 역할(바탕/강조)과 면적을 함께 낸다.
 //
 // 역할은 저장된 비율에서 계산한다. 코퍼스의 유형(D형 등)이 아니라 **지금 이 항목의 비율**을 본다 —
 // 사용자가 대등 조합을 60:40 으로 조정했다면 그때부터 서열이 있는 것이다.
+
+import { applyFinish, toUnity, toUnreal } from "./material.js";
 
 const ROLE = { ground: "ground", accent: "accent", equal: "tone" };
 
@@ -86,7 +99,7 @@ export function toCss(entries) {
   const { kept, skipped } = split(entries);
   // 뺐다는 사실을 맨 위에 적는다. 파일을 받은 사람이 "왜 이것만 있지" 를 묻지 않게.
   const skippedNote = skipped
-    ? `/* 파생 팔레트 ${skipped}개는 아직 이 형식으로 못 내보냅니다 — 저장 화면에서 볼 수 있습니다. */\n\n`
+    ? `/* 파생 팔레트 ${skipped}개는 이 형식에 없습니다 — '엔진 수치로 내보내기' 로 받으세요. */\n\n`
     : "";
 
   if (kept.length === 0) {
@@ -135,8 +148,9 @@ export function toJson(entries) {
       note: "ratio 는 면적 비율입니다. 같은 두 헥스도 비율이 바뀌면 다른 색이 되므로 함께 씁니다.",
       count: kept.length,
       // 뺀 것이 있으면 숫자로 말한다. 0 일 때도 필드를 둬서 "이 형식은 파생을 다룬다" 로
-      // 오해할 자리를 없앤다.
+      // 오해할 자리를 없앤다. 파생은 엔진 형식(unreal·unity)으로 나간다.
       skippedDerived: skipped,
+      skippedDerivedHint: "파생 팔레트는 unreal · unity 형식으로 내보내세요.",
       palettes: kept.map((entry) => {
         const roles = rolesOf(entry.colors);
         return {
@@ -162,10 +176,132 @@ export function toJson(entries) {
   ) + "\n";
 }
 
+/* ── 엔진 수치 ───────────────────────────────────────────────
+
+   **엔진마다 파일을 나눈다. 한 파일에 둘을 같이 넣지 않는다.**
+
+   막으려는 것은 하나다 — 언리얼 `Roughness` 는 **0이 거울**이고 유니티 `Smoothness` 는
+   **1이 거울**로 정확히 반대다. 한 파일에 둘 다 있으면 잘못된 쪽을 복사하기 쉽고,
+   그러면 거울로 만들려던 면이 무광이 된다. 눈에 띄는 에러 없이 장면만 달라진다.
+
+   나눠도 파일을 열었을 때 어느 쪽인지 몰라야 소용없으므로 **파일이 자기 엔진을 밝힌다**
+   (`engine` 필드 + `note` 한 줄). 그리고 필드 이름이 겹치지 않는다 — 유니티 프로젝트에
+   `roughness` 를 넣으면 그 칸이 비어 **사람이 알아챈다.** 조용히 반대가 되는 것보다 낫다.
+   (`docs/com/open-work.md` 의 C4 가 이것으로 닫힌다.) */
+
+const ENGINE_SPEC = {
+  unreal: {
+    id: "unreal",
+    label: "언리얼 엔진",
+    convert: toUnreal,
+    filename: "tonefirst-unreal.json",
+    note:
+      "언리얼 표기입니다. roughness 는 0이 거울, 1이 완전 무광입니다. " +
+      "유니티의 Smoothness 는 방향이 반대(1이 거울)이므로 이 값을 그대로 넣으면 안 됩니다 — " +
+      "유니티용은 따로 내보내세요.",
+  },
+  unity: {
+    id: "unity",
+    label: "유니티",
+    convert: toUnity,
+    filename: "tonefirst-unity.json",
+    note:
+      "유니티 표기입니다. smoothness 는 1이 거울, 0이 완전 무광입니다. " +
+      "언리얼의 Roughness 는 방향이 반대(0이 거울)이므로 이 값을 그대로 넣으면 안 됩니다 — " +
+      "언리얼용은 따로 내보내세요.",
+  },
+};
+
+export const ENGINE_IDS = Object.freeze(Object.keys(ENGINE_SPEC));
+export const isEngineFormat = (format) => typeof format === "string" && Object.hasOwn(ENGINE_SPEC, format);
+
+/**
+ * 파생 팔레트 하나를 엔진 수치로 바꾼다. **못 바꾸면 `null` 을 돌려준다.**
+ *
+ * `applyFinish` 는 모르는 재질·역할에 던진다(16단계 계약). 그 계약은 옳지만, 여기서 그대로
+ * 위로 올리면 **손상된 항목 하나가 내보내기 전체를 500 으로 만든다** — 사용자는 멀쩡한
+ * 저장까지 못 가져간다. 18-B 에서 `/saved` 화면이 정확히 그 이유로 목록을 통째로 비웠고
+ * 리뷰가 High 로 잡았다. 같은 부류를 여기서 되풀이하지 않는다.
+ *
+ * **던지지 않는 것과 조용히 넘어가는 것은 다르다.** 못 낸 수는 `skippedBroken` 으로 말한다.
+ */
+function enginePalette(entry, spec) {
+  const finishes = entry.finishes ?? {};
+  const colors = [];
+  for (const color of entry.colors ?? []) {
+    let material;
+    try {
+      material = applyFinish(color.hex, finishes[color.role], color.role);
+    } catch {
+      return null; // 색 하나라도 못 만들면 팔레트가 반쪽이 된다 — 반쪽을 내보내지 않는다
+    }
+    const { baseColor, ...rest } = spec.convert(material);
+    colors.push({ role: color.role, ratio: color.ratio, finish: material.finish, baseColor, ...rest });
+  }
+  if (colors.length === 0) return null;
+
+  return {
+    id: `${entry.seedId}-${entry.structureId}-${entry.mode}`,
+    name: entry.name,
+    seed: entry.seedLabel,
+    structure: entry.structureId,
+    mode: entry.mode,
+    principle: entry.principle,
+    note: entry.note || null,
+    ratioAdjusted: Boolean(entry.ratioAdjusted),
+    finishesAdjusted: Boolean(entry.finishesAdjusted),
+    colors,
+  };
+}
+
+/**
+ * 엔진 형식 하나를 만든다.
+ *
+ * 코퍼스는 세어서 `skippedCorpus` 로, 못 바꾼 파생은 `skippedBroken` 으로 말한다.
+ * **둘 다 0 일 때도 필드를 둔다** — 없으면 "이 형식은 코퍼스도 담는다" 로 오해할 자리가 생긴다.
+ */
+export function toEngine(entries, engineId) {
+  const spec = ENGINE_SPEC[engineId];
+  if (!spec) throw new Error(`모르는 엔진이다: ${engineId}`);
+
+  const list = Array.isArray(entries) ? entries : [];
+  const derived = list.filter((e) => !isExportable(e));
+  const built = derived.map((e) => enginePalette(e, spec));
+  const palettes = built.filter(Boolean);
+
+  return JSON.stringify(
+    {
+      generatedBy: "톤먼저 (colorpicker)",
+      engine: spec.id,
+      engineLabel: spec.label,
+      note: spec.note,
+      areaNote:
+        "ratio 는 면적 비율입니다. 같은 색도 면적이 바뀌면 다른 배색이 되므로 함께 씁니다.",
+      count: palettes.length,
+      // 코퍼스 조합은 재질 배정이 없어 엔진 수치를 만들 수 없습니다.
+      skippedCorpus: list.length - derived.length,
+      // 재질이나 역할이 이 엔진이 모르는 값이라 못 만든 항목.
+      skippedBroken: built.length - palettes.length,
+      palettes,
+    },
+    null,
+    2,
+  ) + "\n";
+}
+
 /** CSS 변수 이름에 쓸 수 있게 id 를 다듬는다. 저장 id 는 이미 안전한 문자만 쓰지만 방어적으로 둔다. */
 export const cssName = (entry) => ({ ...entry, id_: String(entry.paletteId).replace(/[^a-zA-Z0-9-]/g, "-") });
 
+const JSON_TYPE = "application/json; charset=utf-8";
+
 export const FORMATS = {
   css: { build: (entries) => toCss(entries.map(cssName)), type: "text/css; charset=utf-8", filename: "tonefirst-palettes.css" },
-  json: { build: toJson, type: "application/json; charset=utf-8", filename: "tonefirst-palettes.json" },
+  json: { build: toJson, type: JSON_TYPE, filename: "tonefirst-palettes.json" },
+  // 엔진 형식은 표를 그대로 편다 — 엔진을 더할 때 여기와 ENGINE_SPEC 을 따로 고치지 않게.
+  ...Object.fromEntries(
+    ENGINE_IDS.map((id) => [
+      id,
+      { build: (entries) => toEngine(entries, id), type: JSON_TYPE, filename: ENGINE_SPEC[id].filename },
+    ]),
+  ),
 };

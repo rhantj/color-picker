@@ -38,6 +38,7 @@
     <div class="page-head__actions">
       <button class="action" id="export-css" type="button">CSS 변수로 내보내기</button>
       <button class="action" id="export-json" type="button">JSON</button>
+      <button class="action" id="export-engine-open" type="button">엔진 수치로 내보내기</button>
     </div>
   </section>
 
@@ -45,6 +46,7 @@
     <div class="export__head">
       <span class="export__title" id="export-title" aria-live="polite"></span>
       <div class="export__actions">
+        <button class="action export__engine" id="export-engine" type="button" hidden></button>
         <button class="action action--primary" id="export-copy" type="button">복사</button>
         <button class="action" id="export-download" type="button">파일로 저장</button>
         <button class="action" id="export-close" type="button">닫기</button>

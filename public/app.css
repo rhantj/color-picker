@@ -1162,6 +1162,16 @@ a:hover {
   gap: 8px;
   flex-wrap: wrap;
 }
+/* 엔진 토글. 지금 어느 표기를 보고 있는지가 이 버튼 하나에 걸려 있어서, 글자만으로
+   두지 않고 방향 기호를 붙인다 — 두 표기를 오가는 것이라는 뜻이 그 자리에서 보인다. */
+.export__engine {
+  font-variant-numeric: tabular-nums;
+}
+.export__engine::before {
+  content: "⇄";
+  margin-inline-end: 6px;
+  opacity: 0.7;
+}
 .export__code {
   margin: 0;
   padding: 20px;

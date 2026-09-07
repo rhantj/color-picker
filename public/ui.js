@@ -514,6 +514,34 @@ export async function refreshRuntime(attempt = 0, onStage) {
   if (state === "starting" && attempt < 20) setTimeout(() => refreshRuntime(attempt + 1, onStage), 1500);
 }
 
+/*
+ * **내보내기 패널의 엔진 토글이 무엇을 할지 정한다.**
+ *
+ * 언리얼 `Roughness` 는 0이 거울, 유니티 `Smoothness` 는 1이 거울로 정반대다. 두 표기를
+ * **오가면서 비교할 수 있어야** 어느 쪽을 붙여넣는지 사용자가 안다. 그래서 버튼 하나가
+ * 지금 보이는 출력을 뒤집는다.
+ *
+ * **라벨은 지금이 아니라 갈 곳을 말한다.** "언리얼" 이라고만 적혀 있으면 지금이 언리얼인지
+ * 누르면 언리얼이 되는지 알 수 없다. 15단계 모드 토글이 "어두운 배경으로 보기" 라고 적는
+ * 것과 같은 규칙이다.
+ *
+ * **순수 함수로 빼는 이유는 게이트다.** 화면 코드는 정적 검사밖에 못 하는데 정적 검사는
+ * "눌렀을 때 어디로 가는가" 를 못 본다. 17단계 `structureColors` · 18단계 `savedFields` 와
+ * 같은 자리다.
+ *
+ * @param {unknown} format 지금 보고 있는 형식
+ * @returns {{visible:boolean, next:string|null, label:string, current:string}}
+ */
+export function engineToggle(format) {
+  const ENGINE_KO = { unreal: "언리얼", unity: "유니티" };
+  // 자기 속성만 본다. `__proto__`·`constructor` 는 평범한 객체에서 값을 물고 나온다.
+  if (typeof format !== "string" || !Object.hasOwn(ENGINE_KO, format)) {
+    return { visible: false, next: null, label: "", current: "" };
+  }
+  const next = format === "unreal" ? "unity" : "unreal";
+  return { visible: true, next, label: `${ENGINE_KO[next]} 표기로 보기`, current: ENGINE_KO[format] };
+}
+
 export const formatWhen = (iso) => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";

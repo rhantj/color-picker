@@ -1,6 +1,6 @@
 // 추천 받은 조합 화면.
 
-import { api, el, formatWhen, ratioControl, refreshRuntime, savedFields, shareControl, swatchView } from "./ui.js";
+import { api, el, engineToggle, formatWhen, ratioControl, refreshRuntime, savedFields, shareControl, swatchView } from "./ui.js";
 
 const list = document.getElementById("list");
 
@@ -240,8 +240,16 @@ const codeBox = document.getElementById("export-code");
 const titleBox = document.getElementById("export-title");
 const noteBox = document.getElementById("export-note");
 
-const FORMAT_LABEL = { css: "CSS 변수", json: "JSON" };
-const FILENAME = { css: "tonefirst-palettes.css", json: "tonefirst-palettes.json" };
+const FORMAT_LABEL = { css: "CSS 변수", json: "JSON", unreal: "언리얼 엔진", unity: "유니티" };
+const FILENAME = {
+  css: "tonefirst-palettes.css",
+  json: "tonefirst-palettes.json",
+  unreal: "tonefirst-unreal.json",
+  unity: "tonefirst-unity.json",
+};
+const MIME = { css: "text/css" };
+
+const engineBtn = document.getElementById("export-engine");
 
 let shown = null; // { format, text }
 
@@ -255,10 +263,19 @@ async function showExport(format) {
     const lines = text.split(/\r?\n/).length;
     titleBox.textContent = `${FORMAT_LABEL[format] ?? format} · ${lines}줄`;
     codeBox.textContent = text;
+    /*
+     * 엔진 형식일 때만 토글을 보인다. 어디에 있는지가 아니라 **어디로 가는지**를 적는다 —
+     * 두 표기는 거울 방향이 반대라(언리얼 0 = 거울, 유니티 1 = 거울) 어느 쪽을 보고 있는지
+     * 헷갈리면 그대로 잘못 붙여넣게 된다.
+     */
+    const toggle = engineToggle(format);
+    engineBtn.hidden = !toggle.visible;
+    engineBtn.textContent = toggle.label;
     panel.hidden = false;
     panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
   } catch (err) {
     shown = null;
+    engineBtn.hidden = true;
     titleBox.textContent = "내보내기 실패";
     codeBox.textContent = err.message;
     panel.hidden = false;
@@ -267,8 +284,15 @@ async function showExport(format) {
 
 document.getElementById("export-css").addEventListener("click", () => showExport("css"));
 document.getElementById("export-json").addEventListener("click", () => showExport("json"));
+// 엔진 수치는 언리얼부터 연다. 토글이 그 자리에서 유니티로 뒤집는다.
+document.getElementById("export-engine-open").addEventListener("click", () => showExport("unreal"));
+engineBtn.addEventListener("click", () => {
+  const next = engineToggle(shown?.format).next;
+  if (next) showExport(next);
+});
 document.getElementById("export-close").addEventListener("click", () => {
   panel.hidden = true;
+  engineBtn.hidden = true;
   shown = null;
 });
 
@@ -291,7 +315,8 @@ document.getElementById("export-copy").addEventListener("click", async () => {
 
 document.getElementById("export-download").addEventListener("click", () => {
   if (!shown) return;
-  const blob = new Blob([shown.text], { type: shown.format === "json" ? "application/json" : "text/css" });
+  // 형식이 넷이 됐다. "json 인가 아닌가" 로 갈랐더니 엔진 파일이 text/css 로 저장됐다.
+  const blob = new Blob([shown.text], { type: MIME[shown.format] ?? "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
