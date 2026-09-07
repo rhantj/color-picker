@@ -180,7 +180,57 @@ const GATES = {
     }
     if (s3.peek() !== "dark") bad.push(`이상한 값을 쓰다가 저장된 dark 를 잃었다 (지금 ${s3.peek()})`);
 
-    out(bad.length ? bad.slice(0, 8).join("\n") : "왕복이 맞고, 이상한 저장값 8가지·이상한 쓰기 7가지를 안 믿는다");
+    /*
+     * **뒤집기와 저장이 한 동작인가.**
+     *
+     * 화면이 이 둘을 두 줄로 적고 있었고, 맞바꾸면 **옛 모드가 저장됐다.** 그 고장은
+     * 그 자리에서 안 보인다 — 버튼도 색도 제대로 바뀐다. **새로고침해야 드러나고**,
+     * 그때는 23단계가 하려던 일이 통째로 무효다. 여섯 게이트가 전부 통과했다(리뷰 재현).
+     *
+     * 정적 검사로 순서를 재지 않고 **틀릴 순서 자체를 없앴다.** 여기서는 그 함수를 직접
+     * 불러 **돌려주는 값과 저장된 값이 같은지**를 본다.
+     */
+    const { nextMode } = await import("../public/ui.js");
+    if (typeof nextMode !== "function") {
+      out("public/ui.js 가 nextMode 를 안 내보낸다 — 뒤집기와 저장이 아직 두 동작이다");
+      return false;
+    }
+    for (const [from, want] of [["light", "dark"], ["dark", "light"]]) {
+      const s = fakeStorage({ initial: from });
+      // `nextMode` 는 저장소가 아니라 **`modeStore` 가 만든 것**을 받는다 — 검증이 그 안에 있다.
+      const got = nextMode(modeStore(s), from);
+      if (got !== want) bad.push(`${from} 에서 뒤집었더니 ${got} (${want} 여야 한다)`);
+      if (s.peek() !== want) bad.push(`${from} 에서 저장된 것이 ${s.peek()} — 옛 모드가 저장됐다`);
+      if (got !== s.peek()) bad.push(`돌려준 값(${got})과 저장된 값(${s.peek()})이 다르다`);
+    }
+    // 저장이 막혀도 뒤집기는 된다. 저장은 편의이고 토글은 기능이다.
+    for (const [what, s] of [["쓰기가 던짐", fakeStorage({ throwOnSet: true })], ["저장소 없음", null]]) {
+      try {
+        if (nextMode(modeStore(s), "light") !== "dark") bad.push(`${what} 일 때 뒤집기가 안 된다`);
+      } catch (err) {
+        bad.push(`${what} 일 때 던졌다 — ${err.message}`);
+      }
+    }
+    // 저장하는 쪽이 아예 없어도 안 던진다.
+    for (const nothing of [null, undefined, {}]) {
+      try {
+        if (nextMode(nothing, "light") !== "dark") bad.push(`저장하는 쪽이 ${String(nothing)} 일 때 뒤집기가 안 된다`);
+      } catch (err) {
+        bad.push(`저장하는 쪽이 ${String(nothing)} 일 때 던졌다 — ${err.message}`);
+      }
+    }
+
+    // 이상한 지금 값에서도 밝은 모드 기준으로 뒤집는다.
+    for (const junk of ["purple", "", null, undefined, 7]) {
+      const s = fakeStorage();
+      if (nextMode(modeStore(s), junk) !== "dark") bad.push(`지금 값이 ${String(junk)} 일 때 dark 로 안 간다`);
+    }
+
+    out(
+      bad.length
+        ? bad.slice(0, 8).join("\n")
+        : "왕복이 맞고 이상한 값 15가지를 안 믿는다 · 뒤집기와 저장이 한 동작이라 순서를 틀릴 수 없다",
+    );
     return bad.length === 0;
   },
 
@@ -207,8 +257,25 @@ const GATES = {
 
     if (light.next !== "dark") bad.push(`밝은 모드의 다음이 ${light.next}`);
     if (dark.next !== "light") bad.push(`어두운 모드의 다음이 ${dark.next}`);
-    if (light.pressed !== false) bad.push(`밝은 모드의 pressed 가 ${light.pressed}`);
-    if (dark.pressed !== true) bad.push(`어두운 모드의 pressed 가 ${dark.pressed}`);
+    if (light.now !== "light") bad.push(`밝은 모드의 now 가 ${light.now}`);
+    if (dark.now !== "dark") bad.push(`어두운 모드의 now 가 ${dark.now}`);
+    /*
+     * **읽어 주는 말이 지금과 갈 곳을 둘 다 담아야 한다.**
+     *
+     * 보이는 글자는 **갈 곳**만 말한다. 그것만 읽어 주면 화면을 못 보는 사람은 지금이
+     * 어디인지 알 수 없다. `aria-pressed` 로 상태를 붙이면 더 나쁘다 — 그 속성은
+     * "이름이 가리키는 것이 켜져 있다" 는 뜻인데 이름이 갈 곳이라 **거꾸로 읽힌다**
+     * (리뷰 지적). 20단계 엔진 토글과 같은 방식으로 맞췄다.
+     *
+     * **보이는 글자를 그대로 담아야** 음성으로 조작하는 사람이 눈에 보이는 대로 말해서
+     * 누를 수 있다(WCAG 2.5.3).
+     */
+    for (const [name, view, nowWord] of [["밝은", light, "밝은"], ["어두운", dark, "어두운"]]) {
+      const speech = String(view.speech ?? "");
+      if (!speech.includes(view.label)) bad.push(`${name} 모드: 읽어 주는 말이 보이는 글자를 안 담는다 (${speech})`);
+      if (!speech.includes(nowWord)) bad.push(`${name} 모드: 읽어 주는 말이 지금 모드를 안 말한다 (${speech})`);
+    }
+    if (light.speech === dark.speech) bad.push("두 모드의 읽어 주는 말이 같다");
     // 라벨은 갈 곳을 말한다. "어두운" 이라고만 적혀 있으면 지금인지 갈 곳인지 모른다.
     if (!String(light.label).includes("어두운")) bad.push(`밝은 모드 라벨이 갈 곳을 안 말한다 (${light.label})`);
     if (!String(dark.label).includes("밝은")) bad.push(`어두운 모드 라벨이 갈 곳을 안 말한다 (${dark.label})`);
@@ -217,8 +284,8 @@ const GATES = {
     // 모르는 값은 밝은 모드로 다룬다 — 저장값이 손상됐을 때 버튼이 이상해지지 않게.
     for (const junk of ["purple", "", null, undefined, 7, ["dark"]]) {
       const got = modeToggle(junk);
-      if (got.next !== "dark" || got.pressed !== false) {
-        bad.push(`${String(junk)} 를 ${got.next}/${got.pressed} 로 다룬다 (밝은 모드여야 한다)`);
+      if (got.next !== "dark" || got.now !== "light") {
+        bad.push(`${String(junk)} 를 ${got.now}→${got.next} 로 다룬다 (밝은 모드여야 한다)`);
       }
     }
 
@@ -237,20 +304,34 @@ const GATES = {
     for (const mode of MODES) {
       const btn = document.createElement("button");
       const view = applyModeButton(btn, mode);
-      if (btn.getAttribute("aria-pressed") !== String(view.pressed)) {
-        bad.push(`${mode}: aria-pressed 가 ${btn.getAttribute("aria-pressed")} (${view.pressed} 여야 한다)`);
-      }
       if (btn.textContent !== view.label) bad.push(`${mode}: 글자가 "${btn.textContent}" (${view.label} 여야 한다)`);
       if (!btn.textContent) bad.push(`${mode}: 버튼에 글자가 없다`);
+      if (btn.getAttribute("aria-label") !== view.speech) {
+        bad.push(`${mode}: 읽어 주는 말이 "${btn.getAttribute("aria-label")}"`);
+      }
+      // 눈으로 보는 상태 표시가 붙는 자리. 색만으로 상태를 알리지 않기 위한 것이다.
+      if (btn.getAttribute("data-mode") !== mode) bad.push(`${mode}: data-mode 가 ${btn.getAttribute("data-mode")}`);
+      /*
+       * **`aria-pressed` 를 안 붙인다.** 이름이 갈 곳을 말하는데 그것을 붙이면
+       * 거꾸로 읽힌다 — 15단계부터 있던 모순이고 리뷰가 잡았다.
+       */
+      if (btn.getAttribute("aria-pressed") !== null) {
+        bad.push(`${mode}: aria-pressed 가 붙었다 (${btn.getAttribute("aria-pressed")}) — 이름이 갈 곳을 말하므로 거꾸로 읽힌다`);
+      }
     }
     // 다시 칠하면 덮어써야 한다 — 쌓이면 글자가 두 번 나온다.
     const btn = document.createElement("button");
     applyModeButton(btn, "light");
     applyModeButton(btn, "dark");
     if (btn.textContent !== modeToggle("dark").label) bad.push(`다시 칠했더니 "${btn.textContent}"`);
-    if (btn.getAttribute("aria-pressed") !== "true") bad.push("다시 칠했는데 aria-pressed 가 안 바뀐다");
+    if (btn.getAttribute("data-mode") !== "dark") bad.push("다시 칠했는데 data-mode 가 안 바뀐다");
+    if (btn.getAttribute("aria-label") !== modeToggle("dark").speech) bad.push("다시 칠했는데 읽어 주는 말이 안 바뀐다");
 
-    out(bad.length ? bad.slice(0, 8).join("\n") : "토글이 지금 모드를 정직하게 보이고 갈 곳을 말한다 · 버튼에 실제로 칠해진다");
+    out(
+      bad.length
+        ? bad.slice(0, 8).join("\n")
+        : "토글이 갈 곳을 보이고 읽어 주는 말이 지금까지 담는다 · 버튼에 실제로 칠해진다 · aria-pressed 는 안 붙는다",
+    );
     return bad.length === 0;
   },
 
@@ -266,13 +347,37 @@ const GATES = {
     const js = stripComments(read("public/app.js"));
 
     if (!/modeStore\s*\(/.test(js)) bad.push("app.js 가 modeStore 를 안 쓴다 — 저장이 화면에 안 닿는다");
-    if (!/modeToggle\s*\(/.test(js)) bad.push("app.js 가 modeToggle 을 안 쓴다 — 버튼이 모드를 거짓말할 수 있다");
     // 버튼에 칠하는 것도 그 함수를 거쳐야 한다. 화면이 직접 적으면 두 곳이 갈라진다.
     const paints = [...js.matchAll(/applyModeButton\s*\(/g)].length;
     if (paints < 2) bad.push(`applyModeButton 을 ${paints}번 부른다 — 만들 때와 누를 때 둘 다 필요하다`);
     if (/modeBtn\.textContent\s*=/.test(js)) bad.push("화면이 버튼 글자를 직접 적는다 — applyModeButton 을 거쳐야 한다");
+    if (/modeBtn\.setAttribute\(\s*"aria-/.test(js)) bad.push("화면이 읽어 줄 말을 직접 적는다 — applyModeButton 을 거쳐야 한다");
+    /*
+     * **눈으로 보는 상태 표시가 살아 있어야 한다.** 색만으로 상태를 알리지 않는다는 규칙이
+     * `aria-pressed` 훅에 걸려 있었는데, 그 속성을 걷어내면서 `data-mode` 로 옮겼다.
+     * CSS 가 안 따라오면 **어느 모드인지 눈으로 알 방법이 사라진다.**
+     */
+    const css = read("public/app.css");
+    /*
+     * **두 규칙을 따로 본다.** 하나만 보면 절반이 깨져도 통과한다(변형으로 확인) —
+     * 테두리 색만 바뀌고 사각형이 안 채워지면 **색만으로 상태를 알리는 것**이 되어,
+     * 색을 구분하기 어려운 사람에게 어느 모드인지 안 보인다. 그것이 이 저장소가
+     * `::before` 사각형을 둔 이유다.
+     */
+    if (!/\.expand__mode-toggle\[data-mode="dark"\]\s*\{/.test(css)) {
+      bad.push("CSS 가 data-mode 로 상태를 안 보인다 — 어느 모드인지 눈으로 알 수 없다");
+    }
+    if (!/\.expand__mode-toggle\[data-mode="dark"\]::before\s*\{/.test(css)) {
+      bad.push("채워진 사각형이 data-mode 를 안 따른다 — 색만으로 상태를 알리게 된다");
+    }
+    if (/\.expand__mode-toggle\[aria-pressed/.test(css)) bad.push("CSS 가 아직 aria-pressed 에 기댄다");
     if (!/\.read\s*\(\)/.test(js)) bad.push("app.js 가 저장된 모드를 안 읽는다");
-    if (!/\.write\s*\(/.test(js)) bad.push("app.js 가 바꾼 모드를 안 쓴다 — 새로고침하면 도로 풀린다");
+    /*
+     * **뒤집기와 저장을 화면이 따로 하지 않는다.** 따로 하면 순서를 틀릴 수 있고, 그 고장은
+     * 새로고침해야 드러난다. `nextMode` 가 둘을 묶고 `S23-G2` 가 그것을 직접 부른다.
+     */
+    if (!/nextMode\s*\(/.test(js)) bad.push("app.js 가 nextMode 를 안 쓴다 — 뒤집기와 저장이 두 동작이다");
+    if (/modes\.write\s*\(/.test(js)) bad.push("화면이 저장을 직접 부른다 — nextMode 를 거쳐야 순서를 틀릴 수 없다");
 
     /*
      * **모드 상태는 여전히 카드(펼침 영역)마다 따로여야 한다.** 그것이 원래 결정의 값이고,

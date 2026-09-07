@@ -1495,7 +1495,10 @@ a.action--primary:hover {
 
 /* 보기 방식을 바꾸는 버튼이지 내용을 여는 버튼이 아니다. 그래서 펼치기(.expand__toggle)보다
    물러서고, 나머지 보기(.expand__more-toggle)와는 같은 무게로 둔다 - 둘 다 보조 조작이다.
-   눌린 상태는 색이 아니라 aria-pressed 로 말한다(색만으로 상태를 알리지 않는다). */
+   지금 모드는 색이 아니라 채워진 사각형으로 말한다(색만으로 상태를 알리지 않는다).
+   **`aria-pressed` 가 아니라 `data-mode` 를 훅으로 쓴다** — 이 버튼의 이름이 갈 곳을
+   말하므로 `aria-pressed` 를 붙이면 화면을 못 보는 사람에게 거꾸로 읽힌다(23단계).
+   읽어 주는 말은 `aria-label` 이 따로 한다. */
 /* 재질 배정 출처. 구조 선택 배지(.expand__note)와 **줄을 나눈다** — 둘은 서로 다른 호출이고
    한쪽만 실패할 수 있다. 한 줄에 붙이면 "LLM 이 고름" 이 무엇에 대한 말인지 흐려진다. */
 .expand__finish-note {
@@ -1539,11 +1542,11 @@ a.action--primary:hover {
   border-radius: 2px;
   background: transparent;
 }
-.expand__mode-toggle[aria-pressed="true"] {
+.expand__mode-toggle[data-mode="dark"] {
   border-color: var(--accent);
   color: var(--accent-ink);
 }
-.expand__mode-toggle[aria-pressed="true"]::before {
+.expand__mode-toggle[data-mode="dark"]::before {
   background: currentColor;
 }
 .expand__mode-toggle:hover {

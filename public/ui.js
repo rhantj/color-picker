@@ -574,11 +574,42 @@ function defaultStorage() {
 export function modeToggle(mode) {
   const now = asMode(mode);
   const next = now === "dark" ? "light" : "dark";
+  const label = next === "dark" ? "어두운 배경으로 보기" : "밝은 배경으로 보기";
   return {
+    now,
     next,
-    pressed: now === "dark",
-    label: next === "dark" ? "어두운 배경으로 보기" : "밝은 배경으로 보기",
+    label,
+    // 지금과 갈 곳을 함께 말한다. 아래 주석 참조.
+    speech: `지금 ${now === "dark" ? "어두운" : "밝은"} 배경 · ${label}`,
   };
+}
+
+/**
+ * 모드를 뒤집고 **그것을 기본으로 저장한다.** 새 모드를 돌려준다.
+ *
+ * **둘을 한 동작으로 묶은 이유는 순서를 틀릴 수 있기 때문이다.** 화면이 이렇게 적고 있었다:
+ *
+ * ```js
+ * mode = modeToggle(mode).next;   // 먼저 바꾸고
+ * modes.write(mode);              // 그다음 저장
+ * ```
+ *
+ * 두 줄을 맞바꾸면 **옛 모드가 저장된다.** 그런데 그 고장은 **그 자리에서 안 보인다** —
+ * 버튼도 색도 새 모드로 제대로 바뀐다. **새로고침해야 드러난다**: 어둡게 바꿔 놓고
+ * 다시 열면 밝은 모드다. 23단계가 하려던 일이 통째로 무효가 되는데 아무 신호가 없다.
+ * (리뷰가 변형으로 재현했고, 그때 여섯 게이트가 전부 통과했다.)
+ *
+ * **정적 검사로 순서를 재려 하지 않는다.** 그건 표기를 지키는 것이지 동작을 지키는 것이
+ * 아니다 — 이 저장소가 그것으로 세 번 뚫렸다. **틀릴 순서 자체를 없앤다.**
+ * 22단계에서 이름표를 인자로 바꾼 것과 같은 처방이다.
+ *
+ * @param {{write:(mode:string)=>void}} store `modeStore()` 가 만든 것
+ * @param {string} current 지금 모드
+ */
+export function nextMode(store, current) {
+  const next = modeToggle(current).next;
+  store?.write?.(next);
+  return next;
 }
 
 /**
@@ -590,10 +621,29 @@ export function modeToggle(mode) {
  *
  * 함수로 빼면 게이트가 **가짜 버튼에 직접 칠해 보고** 확인한다. 화면 코드는 정적 검사밖에
  * 못 하는데, 정적 검사는 "처음에 칠했는가" 를 못 본다.
+ *
+ * **`aria-pressed` 를 안 쓴다. 15단계부터 있던 모순을 여기서 고친다.**
+ *
+ * `aria-pressed` 는 **버튼 이름이 가리키는 것이 켜져 있다**는 뜻이다. 그런데 이 버튼의
+ * 이름(=보이는 글자)은 **갈 곳**을 말한다. 어두운 모드일 때 둘을 합치면 화면을 못 보는
+ * 사람에게 이렇게 읽힌다:
+ *
+ *     "밝은 배경으로 보기, 버튼, 눌림"   →  밝은 배경이 켜져 있다는 뜻이 된다. 거꾸로다.
+ *
+ * 이름을 고정값(`"어두운 배경"`)으로 바꾸면 `aria-pressed` 는 맞아지지만, 이번에는
+ * **보이는 글자와 이름이 달라진다** — 음성으로 조작하는 사람은 눈에 보이는 대로 말해서
+ * 버튼을 누르므로 그 방법이 막힌다(WCAG 2.5.3).
+ *
+ * 그래서 20단계 엔진 토글과 같은 방식으로 간다 — **`aria-label` 이 지금과 갈 곳을 함께
+ * 말하고**, 그 안에 보이는 글자가 그대로 들어 있다. 이제 이 앱의 두 토글이 서로 같다.
+ *
+ * **눈으로 보는 상태 표시는 `data-mode` 로 옮겼다.** 색만으로 상태를 알리지 않는다는
+ * 규칙(채워진 사각형)은 그대로다.
  */
 export function applyModeButton(button, mode) {
   const view = modeToggle(mode);
-  button.setAttribute("aria-pressed", String(view.pressed));
+  button.setAttribute("aria-label", view.speech);
+  button.setAttribute("data-mode", view.now);
   button.textContent = view.label;
   return view;
 }
@@ -870,10 +920,12 @@ export async function refreshRuntime(attempt = 0, onStage) {
  * "유니티 표기로 보기" 만 들리고 지금이 어디인지는 모른다. 그래서 `speech` 가 **지금과 갈
  * 곳을 함께** 말한다(`aria-label`).
  *
- * **`aria-pressed` 를 안 쓴다.** 15단계 모드 토글은 그것을 쓰지만 거기는 "어두운 모드가
- * 켜졌는가" 라는 이진 상태다. 여기는 **둘 사이를 오가는 전환**이라 눌림/안 눌림이 언리얼·
- * 유니티에 대응되지 않는다 — 읽어 주면 오히려 틀린 말이 된다. (리뷰가 같은 자리를 지적했고,
- * 상태 표시가 빠졌다는 지적은 맞지만 그 수단은 이쪽이 맞다고 봤다.)
+ * **`aria-pressed` 를 안 쓴다.** 눌림/안 눌림이 언리얼·유니티에 대응되지 않아서다 —
+ * 읽어 주면 오히려 틀린 말이 된다.
+ *
+ * 처음엔 여기에 *"15단계 모드 토글은 그것을 쓰지만 거기는 이진 상태라 맞다"* 고 적었는데
+ * **틀렸다.** 그 버튼도 라벨이 갈 곳을 말하므로 `aria-pressed` 와 합치면 같은 모순이 난다
+ * (리뷰가 잡았다). 23단계에서 그쪽도 이 방식으로 맞췄다 — **두 토글이 서로 같다.**
  *
  * **`speech` 는 보이는 글자를 그대로 포함한다.** 음성으로 조작하는 사람은 눈에 보이는 것을
  * 말해서 버튼을 누르므로, 라벨이 보이는 글자를 안 담으면 그 방법이 막힌다.

@@ -1,6 +1,6 @@
 // 홈 화면. 렌더 조각은 ui.js 가 세 화면과 공유한다.
 
-import { api, applyModeButton, diagnosisCard, el, finishEditing, finishOverrides, modeStore, modeToggle, paletteCard, refreshRuntime, structureCard } from "./ui.js";
+import { api, applyModeButton, diagnosisCard, el, finishEditing, finishOverrides, modeStore, nextMode, paletteCard, refreshRuntime, structureCard } from "./ui.js";
 
 const form = document.getElementById("search-form");
 const input = document.getElementById("q");
@@ -261,9 +261,9 @@ function expansionSection(seedId, query) {
        */
       applyModeButton(modeBtn, mode);
       modeBtn.addEventListener("click", () => {
-        mode = modeToggle(mode).next;
-        // 마지막으로 고른 것이 다음번 기본이 된다. 별도 버튼을 만들면 두 번 눌러야 한다.
-        modes.write(mode);
+        // 뒤집기와 저장이 한 동작이다 — 두 줄로 나누면 순서를 틀릴 수 있고, 그 고장은
+        // 새로고침해야 드러난다(리뷰가 재현). 마지막으로 고른 것이 다음번 기본이 된다.
+        mode = nextMode(modes, mode);
         applyModeButton(modeBtn, mode);
         // **다시 그리기 전에 포커스를 이 버튼으로 확정한다.** redraw 가 격자를 통째로 갈아서,
         // 카드 안 비율 슬라이더에 포커스가 있었다면 그 요소가 DOM 에서 사라지고 포커스가 body 로
