@@ -11,7 +11,7 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { chroma } from "../public/color.js";
+import { chroma, contrast } from "../public/color.js";
 
 const CATALOG_PATH = fileURLToPath(new URL("../data/structures.json", import.meta.url));
 
@@ -199,13 +199,78 @@ function splitSeed(colors) {
    각 규칙은 {ground, accent} 의 HSL 을 받아 [{role, hsl}] 을 돌려준다.
    역할 이름(바탕·본문·강조)은 "디자인 토큰은 톤 축으로 먼저 짠다"(4절)의 자리 이름이다. */
 
+/* ── 읽힐 때까지 채도를 뺀다 (24단계) ────────────────────────
+   **HSL 명도는 지각 휘도가 아니다.** 같은 앵커에 앉혀도 색상에 따라 휘도가 6배 넘게 갈린다 —
+   l=0.5 에서 노랑은 0.510, 파랑은 0.081 이다(실측). 그래서 앵커만으로는 "본문이 바탕 위에서
+   읽힌다" 를 보장할 수 없다.
+
+   **앵커 자체가 못 닿는 경우도 있었다.** 순수 회색으로 계산해도 `light(0.93)` ↔ `mid(0.5)` 는
+   최대 3.37:1 이라 **어떤 색으로도 4.5 에 못 닿는다.** 톤온톤의 본문이 거기 있었고,
+   **씨앗 40 × 모드 2 = 80건 중 62건이 읽히지 않았다.** 본문을 `lower` 로 내린 것이 그
+   때문이다(회색 기준 6.67:1).
+
+   그러고도 남는 것이 있다 — 청록·노랑·주황처럼 **휘도가 높은 색상**은 같은 앵커에서도 밝다.
+   그때만 채도를 뺀다. **회색 쪽으로 가면 반드시 목표에 닿는다**(회색이 앵커 간격만큼의 대비를
+   내므로). 80건 중 **9건만 손대고 71건은 그대로다**(실측).
+
+   **문턱을 여기서 정하지 않는다.** 4.5:1 은 WCAG 2.2 의 일반 크기 글자 기준이고 `[문헌]`,
+   이 저장소가 스와치 글자색에 이미 쓰던 값이다(S2-G5·S13-G6).
+
+   **채도를 빼는 것이 이 구조의 성격을 배신하지 않는다.** 톤온톤의 설명이 "통일·안정,
+   차분한 깊이" 이고, value-scale 의 주석이 이미 같은 것을 말한다 —
+   "채도를 낮게 묶어야 단계가 명도로만 읽힌다."
+
+   S24-G1 이 이 보장을 검사한다. */
+const TEXT_CONTRAST = 4.5;
+
+/**
+ * 이 색이 바탕 위에서 읽히게 만든다. **읽히면 손대지 않는다.**
+ *
+ * 색상은 그대로 두고 채도만 뺀다 — 씨앗의 색을 잃지 않기 위해서다. 명도도 안 건드린다.
+ * 앵커가 정한 단계를 흐트러뜨리면 `S11-G7` 이 지키던 것이 무너진다.
+ *
+ * 이분 탐색 24회는 **결정적**이다(`S11-G3`). 채도 정밀도가 2^-24 라 헥스 반올림보다 촘촘하다.
+ */
+function readable(hsl, groundHex) {
+  const at = (s) => hslToHex({ ...hsl, s });
+  if (contrast(at(hsl.s), groundHex) >= TEXT_CONTRAST) return hsl;
+  // 회색으로도 못 닿으면 회색이 최선이다. 앵커가 그만큼 안 벌어졌다는 뜻이고 S24-G1 이 운다.
+  if (contrast(at(0), groundHex) < TEXT_CONTRAST) return { ...hsl, s: 0 };
+
+  let lo = 0;
+  let hi = hsl.s;
+  for (let i = 0; i < 24; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (contrast(at(mid), groundHex) >= TEXT_CONTRAST) lo = mid;
+    else hi = mid;
+  }
+  return { ...hsl, s: lo };
+}
+
 const RULES = {
-  // 색상 고정, 명도만 세로로. 세 색의 h 가 모두 같아야 이름값을 한다(S11-G6).
-  "tone-on-tone": ({ accent, step }) => [
-    { role: "바탕", hsl: step(accent, "light", { k: 0.35 }) },
-    { role: "본문", hsl: step(accent, "mid") },
-    { role: "강조", hsl: step(accent, "dark", { k: 0.8 }) },
-  ],
+  /*
+   * 색상 고정, 명도만 세로로. 세 색의 h 가 모두 같아야 이름값을 한다(S11-G6).
+   *
+   * **본문이 `mid` 에 있었고, 그 자리는 읽힐 수 없는 자리였다(24단계).** 바탕이 `light`(0.93)
+   * 인데 `mid`(0.5)와의 대비는 **순수 회색으로 계산해도 최대 3.37:1** 이라 어떤 색으로도
+   * 4.5 에 못 닿는다. 씨앗 40 × 모드 2 = 80건 중 62건이 읽히지 않았다.
+   *
+   * `value-scale` 은 같은 것을 약속하고도 0건이었다 — 그쪽 본문이 `lower` 에 있기 때문이다.
+   * **대조군이 있으니 "이 기법은 원래 그렇다" 가 아니다.** 카탈로그도 이 구조를
+   * *"바탕부터 본문까지 한 색으로 덮을 때 쓴다"* 고 적어 글자 올릴 자리라고 스스로 말한다.
+   *
+   * `lower` 로 내리면 명도 단계는 0.93 → 0.32 → 0.15 다. 인접 간격이 0.61·0.17 로
+   * `S11-G7`(최소 0.15)을 지킨다.
+   */
+  "tone-on-tone": ({ accent, step }) => {
+    const ground = step(accent, "light", { k: 0.35 });
+    return [
+      { role: "바탕", hsl: ground },
+      // 앵커만으로는 색상에 따라 못 닿는다. 그때만 채도를 뺀다 — 위 `readable` 주석 참조.
+      { role: "본문", hsl: readable(step(accent, "lower"), hslToHex(ground)) },
+      { role: "강조", hsl: step(accent, "dark", { k: 0.8 }) },
+    ];
+  },
 
   // 톤 좌표를 고정하고 색상만 가로로. 두 씨앗의 톤을 평균 내 같은 자리에 앉힌다.
   // 씨앗의 색상 간격이 좁으면 메울 사이가 없으므로 그때만 ±40 으로 벌린다.
@@ -256,10 +321,17 @@ const RULES = {
   "value-scale": ({ accent, step }) => {
     // 스케일은 채도를 낮게 묶어야 단계가 명도로만 읽힌다. 앵커 상한보다 더 조인다.
     const base = { ...accent, s: Math.min(accent.s, 0.35) };
+    const ground = step(base, "light", { k: 0.5 });
     return [
-      { role: "바탕", hsl: step(base, "light", { k: 0.5 }) },
+      { role: "바탕", hsl: ground },
       { role: "면", hsl: step(base, "upper") },
-      { role: "본문", hsl: step(base, "lower") },
+      /*
+       * **오늘은 아무것도 안 바꾼다** — 코퍼스 16쌍과 씨앗 풀 24쌍을 합친 40씨앗 × 2모드
+       * 80건 전부에서 이미 4.71:1 이상이라 채도를 한 번도 안 뺀다(실측). 그래도 거는 것은
+       * **약속이 구조에 붙어 있지 씨앗 목록에 붙어 있지 않기 때문**이다 — 씨앗이 더 늘거나
+       * 앵커를 조정하면 여기도 못 닿는 색이 온다. S24-G1 이 40씨앗 전부를 검사한다.
+       */
+      { role: "본문", hsl: readable(step(base, "lower"), hslToHex(ground)) },
       { role: "강조", hsl: step(base, "dark") },
     ];
   },
