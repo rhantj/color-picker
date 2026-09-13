@@ -23,7 +23,7 @@ import { buildVocabulary, expandTerms } from "./vocabulary.js";
 import { indexText as paletteText, embedText as paletteEmbedText } from "./palettes.js";
 import { indexText as diagnosticText, embedText as diagnosticEmbedText } from "./diagnostics.js";
 import { embedQuery, similarities, status as embedStatus, prepare as prepareEmbeddings, EMBED_MODEL } from "./embed.js";
-import { agrees, decide, fuse } from "./hybrid.js";
+import { agrees, decide, fuse, DISAGREE_BM25_WEIGHT, DISTRUST_MAX_WHOLE } from "./hybrid.js";
 import { relationVocabulary } from "./bridge.js";
 import { corpusPath } from "./corpus-paths.js";
 
@@ -161,8 +161,8 @@ export function createPipeline() {
         const diagnosisWhole = diagnosticHits[0]?.wholeMatches ?? 0;
         const takeDiagnosis = diagnosisOk && (!paletteOk || diagnosisWhole > paletteWhole);
         stage1 = takeDiagnosis
-          ? { route: "diagnosis", top: diagnosticHits[0].doc.id, paletteHits: [], diagnosticHits }
-          : { route: "palette", top: paletteHits[0].doc.id, paletteHits, diagnosticHits: [] };
+          ? { route: "diagnosis", top: diagnosticHits[0].doc.id, whole: diagnosisWhole, paletteHits: [], diagnosticHits }
+          : { route: "palette", top: paletteHits[0].doc.id, whole: paletteWhole, paletteHits, diagnosticHits: [] };
       }
 
       // 임베딩 — 확신 후보가 있으면 짧은 예산, 없으면 긴 예산. 준비 안 됐으면 바로 사유만 남는다.
@@ -195,12 +195,12 @@ export function createPipeline() {
       const base = { stage: 1, route: "none", confident: false, paletteHits, diagnosticHits, searchMs, hybrid: null, hybridError, usedLlm: false };
 
       // 3단계 — 결합 재순위. 임베딩이 없으면 여기를 못 하고 바로 2단계로 간다.
-      const rerank = (pHits, dHits) => {
+      const rerank = (pHits, dHits, { bm25Weight = 1 } = {}) => {
         const bm25 = [
           ...pHits.map((h) => ({ id: h.doc.id, kind: "palette" })),
           ...dHits.map((h) => ({ id: h.doc.id, kind: "diagnosis" })),
         ];
-        const fused = fuse(bm25, sims).filter((f) => byId.has(f.id));
+        const fused = fuse(bm25, sims, { bm25Weight }).filter((f) => byId.has(f.id));
         const verdict = decide(fused);
         const pick = (kind, n) =>
           fused
@@ -220,7 +220,13 @@ export function createPipeline() {
 
       let first = null; // 재작성 전 결합 결과. 재작성이 실패하면 이것을 그대로 돌려준다(두 번 계산하지 않는다)
       if (sims.length > 0) {
-        first = rerank(paletteHits, diagnosticHits);
+        // BM25 가 확신했는데 임베딩 1위와 달랐고(stage1 이 있는데 여기 왔다) 그 확신이 흔한 어절 하나에서 왔다면
+        // 그 순위는 안 믿는다(28단계 · E1). 어절 둘 이상이 통째로 맞은 확신은 그대로 믿는다.
+        // **임베딩 순위에 아예 없는 문서는 "어긋난" 것이 아니라 "아직 모르는" 것이다** — 재적재 직후 옛 벡터 창의
+        // 새 문서가 그렇다. 그때 BM25 를 버리면 방금 더한 문서가 결과에서 사라진다(S28-G4, 리뷰 지적).
+        const known = stage1 !== null && sims.some((x) => x.id === stage1.top);
+        const distrust = known && stage1.whole <= DISTRUST_MAX_WHOLE;
+        first = rerank(paletteHits, diagnosticHits, { bm25Weight: distrust ? DISAGREE_BM25_WEIGHT : 1 });
         if (first.confident || !allowRewrite) return { ...base, ...first, stage: 3, searchMs: ms(started) };
       } else if (!allowRewrite) {
         return base;
