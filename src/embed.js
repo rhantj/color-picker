@@ -21,6 +21,11 @@ const BASE = `http://${HOST}`;
 export const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL ?? "bge-m3";
 /** 저신뢰 경로의 예산. 처음 적재 때 7초까지 봤다 [실측]. 확신 경로는 호출부가 더 짧게 준다. */
 export const EMBED_TIMEOUT_MS = Number(process.env.EMBED_TIMEOUT_MS ?? 8000);
+/**
+ * 모델을 GPU 에 붙들어 두는 시간. 없으면 Ollama 기본 5분 뒤 내려가고 다음 질의가 재적재(1855·2198ms [실측])를 치러
+ * 확신 경로 예산(700ms)에 걸린다 — 26단계부터 보인 "2.2초 튐" 의 원인이다(30단계 · E3). rewrite.js 의 채팅 워밍업과 같은 값.
+ */
+export const EMBED_KEEP_ALIVE = "30m";
 /** 코퍼스 34건을 한 번에 벡터화하는 예산. 질의 예산에 묶여 있다 — 질의 예산을 줄이면 이것도 줄어든다(리뷰 지적). 처음 적재 7초보다 넉넉해야 한다. */
 const PREPARE_TIMEOUT_MS = EMBED_TIMEOUT_MS * 4;
 /** unavailable 뒤 다시 확인해 보는 간격. ollama.js 의 STATUS_TTL_MS 와 같은 뜻이다. */
@@ -92,7 +97,7 @@ async function callEmbed(input, timeoutMs) {
     method: "POST",
     headers: { "content-type": "application/json" },
     signal: AbortSignal.timeout(timeoutMs),
-    body: JSON.stringify({ model: EMBED_MODEL, input }),
+    body: JSON.stringify({ model: EMBED_MODEL, input, keep_alive: EMBED_KEEP_ALIVE }),
   });
   let json = null;
   try {
