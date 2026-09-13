@@ -157,7 +157,7 @@ Windows 에서 libuv 어서션이 뜬다" 고 적어 둔 것과 같은 부류다
 
 - D1·D2 닫힘. 게이트 193개 — `S22-G6` 이 네 곳(실제·`GATES.md`·README 선언·README 표)에서
   같은 수를 센다 `[실측]`.
-- **커밋하지 않았다.** 대표님 확인 뒤 커밋한다.
+- **커밋 `a13f9c1` 로 `main` 에 올라갔다** (`stage-25-honest-status` 브랜치, `--ff-only` 머지, 원격 `rhantj/color-picker`). 대표님 확인은 추후에 한다.
 
 ## 다음에 할 일
 
