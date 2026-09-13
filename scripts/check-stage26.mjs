@@ -10,13 +10,20 @@
 
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const out = (line = "") => process.stdout.write(Buffer.from(line + "\n", "utf8"));
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
+/**
+ * 자식·서버마다 **빈 임시 데이터 폴더**를 준다. 27단계부터 임베딩이 var/embeddings.json 에 캐시되는데,
+ * 기본 폴더를 쓰면 앞 자식이 남긴 캐시를 뒤 자식이 읽어 Ollama 를 안 부르고도 ready 가 된다 — S26-G3 이
+ * 그렇게 헛돌았다 [실측]. 그리고 게이트가 저장소의 var/ 를 더럽힌다.
+ */
+const freshDataDir = () => mkdtempSync(join(tmpdir(), "tonefirst-26-"));
 
 /**
  * **감시할 값을 여기 다시 적는다.** `hybrid.js` 에서 가져오면 그 상수를 바꾸는 순간 게이트가 함께
@@ -158,7 +165,7 @@ async function deadHost() {
 function runChild(code, env, { timeoutMs = 60000 } = {}) {
   const child = spawn(process.execPath, ["--input-type=module", "-e", code], {
     cwd: ROOT,
-    env: { ...process.env, OLLAMA_AUTOSTART: "0", ...env },
+    env: { ...process.env, OLLAMA_AUTOSTART: "0", TONEFIRST_DATA_DIR: freshDataDir(), ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   return new Promise((resolve, reject) => {
@@ -200,7 +207,7 @@ const say = (o) => { console.log("RESULT " + JSON.stringify(o)); };
 function startServer(port, env = {}) {
   const child = spawn(process.execPath, ["server.js"], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", OLLAMA_AUTOSTART: "0", OLLAMA_WARMUP: "0", ...env },
+    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", OLLAMA_AUTOSTART: "0", OLLAMA_WARMUP: "0", TONEFIRST_DATA_DIR: freshDataDir(), ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   return new Promise((resolve, reject) => {

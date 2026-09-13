@@ -2,6 +2,12 @@
 // 3단계 완료 조건 검사기 — Ollama 수명주기(G1~G6, G10) + 의도 분기·재작성(G7~G9).
 //   node scripts/check-stage3.mjs S3-G1
 
+// 서버마다 빈 임시 데이터 폴더를 준다(27단계). 임베딩 캐시가 var/ 에 남게 되면서 게이트가 저장소 var/ 를
+// 더럽히게 됐다(리뷰 지적). 명시적으로 넘긴 TONEFIRST_DATA_DIR 이 있으면 그것이 이긴다(뒤의 ...env).
+import { mkdtempSync as gateMkdtemp } from "node:fs";
+import { tmpdir as gateTmpdir } from "node:os";
+import { join as gateJoin } from "node:path";
+const gateDataDir = () => gateMkdtemp(gateJoin(gateTmpdir(), "tonefirst-gate-"));
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -16,7 +22,7 @@ const LIVE_HOST = process.env.OLLAMA_HOST ?? "127.0.0.1:11434";
 function startServer(port, env = {}) {
   const child = spawn(process.execPath, ["server.js"], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", ...env },
+    env: { ...process.env, TONEFIRST_DATA_DIR: gateDataDir(), PORT: String(port), HOST: "127.0.0.1", ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   return new Promise((resolve, reject) => {
@@ -315,7 +321,7 @@ const gates = {
     const port = 4314;
     const child = spawn(process.execPath, ["server.js"], {
       cwd: ROOT,
-      env: { ...process.env, PORT: String(port), HOST: "127.0.0.1" },
+      env: { ...process.env, TONEFIRST_DATA_DIR: gateDataDir(), PORT: String(port), HOST: "127.0.0.1" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     try {

@@ -13,6 +13,12 @@
 // **자식 프로세스 하나**를 띄워 환경변수를 먼저 세우고 그 안에서 모듈을 불러 온다.
 // check-stage3 이 같은 이유로 같은 모양을 쓴다.
 
+// 서버마다 빈 임시 데이터 폴더를 준다(27단계). 임베딩 캐시가 var/ 에 남게 되면서 게이트가 저장소 var/ 를
+// 더럽히게 됐다(리뷰 지적). 명시적으로 넘긴 TONEFIRST_DATA_DIR 이 있으면 그것이 이긴다(뒤의 ...env).
+import { mkdtempSync as gateMkdtemp } from "node:fs";
+import { tmpdir as gateTmpdir } from "node:os";
+import { join as gateJoin } from "node:path";
+const gateDataDir = () => gateMkdtemp(gateJoin(gateTmpdir(), "tonefirst-gate-"));
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -159,7 +165,7 @@ const say = (o) => { console.log("RESULT " + JSON.stringify(o)); };
 function startServer(port, env = {}) {
   const child = spawn(process.execPath, ["server.js"], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", OLLAMA_AUTOSTART: "0", ...env },
+    env: { ...process.env, TONEFIRST_DATA_DIR: gateDataDir(), PORT: String(port), HOST: "127.0.0.1", OLLAMA_AUTOSTART: "0", ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   return new Promise((resolve, reject) => {

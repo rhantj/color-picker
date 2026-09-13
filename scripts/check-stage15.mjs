@@ -5,6 +5,12 @@
 // **이 파일은 구현보다 먼저 쓰였다.** 다섯 게이트가 전부 실패하는 것을 확인한 뒤에
 // src/expand.js 를 고쳤다. 통과부터 하는 게이트는 무엇을 지키는지 알 수 없다.
 
+// 서버마다 빈 임시 데이터 폴더를 준다(27단계). 임베딩 캐시가 var/ 에 남게 되면서 게이트가 저장소 var/ 를
+// 더럽히게 됐다(리뷰 지적). 명시적으로 넘긴 TONEFIRST_DATA_DIR 이 있으면 그것이 이긴다(뒤의 ...env).
+import { mkdtempSync as gateMkdtemp } from "node:fs";
+import { tmpdir as gateTmpdir } from "node:os";
+import { join as gateJoin } from "node:path";
+const gateDataDir = () => gateMkdtemp(gateJoin(gateTmpdir(), "tonefirst-gate-"));
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -84,7 +90,7 @@ const groundOf = (structure) => structure.colors[0];
 function startServer(port) {
   const child = spawn(process.execPath, ["server.js"], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", OLLAMA_AUTOSTART: "0" },
+    env: { ...process.env, TONEFIRST_DATA_DIR: gateDataDir(), PORT: String(port), HOST: "127.0.0.1", OLLAMA_AUTOSTART: "0" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   return new Promise((resolve, reject) => {

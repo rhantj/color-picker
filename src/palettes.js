@@ -2,10 +2,10 @@
 // "무엇을 색인하는가" 는 검색 품질을 좌우하므로 검색 로직(bm25.js)과 분리해 여기 한 곳에만 둔다.
 
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { buildIndex, search } from "./bm25.js";
+import { corpusPath } from "./corpus-paths.js";
 
-const CORPUS_PATH = fileURLToPath(new URL("../data/palettes.json", import.meta.url));
+const CORPUS_PATH = corpusPath("palettes.json");
 
 export class CorpusError extends Error {}
 

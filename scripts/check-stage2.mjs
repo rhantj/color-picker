@@ -2,6 +2,12 @@
 // 2단계 완료 조건 검사기. 서버를 실제로 띄워 HTTP 로 두드린다.
 //   node scripts/check-stage2.mjs S2-G2
 
+// 서버마다 빈 임시 데이터 폴더를 준다(27단계). 임베딩 캐시가 var/ 에 남게 되면서 게이트가 저장소 var/ 를
+// 더럽히게 됐다(리뷰 지적). 명시적으로 넘긴 TONEFIRST_DATA_DIR 이 있으면 그것이 이긴다(뒤의 ...env).
+import { mkdtempSync as gateMkdtemp } from "node:fs";
+import { tmpdir as gateTmpdir } from "node:os";
+import { join as gateJoin } from "node:path";
+const gateDataDir = () => gateMkdtemp(gateJoin(gateTmpdir(), "tonefirst-gate-"));
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -14,7 +20,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 function startServer() {
   const child = spawn(process.execPath, ["server.js"], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(PORT), HOST: "127.0.0.1" },
+    env: { ...process.env, TONEFIRST_DATA_DIR: gateDataDir(), PORT: String(PORT), HOST: "127.0.0.1" },
     stdio: ["ignore", "pipe", "pipe"],
   });
 

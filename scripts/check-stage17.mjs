@@ -12,6 +12,12 @@
 // 정적 import 로 두면 진짜 포트(11434)를 물고 올라와 이 기계에 Ollama 가 떠 있는지에 따라
 // 게이트 결과가 달라진다 — 그건 검사가 아니라 운이다.
 
+// 서버마다 빈 임시 데이터 폴더를 준다(27단계). 임베딩 캐시가 var/ 에 남게 되면서 게이트가 저장소 var/ 를
+// 더럽히게 됐다(리뷰 지적). 명시적으로 넘긴 TONEFIRST_DATA_DIR 이 있으면 그것이 이긴다(뒤의 ...env).
+import { mkdtempSync as gateMkdtemp } from "node:fs";
+import { tmpdir as gateTmpdir } from "node:os";
+import { join as gateJoin } from "node:path";
+const gateDataDir = () => gateMkdtemp(gateJoin(gateTmpdir(), "tonefirst-gate-"));
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
@@ -166,7 +172,7 @@ async function withoutOllama(fn) {
 function startServer(port, env = {}) {
   const child = spawn(process.execPath, ["server.js"], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", OLLAMA_AUTOSTART: "0", ...env },
+    env: { ...process.env, TONEFIRST_DATA_DIR: gateDataDir(), PORT: String(port), HOST: "127.0.0.1", OLLAMA_AUTOSTART: "0", ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   return new Promise((resolve, reject) => {

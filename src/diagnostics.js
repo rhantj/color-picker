@@ -2,12 +2,12 @@
 // 섞으면 "탁해 보여요" 가 팔레트 설명문의 조각과 경쟁하게 되고, 둘 다 흐려진다.
 
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 import { buildIndex, search } from "./bm25.js";
 import { CorpusError } from "./palettes.js";
+import { corpusPath } from "./corpus-paths.js";
 
-const CORPUS_PATH = fileURLToPath(new URL("../data/diagnostics.json", import.meta.url));
+const CORPUS_PATH = corpusPath("diagnostics.json");
 
 export function loadDiagnostics() {
   let parsed;

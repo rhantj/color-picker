@@ -9,7 +9,7 @@ import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CorpusError } from "./src/palettes.js";
-import { palettesForAxis, relationVocabulary } from "./src/bridge.js";
+import { palettesForAxis } from "./src/bridge.js";
 import { createPipeline } from "./src/pipeline.js";
 import { ensureRunning, refresh as refreshOllama } from "./src/ollama.js";
 import { warmUp } from "./src/rewrite.js";
@@ -41,8 +41,9 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 // 화면의 6단계 사다리는 "이 서버가 실제로 할 수 있는 단계"를 그린다.
 // 재작성은 Ollama 가 준비돼 있을 때만 가능하므로 능력치는 고정값이 아니라 상태에서 계산한다 —
 // 화면이 실제보다 앞서 보이지 않게 하려는 것이다. 개별 질의가 몇 단계에서 끝났는지는 따로 알린다.
-// 3단계는 임베딩이 준비됐을 때, 2단계는 Ollama 가 준비됐을 때만 가능하다.
-const maxStage = (ollamaState, embedState) => (embedState === "ready" ? 3 : ollamaState === "ready" ? 2 : 1);
+// 4단계(온디맨드 재적재)는 임베딩이 준비됐을 때 — 재적재 자체는 늘 가능하므로 3 은 이제 안 나온다.
+// 2단계는 Ollama 가 준비됐을 때만 가능하다.
+const maxStage = (ollamaState, embedState) => (embedState === "ready" ? 4 : ollamaState === "ready" ? 2 : 1);
 
 // 루프백 밖에 바인딩했다면 모델 목록·호스트·오류 원문을 내보내지 않는다.
 // 로컬 도구를 네트워크에 열어 두면 이 응답이 "이 기계에 어떤 모델이 있는가" 를 알려주는 창구가 된다.
@@ -149,11 +150,9 @@ function prepareCorpusEmbeddings() {
   });
 }
 
-// 관계 어휘는 팔레트 코퍼스에서 한 번만 읽는다. 코퍼스는 기동 때 고정된다.
-const relationVocab = relationVocabulary(pipeline.palettes);
-
+// 관계 어휘는 파이프라인이 코퍼스와 함께 다시 만든다(27단계). 여기서 상수로 들면 재적재 뒤 낡는다.
 const shapeDiagnostic = ({ doc, score, matched, wholeMatches }) => {
-  const { hue, tone, matches } = palettesForAxis(doc.axis, pipeline.palettes, relationVocab);
+  const { hue, tone, matches } = palettesForAxis(doc.axis, pipeline.palettes, pipeline.relationVocab);
   return {
     id: doc.id,
     symptom: doc.symptom,
@@ -181,6 +180,7 @@ const shapeBridgePalette = (p) => ({
 });
 
 async function handleSearch(res, params) {
+  pipeline.reloadIfChanged(); // 2초 TTL. 바뀌었으면 이 요청부터 새 코퍼스다(27단계)
   // 서식 문자만 있는 q 는 빈 질의다. 안 거르면 전문 검색이 못 잡고 재작성이 모델을 헛되이 부른다.
   const query = cleanQuery(params.get("q"));
   if (!query) return sendJson(res, 400, { error: "q 가 비어 있다" });
@@ -427,6 +427,7 @@ function handleConversations(res, params) {
 }
 
 async function handleStatus(res) {
+  pipeline.reloadIfChanged();
   // refresh 는 확인만 한다 — 요청이 프로세스 기동을 유발하지 않는다(S3-G5).
   const ollama = await refreshOllama();
   // 임베딩도 확인만 한다 — 쓸 수 없는 상태면 TTL 마다 다시 시도해 살아난 것을 알아챈다(리뷰 지적).
@@ -440,6 +441,10 @@ async function handleStatus(res) {
       : { state: ollama.state, startedByUs: ollama.startedByUs },
     // 같은 경계. 모델명·호스트가 들어간 사유는 루프백에서만.
     embed: LOOPBACK_ONLY ? embed : { state: embed.state, count: embed.count },
+    // 코퍼스 재적재 상태(27단계). 사유에 파일 경로가 들어가므로 같은 경계.
+    corpus: LOOPBACK_ONLY
+      ? pipeline.corpusStatus()
+      : { ...pipeline.corpusStatus(), error: pipeline.corpusStatus().error ? "코퍼스 파일을 읽을 수 없습니다" : null },
   });
 }
 
@@ -457,6 +462,7 @@ async function handleStatus(res) {
  * 둔 것을 버리는 셈이 된다. 파생은 결정적이므로(S11-G3) 여덟을 다 주는 비용이 사실상 없다.
  */
 async function handleExpand(res, params) {
+  pipeline.reloadIfChanged();
   const id = params.get("seed");
   if (id === null || id.trim() === "") return sendJson(res, 400, { error: "seed 가 비어 있다" });
   if (id.length > 60) return sendJson(res, 400, { error: "seed 가 너무 길다" });

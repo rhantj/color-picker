@@ -5,7 +5,14 @@
 //   2. 프로세스를 띄우지 않는다. 기동은 ollama.js 의 몫이고 여기는 HTTP 뿐이다.
 //   3. 사용자 입력은 요청 본문으로만 간다. spawn 에 닿는 경로가 없다(S3-G5).
 //
-// 코퍼스 벡터는 캐시하지 않는다 — 34건이 따뜻할 때 0.5초다 [실측]. 필요가 생기면 그때(스펙 "버린 대안").
+// 코퍼스 벡터는 **내용 해시로 캐시**한다(27단계). sha1(모델 + 문장) 이 키라 문장이 한 글자라도 바뀌면 다시
+// 만들고, 안 바뀌면 Ollama 를 안 부른다. 캐시는 var/embeddings.json 에 남겨 재시작을 넘긴다.
+// 26단계는 캐시 없이 기동 때 전부 만들었다(0.5초) — 코퍼스가 바뀌면 바뀐 문서만 다시 만들려고 들였다.
+
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { cosine } from "./hybrid.js";
 
@@ -19,14 +26,63 @@ const PREPARE_TIMEOUT_MS = EMBED_TIMEOUT_MS * 4;
 /** unavailable 뒤 다시 확인해 보는 간격. ollama.js 의 STATUS_TTL_MS 와 같은 뜻이다. */
 const RETRY_TTL_MS = 5000;
 
+// 캐시 자리. store.js 와 같은 폴더·같은 규칙(임시 파일 → rename, 깨지면 옆으로).
+const DATA_DIR = process.env.TONEFIRST_DATA_DIR || fileURLToPath(new URL("../var/", import.meta.url));
+const CACHE_FILE = "embeddings.json";
+const keyOf = (text) => createHash("sha1").update(`${EMBED_MODEL}\n${text}`).digest("hex");
+
+/** @type {Map<string, number[]>} 해시 → 벡터 */
+let cache = new Map();
+let cacheLoaded = false;
+
+function loadCache() {
+  if (cacheLoaded) return;
+  cacheLoaded = true;
+  const target = join(DATA_DIR, CACHE_FILE);
+  if (!existsSync(target)) return;
+  try {
+    const parsed = JSON.parse(readFileSync(target, "utf8"));
+    // 다른 모델의 캐시는 버린다 — 벡터 공간이 다르다.
+    if (parsed?.model !== EMBED_MODEL || typeof parsed.entries !== "object" || parsed.entries === null) return;
+    for (const [hash, vector] of Object.entries(parsed.entries)) {
+      if (Array.isArray(vector) && vector.every((x) => typeof x === "number")) cache.set(hash, vector);
+    }
+  } catch (err) {
+    // 깨진 캐시로 시작하면 다음 쓰기가 원본을 덮는다. 옆으로 치우고 이유를 남긴다(store.js 와 같은 처방).
+    const aside = `${target}.corrupt-${Date.now()}`;
+    try {
+      renameSync(target, aside);
+      process.stderr.write(Buffer.from(`임베딩 캐시가 깨져 있어 옆으로 옮겼다: ${aside} (${err.message})\n`, "utf8"));
+    } catch {
+      process.stderr.write(Buffer.from(`임베딩 캐시가 깨졌는데 옮기지도 못했다: ${target}\n`, "utf8"));
+    }
+  }
+}
+
+function saveCache() {
+  try {
+    mkdirSync(DATA_DIR, { recursive: true });
+    const target = join(DATA_DIR, CACHE_FILE);
+    const temp = `${target}.tmp`;
+    const dims = cache.size ? cache.values().next().value.length : 0;
+    writeFileSync(temp, JSON.stringify({ model: EMBED_MODEL, dims, entries: Object.fromEntries(cache) }), "utf8");
+    renameSync(temp, target);
+  } catch (err) {
+    // 쓰기 실패는 서비스와 무관하다 — 다음 기동에 다시 만들 뿐이다.
+    process.stderr.write(Buffer.from(`임베딩 캐시를 쓰지 못했다: ${err.message}\n`, "utf8"));
+  }
+}
+
 /** @type {{state:"unknown"|"ready"|"unavailable", detail:string, model:string, count:number}} */
-let current = { state: "unknown", detail: "아직 확인하지 않았다", model: EMBED_MODEL, count: 0 };
+let current = { state: "unknown", detail: "아직 확인하지 않았다", model: EMBED_MODEL, count: 0, cached: 0, embedded: 0 };
 /** @type {{id:string, kind:"palette"|"diagnosis", vector:number[]}[]} */
 let corpus = [];
 /** 마지막으로 prepare 에 넘어온 문서. refresh 가 다시 시도할 때 쓴다. */
 let lastDocs = null;
 let lastTriedAt = 0;
 let preparing = null;
+/** 지금 벡터화 중인 문서 목록. 끝났을 때 lastDocs 와 다르면 한 번 더 돈다 — 진행 중에 코퍼스가 또 바뀐 경우다(리뷰 지적). */
+let runningDocs = null;
 
 export const status = () => ({ ...current });
 
@@ -63,16 +119,38 @@ const reason = (err) => {
 export async function prepare(docs) {
   lastDocs = docs;
   lastTriedAt = Date.now();
-  if (preparing) return preparing; // 단일 비행 — /api/status 가 연달아 와도 벡터화는 한 번만
+  // 단일 비행 — /api/status 가 연달아 와도 벡터화는 한 번만. 다만 진행 중에 **다른** 문서 목록이 오면
+  // 끝난 뒤 그 목록으로 한 번 더 돈다. 안 그러면 두 번째 편집이 조용히 유실되고, 첫 번이 성공으로 끝나
+  // refresh 의 재시도 조건에도 안 걸려 다음 편집 때까지 3단계가 옛 코퍼스 벡터 없이 비활성이다(리뷰 재현).
+  if (preparing) return preparing.then(() => (lastDocs !== runningDocs ? prepare(lastDocs) : status()));
+  runningDocs = docs;
   preparing = (async () => {
     try {
-      const vectors = await callEmbed(docs.map((d) => d.text), PREPARE_TIMEOUT_MS);
-      if (vectors.length !== docs.length) throw new Error(`벡터 ${vectors.length}개, 문서 ${docs.length}개`);
-      corpus = docs.map((d, i) => ({ id: d.id, kind: d.kind, vector: vectors[i] }));
-      current = { ...current, state: "ready", detail: `${HOST} 응답 · ${EMBED_MODEL}`, count: corpus.length };
+      loadCache();
+      const missing = docs.filter((d) => !cache.has(keyOf(d.text)));
+      if (missing.length > 0) {
+        const vectors = await callEmbed(missing.map((d) => d.text), PREPARE_TIMEOUT_MS);
+        if (vectors.length !== missing.length) throw new Error(`벡터 ${vectors.length}개, 문서 ${missing.length}개`);
+        missing.forEach((d, i) => cache.set(keyOf(d.text), vectors[i]));
+      }
+      corpus = docs.map((d) => ({ id: d.id, kind: d.kind, vector: cache.get(keyOf(d.text)) }));
+      // 가지치기 — 현재 문서의 해시만 남긴다. 안 하면 문서를 고칠 때마다 옛 벡터가 쌓인다.
+      const keep = new Set(docs.map((d) => keyOf(d.text)));
+      const before = cache.size;
+      cache = new Map([...cache].filter(([hash]) => keep.has(hash)));
+      // 새로 만든 것이 있거나 가지치기로 줄었을 때 쓴다. 삭제만 하면 missing 이 0 이라 안 쓰던 결함이 있었다(리뷰 지적).
+      if (missing.length > 0 || cache.size !== before) saveCache();
+      current = {
+        ...current,
+        state: "ready",
+        detail: `${HOST} 응답 · ${EMBED_MODEL}`,
+        count: corpus.length,
+        cached: docs.length - missing.length,
+        embedded: missing.length,
+      };
     } catch (err) {
       corpus = [];
-      current = { ...current, state: "unavailable", detail: reason(err), count: 0 };
+      current = { ...current, state: "unavailable", detail: reason(err), count: 0, cached: 0, embedded: 0 };
     }
     return status();
   })().finally(() => {

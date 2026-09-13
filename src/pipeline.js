@@ -4,6 +4,7 @@
 //   3단계: BM25 가 저신뢰이거나 임베딩과 어긋나면, BM25 순위와 코사인 순위를 결합(RRF)해 다시 고른다.
 //          LLM 을 안 부르고 수십 ms 다. 그래서 2단계보다 **먼저** 돈다.
 //   2단계: 3단계도 저신뢰일 때만 LLM 한 번. 의도를 가르고 검색어를 다시 쓴 뒤 다시 3단계로 고른다.
+//   4단계: 코퍼스 파일이 바뀌면 요청 때 알아채고 그 자리에서 다시 읽는다(27단계). 임베딩은 바뀐 문서만.
 //
 // 실행 순서는 1→3→2 이고 번호는 문서의 비용 사다리를 따른다. 응답의 stage 는 **가장 높이 쓴 칸**이다.
 // 26단계 실측: 코퍼스 어휘와 안 겹치는 질의 18건 중 9건을 1단계가 흔한 어절 하나로 확신해 틀렸다.
@@ -13,14 +14,18 @@
 // 순서를 고정한 이유는 "탁하지 않은 따뜻한 색" 처럼 증상 어휘가 섞인 탐색 질의가 있기 때문이다 —
 // 그런 질의는 팔레트를 찾는 것이므로 팔레트를 먼저 본다.
 
-import { createSearcher } from "./palettes.js";
+import { statSync } from "node:fs";
+
+import { CorpusError, createSearcher } from "./palettes.js";
 import { createDiagnosticSearcher } from "./diagnostics.js";
 import { rewrite } from "./rewrite.js";
 import { buildVocabulary, expandTerms } from "./vocabulary.js";
 import { indexText as paletteText, embedText as paletteEmbedText } from "./palettes.js";
 import { indexText as diagnosticText, embedText as diagnosticEmbedText } from "./diagnostics.js";
-import { embedQuery, similarities, status as embedStatus, EMBED_MODEL } from "./embed.js";
+import { embedQuery, similarities, status as embedStatus, prepare as prepareEmbeddings, EMBED_MODEL } from "./embed.js";
 import { agrees, decide, fuse } from "./hybrid.js";
+import { relationVocabulary } from "./bridge.js";
+import { corpusPath } from "./corpus-paths.js";
 
 const isConfident = (hits) => hits.length > 0 && hits[0].wholeMatches > 0;
 const ms = (start) => Number((Number(process.hrtime.bigint() - start) / 1e6).toFixed(2));
@@ -28,30 +33,107 @@ const ms = (start) => Number((Number(process.hrtime.bigint() - start) / 1e6).toF
 /** 확신 경로의 임베딩 예산. 넘기면 BM25 답을 그대로 쓴다 — S3-G8 의 "1초 미만" 안에 들어야 하므로 1초보다 짧다. [실측] 따뜻할 때 45ms, 튐 2.2초 */
 const FAST_BUDGET_MS = 700;
 
-export function createPipeline() {
+/** 코퍼스 파일 시각 확인 간격(27단계). 안에서는 statSync 도 안 한다. */
+const CORPUS_CHECK_TTL_MS = 2000;
+
+/** 두 파일의 지문. mtime 만 보면 같은 초 안의 두 저장을 놓칠 수 있어 size 도 본다. */
+function fingerprint() {
+  return ["palettes.json", "diagnostics.json"]
+    .map((name) => {
+      const st = statSync(corpusPath(name));
+      return `${name}:${st.mtimeMs}:${st.size}`;
+    })
+    .join("|");
+}
+
+/** 코퍼스를 읽어 검색에 필요한 것을 전부 만든다. 던진다 — 호출부가 옛 것을 지킬지 정한다. */
+function build() {
   const palettes = createSearcher();
   const diagnostics = createDiagnosticSearcher();
-
-  // 재작성어의 붙여쓰기를 되돌리는 데 쓴다. 두 코퍼스의 어절을 모두 담는다.
-  const vocabulary = buildVocabulary([
-    ...palettes.palettes.map(paletteText),
-    ...diagnostics.diagnostics.map(diagnosticText),
-  ]);
-
-  const byId = new Map([
-    ...palettes.palettes.map((p) => [p.id, { doc: p, kind: "palette" }]),
-    ...diagnostics.diagnostics.map((d) => [d.id, { doc: d, kind: "diagnosis" }]),
-  ]);
-
   return {
-    palettes: palettes.palettes,
-    diagnostics: diagnostics.diagnostics,
-    vocabulary,
-    /** 서버가 기동 때 embed.prepare() 에 넘긴다. */
+    palettes,
+    diagnostics,
+    // 재작성어의 붙여쓰기를 되돌리는 데 쓴다. 두 코퍼스의 어절을 모두 담는다.
+    vocabulary: buildVocabulary([...palettes.palettes.map(paletteText), ...diagnostics.diagnostics.map(diagnosticText)]),
+    byId: new Map([
+      ...palettes.palettes.map((p) => [p.id, { doc: p, kind: "palette" }]),
+      ...diagnostics.diagnostics.map((d) => [d.id, { doc: d, kind: "diagnosis" }]),
+    ]),
     embedDocs: [
       ...palettes.palettes.map((p) => ({ id: p.id, kind: "palette", text: paletteEmbedText(p) })),
       ...diagnostics.diagnostics.map((d) => ({ id: d.id, kind: "diagnosis", text: diagnosticEmbedText(d) })),
     ],
+    relationVocab: relationVocabulary(palettes.palettes),
+  };
+}
+
+export function createPipeline() {
+  let state = build(); // 기동 때는 던진다 — 코퍼스 없이 뜨지 않는다(1단계 계약, server.js 가 잡아 exit 1)
+  let seen = fingerprint();
+  let version = 1;
+  let checkedAt = Date.now();
+  let reloadedAt = null;
+  let corpusError = null;
+
+  return {
+    // **살아 있는 참조.** 재적재 뒤에도 호출부가 새 코퍼스를 보게 getter 로 둔다.
+    get palettes() {
+      return state.palettes.palettes;
+    },
+    get diagnostics() {
+      return state.diagnostics.diagnostics;
+    },
+    get vocabulary() {
+      return state.vocabulary;
+    },
+    /** 서버가 기동 때 embed.prepare() 에 넘긴다. */
+    get embedDocs() {
+      return state.embedDocs;
+    },
+    get relationVocab() {
+      return state.relationVocab;
+    },
+
+    corpusStatus: () => ({
+      version,
+      palettes: state.palettes.palettes.length,
+      diagnostics: state.diagnostics.diagnostics.length,
+      checkedAt,
+      reloadedAt,
+      error: corpusError,
+    }),
+
+    /**
+     * 파일이 바뀌었으면 그 자리에서 다시 읽는다(27단계). 던지지 않는다 — 깨진 파일이면 옛 코퍼스를 지키고
+     * 사유만 남긴다. 편집 도중 저장된 반쪽 파일로 서비스가 죽으면 안 된다.
+     * @returns {boolean} 재적재했는가
+     */
+    reloadIfChanged() {
+      if (Date.now() - checkedAt < CORPUS_CHECK_TTL_MS) return false;
+      checkedAt = Date.now();
+      let now;
+      try {
+        now = fingerprint();
+      } catch (err) {
+        corpusError = `코퍼스 파일을 볼 수 없다: ${err.message}`;
+        return false;
+      }
+      if (now === seen) return false;
+      try {
+        state = build();
+        seen = now;
+        version += 1;
+        reloadedAt = Date.now();
+        corpusError = null;
+        // 기다리지 않는다. 끝날 때까지 similarities 는 옛 벡터를 낸다 — resolve 가 모르는 id 를 버린다.
+        prepareEmbeddings(state.embedDocs);
+        return true;
+      } catch (err) {
+        corpusError = err instanceof CorpusError ? err.message : String(err.message ?? err);
+        seen = now; // 같은 깨진 파일을 매번 다시 읽지 않는다. 고쳐지면 지문이 바뀐다
+        return false;
+      }
+    },
 
     /**
      * @returns 항상 결과 객체. 던지지 않는다.
@@ -63,6 +145,7 @@ export function createPipeline() {
      */
     async resolve(query, limit = 3, { allowRewrite = true } = {}) {
       const started = process.hrtime.bigint();
+      const { palettes, diagnostics, vocabulary, byId } = state; // 이 요청 동안은 한 코퍼스만 본다
 
       const paletteHits = palettes.search(query, limit);
       const diagnosticHits = diagnostics.search(query, 2);
@@ -87,7 +170,8 @@ export function createPipeline() {
         embedStatus().state === "ready"
           ? await embedQuery(query, stage1 ? { timeoutMs: FAST_BUDGET_MS } : {})
           : { vector: null, error: `임베딩을 쓸 수 없다 (${embedStatus().detail})`, elapsedMs: 0 };
-      const sims = similarities(q.vector);
+      // 재적재 직후 재임베딩이 끝나기 전엔 옛 코퍼스의 벡터가 온다. 지금 코퍼스에 없는 id 는 버린다(S27-G5).
+      const sims = similarities(q.vector).filter((s) => byId.has(s.id));
       const hybridError = q.error;
 
       // 1단계 — 확신 후보가 있고, 임베딩이 없거나(사유는 남긴다) 동의하면 지금까지와 같다.
@@ -116,7 +200,7 @@ export function createPipeline() {
           ...pHits.map((h) => ({ id: h.doc.id, kind: "palette" })),
           ...dHits.map((h) => ({ id: h.doc.id, kind: "diagnosis" })),
         ];
-        const fused = fuse(bm25, sims);
+        const fused = fuse(bm25, sims).filter((f) => byId.has(f.id));
         const verdict = decide(fused);
         const pick = (kind, n) =>
           fused
