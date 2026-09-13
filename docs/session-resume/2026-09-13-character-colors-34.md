@@ -113,8 +113,7 @@ typescript-reviewer 는 음성 대조를 스스로 했다 — 하의 출처를 `
 
 ## 지금 상태
 
-- 브랜치 `stage-34-character-colors`, 미커밋. 게이트 237개 네 곳 일치(S22-G6).
-- 대표 확인 뒤 커밋 · `main` 에 `--ff-only` 머지.
+- **커밋 `701657e` 로 `main` 에 올라갔다**(`stage-34-character-colors` 브랜치, `--ff-only` 머지, 원격 `rhantj/color-picker`). 게이트 237개 네 곳 일치(S22-G6).
 
 ## 확인 질문
 
