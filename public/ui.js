@@ -826,7 +826,7 @@ function bridgeSection(dx) {
 
   if (bridge?.palettes?.length) {
     const axis = [bridge.hue, bridge.tone].filter(Boolean).join(" + ");
-    box.append(el("h4", "dx__bridge-title", `이 축에 맞는 조합 — ${axis}`));
+    box.append(el("h4", "dx__bridge-title", `이 원인에 맞는 조합 — ${axis}`));
     const list = el("ul", "dx__bridge-list");
     for (const p of bridge.palettes) {
       const item = el("li", "dx__bridge-item");
@@ -849,7 +849,7 @@ function bridgeSection(dx) {
     el(
       "p",
       "dx__bridge-none",
-      "이 축은 조합의 관계(색상각·톤)를 말하지 않습니다. 코퍼스가 가리킬 조합이 없어 넘겨줄 것도 없습니다.",
+      "이 원인은 조합의 관계(색상각·톤)를 말하지 않습니다. 코퍼스가 가리킬 조합이 없어 넘겨줄 것도 없습니다.",
     ),
   );
   return box;
@@ -861,7 +861,7 @@ export function diagnosisCard(dx, rank) {
   head.append(
     el("span", "card__rank", String(rank).padStart(2, "0")),
     el("h3", "dx__symptom", dx.symptom),
-    el("span", "dx__axis", `의심할 축 — ${dx.axis}`),
+    el("span", "dx__axis", `의심할 원인 — ${dx.axis}`),
   );
   root.append(
     head,
