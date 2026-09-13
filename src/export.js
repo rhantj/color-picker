@@ -126,7 +126,7 @@ export function toCss(entries) {
   });
 
   return skippedNote + [
-    "/* 톤먼저 — 저장한 색 조합",
+    "/* Color Picker — 저장한 색 조합",
     "   면적(-area)이 색의 일부입니다. 같은 두 헥스도 비율이 바뀌면 다른 색이 됩니다.",
     "   출처: 와다 산조 『배색사전』 */",
     "",
@@ -143,7 +143,7 @@ export function toJson(entries) {
   const { kept, skipped } = split(entries);
   return JSON.stringify(
     {
-      generatedBy: "톤먼저 (colorpicker)",
+      generatedBy: "Color Picker",
       source: "와다 산조 『배색사전』",
       note: "ratio 는 면적 비율입니다. 같은 두 헥스도 비율이 바뀌면 다른 색이 되므로 함께 씁니다.",
       count: kept.length,
@@ -194,7 +194,7 @@ const ENGINE_SPEC = {
     id: "unreal",
     label: "언리얼 엔진",
     convert: toUnreal,
-    filename: "tonefirst-unreal.json",
+    filename: "color-picker-unreal.json",
     note:
       "언리얼 표기입니다. roughness 는 0이 거울, 1이 완전 무광입니다. " +
       "유니티의 Smoothness 는 방향이 반대(1이 거울)이므로 이 값을 그대로 넣으면 안 됩니다 — " +
@@ -204,7 +204,7 @@ const ENGINE_SPEC = {
     id: "unity",
     label: "유니티",
     convert: toUnity,
-    filename: "tonefirst-unity.json",
+    filename: "color-picker-unity.json",
     note:
       "유니티 표기입니다. smoothness 는 1이 거울, 0이 완전 무광입니다. " +
       "언리얼의 Roughness 는 방향이 반대(0이 거울)이므로 이 값을 그대로 넣으면 안 됩니다 — " +
@@ -294,7 +294,7 @@ export function toEngine(entries, engineId) {
 
   return JSON.stringify(
     {
-      generatedBy: "톤먼저 (colorpicker)",
+      generatedBy: "Color Picker",
       engine: spec.id,
       engineLabel: spec.label,
       note: spec.note,
@@ -318,8 +318,8 @@ export const cssName = (entry) => ({ ...entry, id_: String(entry.paletteId).repl
 const JSON_TYPE = "application/json; charset=utf-8";
 
 export const FORMATS = {
-  css: { build: (entries) => toCss(entries.map(cssName)), type: "text/css; charset=utf-8", filename: "tonefirst-palettes.css" },
-  json: { build: toJson, type: JSON_TYPE, filename: "tonefirst-palettes.json" },
+  css: { build: (entries) => toCss(entries.map(cssName)), type: "text/css; charset=utf-8", filename: "color-picker-palettes.css" },
+  json: { build: toJson, type: JSON_TYPE, filename: "color-picker-palettes.json" },
   // 엔진 형식은 표를 그대로 편다 — 엔진을 더할 때 여기와 ENGINE_SPEC 을 따로 고치지 않게.
   ...Object.fromEntries(
     ENGINE_IDS.map((id) => [

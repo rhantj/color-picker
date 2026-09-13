@@ -620,7 +620,7 @@ const server = createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   process.stdout.write(
     Buffer.from(
-      `톤먼저 · http://${HOST}:${PORT} · 팔레트 ${pipeline.palettes.length}쌍 · 진단 ${pipeline.diagnostics.length}건\n`,
+      `Color Picker · http://${HOST}:${PORT} · 팔레트 ${pipeline.palettes.length}쌍 · 진단 ${pipeline.diagnostics.length}건\n`,
       "utf8",
     ),
   );

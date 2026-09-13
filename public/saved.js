@@ -269,10 +269,10 @@ const noteBox = document.getElementById("export-note");
 
 const FORMAT_LABEL = { css: "CSS 변수", json: "JSON", unreal: "언리얼 엔진", unity: "유니티" };
 const FILENAME = {
-  css: "tonefirst-palettes.css",
-  json: "tonefirst-palettes.json",
-  unreal: "tonefirst-unreal.json",
-  unity: "tonefirst-unity.json",
+  css: "color-picker-palettes.css",
+  json: "color-picker-palettes.json",
+  unreal: "color-picker-unreal.json",
+  unity: "color-picker-unity.json",
 };
 const MIME = { css: "text/css" };
 
@@ -349,7 +349,7 @@ document.getElementById("export-download").addEventListener("click", () => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = FILENAME[shown.format] ?? `tonefirst.${shown.format}`;
+  link.download = FILENAME[shown.format] ?? `color-picker.${shown.format}`;
   document.body.append(link);
   link.click();
   link.remove();
