@@ -74,7 +74,7 @@
 
 ## 지금 상태
 
-- 브랜치 `stage-29-30-aliases-and-embed-keepalive` 에 29·30·31 이 함께 있다. 커밋 전.
+- **커밋 `b37febb` 로 `main` 에 올라갔다** (`stage-29-30-aliases-and-embed-keepalive` 브랜치에 29·30(`e48fec9`)과 함께, `--ff-only` 머지, 원격 `rhantj/color-picker`).
 
 ## 확인 질문
 

@@ -117,7 +117,7 @@ GPU 8GB 를 다른 일과 나눠 쓰기 때문이고, 채팅 모델과 같은 �
 
 ## 지금 상태
 
-- 브랜치 `stage-29-30-aliases-and-embed-keepalive`. 커밋 전.
+- **커밋 `e48fec9` 로 `main` 에 올라갔다** (`stage-29-30-aliases-and-embed-keepalive` 브랜치, `--ff-only` 머지, 원격 `rhantj/color-picker`). 31단계(`b37febb`)와 같은 브랜치다.
 
 ## 다음에 할 일
 
