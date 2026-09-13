@@ -401,6 +401,17 @@ function renderStatus(data, error) {
           : "전문 검색만으로 걸렸습니다. LLM 을 부르지 않았습니다.",
       ),
     );
+  } else if (data.stage === 3) {
+    statusBox.append(
+      el("span", "status__badge", "3단계"),
+      el(
+        "span",
+        "status__text",
+        data.usedLlm
+          ? "전문 검색과 임베딩이 못 잡아 로컬 LLM 이 질문을 다시 썼고, 그 검색어를 임베딩과 결합해 골랐습니다."
+          : "전문 검색만으로는 근거가 어긋나 임베딩과 결합해 다시 골랐습니다. LLM 을 부르지 않았습니다.",
+      ),
+    );
   } else {
     statusBox.append(
       el("span", "status__badge", "2단계"),
@@ -409,7 +420,14 @@ function renderStatus(data, error) {
   }
 
   const count = data.route === "diagnosis" ? data.diagnostics.length : data.results.length;
-  statusBox.append(el("span", "status__timing", `BM25 ${data.elapsedMs}ms · ${count}건`));
+  const timing = [`BM25 ${data.elapsedMs}ms`];
+  if (data.hybrid) timing.push(`임베딩 ${data.hybrid.elapsedMs}ms · 코사인 ${data.hybrid.cosine}`);
+  statusBox.append(el("span", "status__timing", `${timing.join(" · ")} · ${count}건`));
+
+  // 임베딩을 못 썼는데 확신 답을 냈다면 그 사실을 숨기지 않는다 — BM25 만 믿은 답이다.
+  if (data.hybridError && data.confident) {
+    statusBox.append(el("span", "status__timing", `임베딩은 못 썼습니다 — ${data.hybridError}`));
+  }
 
   if (data.rewrite) {
     const strip = el("div", "rewrite");
@@ -470,6 +488,7 @@ async function recordTurn(data) {
     conversationId,
     query: data.query,
     stage: data.stage,
+    usedLlm: data.usedLlm === true,
     route: data.route,
     confident: data.confident,
     topKind: top ? data.route : null,
@@ -523,7 +542,8 @@ for (const chip of document.querySelectorAll("[data-example]")) {
 function showThread(conversation) {
   conversationId = conversation.id;
   threadTitle.textContent = conversation.turns.at(-1)?.query ?? "(빈 대화)";
-  const usedLlm = conversation.turns.filter((t) => t.stage === 2).length;
+  // 26단계 전 턴에는 usedLlm 이 없다 — 그때는 2단계가 곧 LLM 이었다(history.js 와 같은 보정).
+  const usedLlm = conversation.turns.filter((t) => (t.usedLlm === undefined ? t.stage === 2 : t.usedLlm === true)).length;
   threadMeta.textContent = `${conversation.turns.length}턴 · LLM ${usedLlm}회`;
   document.getElementById("thread-open").href = `/history#${conversation.id}`;
   threadBox.hidden = false;

@@ -178,9 +178,12 @@ export function recordTurn(input) {
   const turn = {
     at: now(),
     query,
-    stage: input.stage === 2 ? 2 : 1,
+    // 3단계(임베딩 결합)가 생겼다. 열거값 위조는 여전히 1 로 떨어진다(S4-G5).
+    stage: [1, 2, 3].includes(input.stage) ? input.stage : 1,
     route: VALID_ROUTES.has(input.route) ? input.route : "none",
     confident: input.confident === true,
+    // LLM 을 썼는가는 stage 로 못 센다 — 3단계 뒤에 재작성이 올 수 있다. 따로 받되 불리언만 믿는다.
+    usedLlm: input.usedLlm === true,
     topKind: input.topKind === "diagnosis" ? "diagnosis" : input.topKind === "palette" ? "palette" : null,
     topId: clip(input.topId, 40) || null,
     topLabel: clip(input.topLabel, 80) || null,

@@ -28,6 +28,10 @@ export function loadDiagnostics() {
 export const indexText = (d) =>
   [d.symptom, d.aliases.join(" "), d.axis, d.prescription, d.detail].join(" ");
 
+// 임베딩용 문장. 네 변형(증상+별칭 · +상세 · +처방 · 전체)이 10건에서 전부 7/10 로 같았다 [실측].
+// 가장 짧고 사용자 말투(별칭)와 처방을 함께 담는 것을 고른다.
+export const embedText = (d) => `${d.symptom}. ${d.aliases.join(", ")}. ${d.prescription}`;
+
 export function createDiagnosticSearcher() {
   const diagnostics = loadDiagnostics();
   const index = buildIndex(diagnostics, indexText);

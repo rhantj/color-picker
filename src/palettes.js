@@ -54,6 +54,11 @@ export function indexText(p) {
   ].join(" ");
 }
 
+// 임베딩용 문장. BM25 색인 문장(indexText)과 **다르다** — 색 이름·헥스·유형 라벨을 빼고 뜻이 있는
+// 문장만 남긴다. 실측: 전체 색인 문장으로 임베딩하면 23건 top1 13, 이 문장으로 17 [실측].
+// 헥스와 유형 라벨은 임베딩에 잡음이고, 정확 매칭은 BM25 가 맡는다.
+export const embedText = (p) => `${p.name}. ${p.summary} ${p.impression} ${p.tags.join(" ")}`;
+
 export function createSearcher() {
   const palettes = loadPalettes();
   const index = buildIndex(palettes, indexText);

@@ -64,6 +64,7 @@ Ollama 는 있으면 쓰고 없으면 안 쓴다. 죽어 있어도 검색은 그
 | 검색 | `src/tokenize.js`(어절+2-gram) · `src/bm25.js` · `src/stopwords.js` · `src/vocabulary.js` |
 | 코퍼스 | `src/palettes.js` · `src/diagnostics.js` · `data/*.json` |
 | LLM | `src/ollama.js`(수명주기) · `src/rewrite.js`(의도+재작성) · `src/structure.js`(구조 선택) · `src/finish.js`(재질 배정) · `src/query.js`(빈 질의 판정 — 서식 문자를 지운다) |
+| 임베딩 | `src/embed.js`(bge-m3 벡터 · 준비 · 유사도) · `src/hybrid.js`(RRF 결합 · 동의 · 문턱, 순수 함수) |
 | 색 파생 | `src/expand.js`(씨앗 2색 → 배색 구조 8가지. HSL 연산만, LLM 안 닿음) · `src/seeds.js`(씨앗 풀 적재) |
 | 재질 | `src/material.js`(역할색 → PBR 머티리얼. 수치는 여기 한 곳) · `data/finishes.json`(재질 4개, 문자열만) |
 | 흐름 | `src/pipeline.js`(단계 승급) |
@@ -72,15 +73,15 @@ Ollama 는 있으면 쓰고 없으면 안 쓴다. 죽어 있어도 검색은 그
 | 서버 | `server.js` |
 | 면적 | `public/ratio.js`(2색 규칙 · 3색 이상 균등 · 슬라이더 재배분) |
 | 화면 | `public/` |
-| 게이트 | `GATES.md` + `scripts/check-stage{1..25}.mjs` |
+| 게이트 | `GATES.md` + `scripts/check-stage{1..26}.mjs` |
 
-## 게이트 193개
+## 게이트 200개
 
 ```bash
 node scripts/check-stage1.mjs S1-G1
 ```
 
-`GATES.md` 에 193개가 전부 있고 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
+`GATES.md` 에 200개가 전부 있고 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
 **게이트는 만들 때마다 일부러 망가뜨려 확인했다** — 통과하는 게이트보다 고장을 잡는 게이트가 목적이다.
 
 | 단계 | 수 | 무엇을 지키나 |
@@ -110,11 +111,13 @@ node scripts/check-stage1.mjs S1-G1
 | S23 | 6 | **저장소가 막혀도 안 던짐** · 저장값 불신 · 토글이 지금 모드를 정직하게 보임 · **카드별 어긋남 유지** · `mode` 가 서버에 안 감 · **저장을 만지는 자리가 한 곳** |
 | S24 | 6 | **명도로 가른다고 한 구조는 본문이 읽힘** · 강조 회귀 · **평평한 구조는 평평한 채로**(음성 대조) · 분류 전수·`S11-G7` 대조 · 대비 계산 검증 · **기준선 개정 기록이 git 의 옛 값과 맞는가** |
 | S25 | 5 | **Ollama 가 없으면 확인한 뒤 "없다" 고 말함** · 더 구체적인 사유를 안 덮어씀 · **폭 0 문자만 있는 질의는 세 경로 어디서도 모델을 안 부름** · 3단계 회귀 10개 · **"자동 기동함" 이 재확인에도 남음** |
+| S26 | 7 | **거짓 확신 9건이 1단계에 안 남음(정답 7 → 12)** · 정확 매칭 회귀 · **임베딩 없어도 그대로** · 느린 임베딩에 안 끌림 · 결합·판정 결정적 · 오류 원문 경계 · 화면·기록 |
 
 ## 환경변수
 
 `PORT` `HOST` `OLLAMA_HOST` `OLLAMA_BIN` `OLLAMA_AUTOSTART=0` `OLLAMA_WARMUP=0`
 `OLLAMA_MODEL` `REWRITE_TIMEOUT_MS` `STRUCTURE_TIMEOUT_MS` `FINISH_TIMEOUT_MS` `TONEFIRST_DATA_DIR`
+`OLLAMA_EMBED_MODEL`(기본 `bge-m3`) `EMBED_TIMEOUT_MS` `EMBED_PREPARE=0`(코퍼스 벡터화 건너뜀)
 
 ## 알려진 한계 (의도적)
 

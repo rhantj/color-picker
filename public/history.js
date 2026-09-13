@@ -33,8 +33,9 @@ function conversationBlock(conversation) {
   block.id = conversation.id; // 홈의 '내역에서 보기' 가 이 앵커로 온다
 
   const head = el("div", "conv__head");
-  const stages = conversation.turns.map((t) => t.stage);
-  const usedLlm = stages.filter((s) => s === 2).length;
+  // stage 로 못 센다 — 3단계(임베딩) 뒤에 재작성이 온 턴도 stage 3 이다. 기록의 usedLlm 을 믿는다.
+  // 26단계 전에 남은 턴에는 usedLlm 이 없다. 그때는 2단계가 곧 LLM 이었으므로 stage 로 되돌아간다.
+  const usedLlm = conversation.turns.filter((t) => (t.usedLlm === undefined ? t.stage === 2 : t.usedLlm === true)).length;
   head.append(
     el("h2", "conv__title", conversation.turns.at(-1)?.query ?? "(빈 대화)"),
     el(

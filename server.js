@@ -29,6 +29,7 @@ import { expandAll, expandSeed, loadStructures } from "./src/expand.js";
 import { PICK_COUNT, selectStructures } from "./src/structure.js";
 import { selectFinishes } from "./src/finish.js";
 import { cleanQuery } from "./src/query.js";
+import { prepare as prepareEmbeddings, refresh as refreshEmbeddings } from "./src/embed.js";
 import { DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, loadFinishes } from "./src/material.js";
 import { loadSeeds, seedLabel } from "./src/seeds.js";
 import { FORMATS } from "./src/export.js";
@@ -40,7 +41,8 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 // 화면의 6단계 사다리는 "이 서버가 실제로 할 수 있는 단계"를 그린다.
 // 재작성은 Ollama 가 준비돼 있을 때만 가능하므로 능력치는 고정값이 아니라 상태에서 계산한다 —
 // 화면이 실제보다 앞서 보이지 않게 하려는 것이다. 개별 질의가 몇 단계에서 끝났는지는 따로 알린다.
-const maxStage = (ollamaState) => (ollamaState === "ready" ? 2 : 1);
+// 3단계는 임베딩이 준비됐을 때, 2단계는 Ollama 가 준비됐을 때만 가능하다.
+const maxStage = (ollamaState, embedState) => (embedState === "ready" ? 3 : ollamaState === "ready" ? 2 : 1);
 
 // 루프백 밖에 바인딩했다면 모델 목록·호스트·오류 원문을 내보내지 않는다.
 // 로컬 도구를 네트워크에 열어 두면 이 응답이 "이 기계에 어떤 모델이 있는가" 를 알려주는 창구가 된다.
@@ -138,6 +140,15 @@ const shapePalette = ({ doc, score, matched, wholeMatches }) => ({
   matched: shapeMatched(matched),
 });
 
+// 코퍼스 34건을 벡터로 만든다. 기다리지 않고 결과만 적는다. EMBED_PREPARE=0 이면 건너뛴다(게이트용).
+function prepareCorpusEmbeddings() {
+  if (process.env.EMBED_PREPARE === "0") return;
+  prepareEmbeddings(pipeline.embedDocs).then((e) => {
+    const line = e.state === "ready" ? `임베딩 준비됨 — ${e.model} ${e.count}건` : `임베딩 쓸 수 없음 — ${e.detail}`;
+    process.stdout.write(Buffer.from(line + "\n", "utf8"));
+  });
+}
+
 // 관계 어휘는 팔레트 코퍼스에서 한 번만 읽는다. 코퍼스는 기동 때 고정된다.
 const relationVocab = relationVocabulary(pipeline.palettes);
 
@@ -195,6 +206,10 @@ async function handleSearch(res, params) {
     // /api/status 와 같은 경계를 적용한다. 재작성 실패 사유에는 OLLAMA_HOST 나 스폰 실패 상세가
     // 들어가므로, 루프백 밖에 바인딩했다면 원문을 내보내지 않는다.
     rewriteError: r.rewriteError ? (LOOPBACK_ONLY ? r.rewriteError : "질의 재작성을 쓸 수 없습니다") : null,
+    hybrid: r.hybrid ?? null,
+    // rewriteError 와 같은 경계 — 사유에 OLLAMA_HOST 가 들어간다.
+    hybridError: r.hybridError ? (LOOPBACK_ONLY ? r.hybridError : "임베딩을 쓸 수 없습니다") : null,
+    usedLlm: r.usedLlm === true,
     results: r.paletteHits.map(shapePalette),
     diagnostics: r.diagnosticHits.map(shapeDiagnostic),
   });
@@ -414,13 +429,17 @@ function handleConversations(res, params) {
 async function handleStatus(res) {
   // refresh 는 확인만 한다 — 요청이 프로세스 기동을 유발하지 않는다(S3-G5).
   const ollama = await refreshOllama();
+  // 임베딩도 확인만 한다 — 쓸 수 없는 상태면 TTL 마다 다시 시도해 살아난 것을 알아챈다(리뷰 지적).
+  const embed = await refreshEmbeddings();
   sendJson(res, 200, {
-    stage: maxStage(ollama.state),
+    stage: maxStage(ollama.state, embed.state),
     corpus: pipeline.palettes.length,
     diagnostics: pipeline.diagnostics.length,
     ollama: LOOPBACK_ONLY
       ? ollama
       : { state: ollama.state, startedByUs: ollama.startedByUs },
+    // 같은 경계. 모델명·호스트가 들어간 사유는 루프백에서만.
+    embed: LOOPBACK_ONLY ? embed : { state: embed.state, count: embed.count },
   });
 }
 
@@ -600,6 +619,9 @@ server.listen(PORT, HOST, () => {
     ),
   );
 
+  // 자동 기동을 껐어도 떠 있는 Ollama 가 있으면 임베딩은 쓴다. 없으면 unavailable 로 남는다.
+  if (process.env.OLLAMA_AUTOSTART === "0") prepareCorpusEmbeddings();
+
   // 기동을 기다리지 않는다. Ollama 가 없거나 느려도 전문 검색은 이미 서비스 가능한 상태다.
   if (process.env.OLLAMA_AUTOSTART !== "0") {
     ensureRunning().then((s) => {
@@ -607,6 +629,11 @@ server.listen(PORT, HOST, () => {
       process.stdout.write(
         Buffer.from(`Ollama ${mark} — ${s.detail}${s.startedByUs ? " (우리가 띄웠다)" : ""}\n`, "utf8"),
       );
+
+      // 코퍼스 벡터를 미리 만든다. 기다리지 않는다 — 준비 전 질의는 3단계를 건너뛴다.
+      // **Ollama 기동에 실패해도 부른다.** 그래야 임베딩 상태가 "unknown" 에 갇히지 않고 "unavailable" 로
+      // 정직하게 남는다(리뷰 지적 · S26-G3). prepare 는 스스로 실패를 잡는다.
+      prepareCorpusEmbeddings();
 
       // 첫 재작성이 모델 적재를 기다리지 않게 미리 올려 둔다.
       // 실측: 워밍업 없으면 첫 저신뢰 질의 3944ms, 있으면 556ms.

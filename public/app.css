@@ -875,6 +875,14 @@ a:hover {
   color: var(--accent-ink);
 }
 
+.turn__stage--3 {
+  /* 2단계와 구분되되 경고색은 아니다 — 3단계는 LLM 없이 로컬에서 끝난 것일 수 있다 */
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  outline: 1px solid var(--accent-ink);
+  outline-offset: -1px;
+}
+
 .turn__query {
   font-size: 14px;
   line-height: 1.6;
