@@ -67,7 +67,7 @@
 
 ## 지금 상태
 
-- 브랜치 `stage-32-rename-color-picker` 에 32·33 이 함께 있다. 커밋 전.
+- **커밋 `baddc7c` 로 `main` 에 올라갔다** (`stage-32-rename-color-picker` 브랜치에 32단계 `23a0cb2` 와 함께, `--ff-only` 머지, 원격 `rhantj/color-picker`).
 
 ## 확인 질문
 

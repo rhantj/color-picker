@@ -52,7 +52,7 @@ G2 는 처음에 `content-disposition` 헤더에서 파일 이름을 읽으려 �
 
 ## 지금 상태
 
-- 브랜치 `stage-32-rename-color-picker`. 커밋 전.
+- **커밋 `23a0cb2` 로 `main` 에 올라갔다** (`stage-32-rename-color-picker` 브랜치, 33단계 `baddc7c` 와 함께 `--ff-only` 머지, 원격 `rhantj/color-picker`).
 
 ## 확인 질문
 
