@@ -65,10 +65,17 @@ export async function refresh() {
 
   probing = (async () => {
     const models = await probe();
+    // 탐지 결과를 **상태와 사유 양쪽에** 적는다. 전에는 상태가 ready 였을 때만 사유를 바꿔서,
+    // 서버가 뜬 직후 탐지가 실패하면 "아직 확인하지 않았다" 가 확인한 뒤에도 남았다(D1).
+    // 이미 더 구체적인 사유가 있으면 남긴다 — unavailable 의 기동 실패 사유도, ready 의 "자동 기동함" 도.
+    // ready 사유는 ready 로 **바뀔 때만** 적는다. 매번 적으면 "자동 기동함" 이 TTL 뒤에 사라진다(리뷰 지적).
     if (models) {
-      current = { ...current, state: "ready", models };
+      const detail = current.state === "ready" ? current.detail : `${HOST} 응답`;
+      current = { ...current, state: "ready", detail, models };
     } else if (current.state === "ready") {
       current = { ...current, state: "unavailable", detail: `${HOST} 응답이 끊겼다`, models: [] };
+    } else if (current.state === "unknown") {
+      current = { ...current, state: "unavailable", detail: `${HOST} 가 응답하지 않는다`, models: [] };
     }
     return status();
   })().finally(() => {

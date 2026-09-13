@@ -4,8 +4,19 @@
     {
       "name": "tonefirst",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["server.js"],
+      "runtimeArgs": [
+        "server.js"
+      ],
       "port": 4173
+    },
+    {
+      "name": "tonefirst-no-ollama",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "-e",
+        "process.env.PORT='4399';process.env.OLLAMA_AUTOSTART='0';process.env.OLLAMA_HOST='127.0.0.1:1';import('./server.js')"
+      ],
+      "port": 4399
     }
   ]
 }

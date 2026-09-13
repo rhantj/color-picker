@@ -14,6 +14,7 @@
 
 import { refresh } from "./ollama.js";
 import { pickModel } from "./rewrite.js";
+import { cleanQuery } from "./query.js";
 import { DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, MaterialError, loadFinishes } from "./material.js";
 
 const HOST = process.env.OLLAMA_HOST ?? "127.0.0.1:11434";
@@ -195,7 +196,7 @@ export async function selectFinishes(query, roles) {
       ...extra,
     });
 
-  const text = typeof query === "string" ? query.trim() : "";
+  const text = cleanQuery(query);
   if (!text) return fallback(null);
 
   const state = await refresh();

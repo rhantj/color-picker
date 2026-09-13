@@ -28,6 +28,7 @@ import { ratioFor } from "./public/ratio.js";
 import { expandAll, expandSeed, loadStructures } from "./src/expand.js";
 import { PICK_COUNT, selectStructures } from "./src/structure.js";
 import { selectFinishes } from "./src/finish.js";
+import { cleanQuery } from "./src/query.js";
 import { DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, loadFinishes } from "./src/material.js";
 import { loadSeeds, seedLabel } from "./src/seeds.js";
 import { FORMATS } from "./src/export.js";
@@ -169,7 +170,8 @@ const shapeBridgePalette = (p) => ({
 });
 
 async function handleSearch(res, params) {
-  const query = (params.get("q") ?? "").trim();
+  // 서식 문자만 있는 q 는 빈 질의다. 안 거르면 전문 검색이 못 잡고 재작성이 모델을 헛되이 부른다.
+  const query = cleanQuery(params.get("q"));
   if (!query) return sendJson(res, 400, { error: "q 가 비어 있다" });
 
   const rawLimit = params.get("limit");

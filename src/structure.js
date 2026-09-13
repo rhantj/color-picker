@@ -12,6 +12,7 @@
 
 import { refresh } from "./ollama.js";
 import { pickModel } from "./rewrite.js";
+import { cleanQuery } from "./query.js";
 
 const HOST = process.env.OLLAMA_HOST ?? "127.0.0.1:11434";
 const BASE = `http://${HOST}`;
@@ -140,7 +141,7 @@ export async function selectStructures(query, catalog, count = PICK_COUNT) {
   const validIds = catalog.map((s) => s.id);
   const fallback = (error) => ({ ids: fallbackSelection(validIds, count), from: "fallback", ...(error ? { error } : {}) });
 
-  const text = typeof query === "string" ? query.trim() : "";
+  const text = cleanQuery(query);
   if (!text) return fallback(null);
 
   const state = await refresh();

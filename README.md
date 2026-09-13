@@ -63,7 +63,7 @@ Ollama 는 있으면 쓰고 없으면 안 쓴다. 죽어 있어도 검색은 그
 |---|---|
 | 검색 | `src/tokenize.js`(어절+2-gram) · `src/bm25.js` · `src/stopwords.js` · `src/vocabulary.js` |
 | 코퍼스 | `src/palettes.js` · `src/diagnostics.js` · `data/*.json` |
-| LLM | `src/ollama.js`(수명주기) · `src/rewrite.js`(의도+재작성) · `src/structure.js`(구조 선택) · `src/finish.js`(재질 배정) |
+| LLM | `src/ollama.js`(수명주기) · `src/rewrite.js`(의도+재작성) · `src/structure.js`(구조 선택) · `src/finish.js`(재질 배정) · `src/query.js`(빈 질의 판정 — 서식 문자를 지운다) |
 | 색 파생 | `src/expand.js`(씨앗 2색 → 배색 구조 8가지. HSL 연산만, LLM 안 닿음) · `src/seeds.js`(씨앗 풀 적재) |
 | 재질 | `src/material.js`(역할색 → PBR 머티리얼. 수치는 여기 한 곳) · `data/finishes.json`(재질 4개, 문자열만) |
 | 흐름 | `src/pipeline.js`(단계 승급) |
@@ -72,15 +72,15 @@ Ollama 는 있으면 쓰고 없으면 안 쓴다. 죽어 있어도 검색은 그
 | 서버 | `server.js` |
 | 면적 | `public/ratio.js`(2색 규칙 · 3색 이상 균등 · 슬라이더 재배분) |
 | 화면 | `public/` |
-| 게이트 | `GATES.md` + `scripts/check-stage{1..24}.mjs` |
+| 게이트 | `GATES.md` + `scripts/check-stage{1..25}.mjs` |
 
-## 게이트 188개
+## 게이트 193개
 
 ```bash
 node scripts/check-stage1.mjs S1-G1
 ```
 
-`GATES.md` 에 188개가 전부 있고 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
+`GATES.md` 에 193개가 전부 있고 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
 **게이트는 만들 때마다 일부러 망가뜨려 확인했다** — 통과하는 게이트보다 고장을 잡는 게이트가 목적이다.
 
 | 단계 | 수 | 무엇을 지키나 |
@@ -109,6 +109,7 @@ node scripts/check-stage1.mjs S1-G1
 | S22 | 6 | 목록 API 가 이름표를 줌 · **손상된 재질 거르기** · 재질 줄 표시·손댄 표시 · 저장 왕복 · **손상 항목이 전체를 안 죽임** · **게이트 수가 네 곳에서 같은가** |
 | S23 | 6 | **저장소가 막혀도 안 던짐** · 저장값 불신 · 토글이 지금 모드를 정직하게 보임 · **카드별 어긋남 유지** · `mode` 가 서버에 안 감 · **저장을 만지는 자리가 한 곳** |
 | S24 | 6 | **명도로 가른다고 한 구조는 본문이 읽힘** · 강조 회귀 · **평평한 구조는 평평한 채로**(음성 대조) · 분류 전수·`S11-G7` 대조 · 대비 계산 검증 · **기준선 개정 기록이 git 의 옛 값과 맞는가** |
+| S25 | 5 | **Ollama 가 없으면 확인한 뒤 "없다" 고 말함** · 더 구체적인 사유를 안 덮어씀 · **폭 0 문자만 있는 질의는 세 경로 어디서도 모델을 안 부름** · 3단계 회귀 10개 · **"자동 기동함" 이 재확인에도 남음** |
 
 ## 환경변수
 
