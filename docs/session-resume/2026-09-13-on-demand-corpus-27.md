@@ -104,7 +104,7 @@
 ## 지금 상태
 
 - 27단계 게이트 7개 · 회귀 전부 통과. 게이트 207개.
-- **커밋하지 않았다.** 브랜치 `stage-27-on-demand-corpus`. 대표 확인 뒤 커밋·머지한다.
+- **커밋 `ac9a1ee` 로 `main` 에 올라갔다** (`stage-27-on-demand-corpus` 브랜치, `--ff-only` 머지, 원격 `rhantj/color-picker`).
 
 ## 다음에 할 일
 
