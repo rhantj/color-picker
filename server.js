@@ -20,17 +20,21 @@ import {
   listSaved,
   recordTurn,
   savePalette,
+  saveCharacter,
   saveDerived,
   updateSavedNote,
   updateSavedRatio,
 } from "./src/store.js";
+import { describe } from "./src/describe.js";
+import { CHARACTER_ROLES, composeCharacter } from "./src/character.js";
+import { loadCharacterWords, loadCreatures } from "./src/color-words.js";
 import { ratioFor } from "./public/ratio.js";
 import { expandAll, expandSeed, loadStructures } from "./src/expand.js";
 import { PICK_COUNT, selectStructures } from "./src/structure.js";
 import { selectFinishes } from "./src/finish.js";
 import { cleanQuery } from "./src/query.js";
 import { prepare as prepareEmbeddings, refresh as refreshEmbeddings } from "./src/embed.js";
-import { DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, loadFinishes } from "./src/material.js";
+import { CHARACTER_FINISH_BY_ROLE, DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, loadFinishes } from "./src/material.js";
 import { loadSeeds, seedLabel } from "./src/seeds.js";
 import { FORMATS } from "./src/export.js";
 
@@ -355,6 +359,125 @@ const MATERIALS = {
  */
 const FINISH_NAMES = () => Object.fromEntries(loadFinishes().map((f) => [f.id, f.name]));
 
+/* ── 캐릭터 부위별 색 (34단계) ─────────────────────────────── */
+
+/**
+ * 코퍼스 80색 — 팔레트 16쌍 32색 + 씨앗 24쌍 48색. 캐릭터 색은 전부 이 안에서 고른다(S34-G3).
+ * 팔레트는 재적재될 수 있어(27단계) 요청마다 모은다. 80개라 비용이 없다.
+ */
+const corpusColors = () => [
+  ...pipeline.palettes.flatMap((p) => p.colors.map((c) => ({ hex: c.hex, name: c.name }))),
+  ...seedPool.flatMap((s) => s.colors.map((c) => ({ hex: c.hex, name: c.origName }))),
+];
+
+/** 검색이 배색 쌍을 못 고르면 여기로 물러선다. 코퍼스 1번이고, 없으면 첫 항목. */
+const FALLBACK_PAIR_ID = "pair-01";
+const fallbackPair = () => paletteById(FALLBACK_PAIR_ID) ?? pipeline.palettes[0];
+
+/** 캐릭터 저장이 쓰는 재질 규칙. `MATERIALS` 와 같은 모양, 표만 캐릭터 것. */
+const CHARACTER_MATERIALS = {
+  finishes: [...MATERIAL_FINISHES],
+  defaultFor: (role) => (Object.hasOwn(CHARACTER_FINISH_BY_ROLE, role) ? CHARACTER_FINISH_BY_ROLE[role] : MATERIAL_FINISHES[0]),
+};
+
+// 종족표는 기동 때 한 번 읽는다. 깨져 있으면 여기서 죽는 것이 맞다 — 낱말표와 함께 코퍼스 급 자산이다.
+const creatureTable = loadCreatures();
+// 낱말표도 기동 때 한 번 검증한다. 안 하면 첫 /api/character 요청에서야 깨진 것을 안다(리뷰 지적).
+loadCharacterWords();
+const creatureById = (id) => (typeof id === "string" ? creatureTable.find((c) => c.id === id) ?? null : null);
+
+/**
+ * 저장 요청의 부위·종족·배색 쌍 id 로 **색을 다시 계산한다**(`store.js` 규칙 4). 모르는 부위·낱말은 걸러 내고(거부가 아니라
+ * 걸러내기 — `pickFinishes` 와 같은 태도) 배색 쌍이 없으면 null 이다.
+ */
+function resolveCharacter(input) {
+  const pair = paletteById(String(input.paletteId ?? ""));
+  if (!pair) return null;
+  const raw = input.parts && typeof input.parts === "object" && !Array.isArray(input.parts) ? input.parts : {};
+  const parts = Object.fromEntries(CHARACTER_ROLES.map((role) => [role, Object.hasOwn(raw, role) && typeof raw[role] === "string" ? raw[role] : null]));
+  const found = creatureById(input.creature);
+  // 피부도 재질도 안 주는 종족(사람)은 결과가 종족 없음과 같다 — 저장 키가 갈라지지 않게 null 로 접는다(리뷰 지적).
+  const creature = found && (found.skin || found.finish) ? found : null;
+  const { colors } = composeCharacter({ parts, creature, pair, corpus: corpusColors() });
+  // 낱말표 밖의 낱말은 composeCharacter 가 무시한다 — 저장에도 남기지 않는다.
+  const kept = Object.fromEntries(CHARACTER_ROLES.map((role) => [role, colors.find((c) => c.role === role)?.source === "spoken" ? parts[role] : null]));
+  return {
+    seedId: pair.id,
+    seedLabel: pair.name,
+    principle: `배색 쌍 ${pair.name} 의 인상으로 맞춘 부위별 색`,
+    source: "캐릭터 규칙 [판단]",
+    colors: colors.map((c) => ({ role: c.role, hex: c.hex })),
+    parts: kept,
+    creature: creature?.id ?? null,
+    finishDefaults: creature?.finish ? { 피부: creature.finish } : {},
+  };
+}
+
+/**
+ * 캐릭터 외형 문장 → 부위 여섯의 색과 재질.
+ *
+ * **LLM 은 색에 닿지 않는다.** `describe` 가 주는 것은 부위별 색 낱말 id 와 인상 한 줄이고, 헥스는 `composeCharacter` 가
+ * 코퍼스 80색에서 고른다. 인상은 기존 검색으로 배색 쌍 하나를 고르는 데 쓴다 — 검색이 진단으로 가거나 못 잡으면
+ * 코퍼스 1번 쌍으로 물러서고 `palette.from` 에 그렇게 적는다.
+ *
+ * 파서와 재질 배정은 서로의 결과를 안 쓰므로 나란히 부른다(`/api/expand` 와 같은 이유). 검색은 인상이 있어야 하므로 그 뒤다.
+ */
+async function handleCharacter(res, params) {
+  pipeline.reloadIfChanged();
+  const query = cleanQuery(params.get("q"));
+  if (!query) return sendJson(res, 400, { error: "q 가 비어 있다" });
+  if (query.length > LIMITS.queryChars) return sendJson(res, 400, { error: `q 는 ${LIMITS.queryChars}자까지` });
+
+  const started = Date.now();
+  const [parsed, finishes] = await Promise.all([
+    describe(query),
+    selectFinishes(query, [...CHARACTER_ROLES], CHARACTER_FINISH_BY_ROLE).catch((err) => ({
+      assignments: {},
+      from: "fallback",
+      matched: 0,
+      error: `재질 배정을 준비하지 못했다 — ${err.message}`,
+    })),
+  ]);
+
+  const r = await pipeline.resolve(parsed.impression, 3);
+  const hit = r.route === "palette" ? (r.paletteHits[0]?.doc ?? null) : null;
+  const pair = hit ?? fallbackPair();
+  const { colors, warnings } = composeCharacter({ parts: parsed.parts, creature: parsed.creature, pair, corpus: corpusColors() });
+  // 종족표의 재질은 결정적 규칙이라 모델 판단보다 앞선다(로봇 피부는 금속이다).
+  const assignments =
+    parsed.creature?.finish && Object.hasOwn(finishes.assignments, "피부")
+      ? { ...finishes.assignments, 피부: parsed.creature.finish }
+      : finishes.assignments;
+
+  sendJson(res, 200, {
+    query,
+    parse: {
+      parts: parsed.parts,
+      creature: parsed.creature?.id ?? null,
+      impression: parsed.impression,
+      from: parsed.from,
+      model: parsed.model ?? null,
+      elapsedMs: parsed.elapsedMs ?? null,
+      // /api/expand 와 같은 경계 — 사유에 OLLAMA_HOST 가 들어간다.
+      error: parsed.error ? (LOOPBACK_ONLY ? parsed.error : "설명 읽기를 쓸 수 없습니다") : null,
+    },
+    palette: { id: pair.id, name: pair.name, from: hit ? "search" : "fallback", route: r.route, confident: r.confident === true },
+    colors,
+    warnings,
+    finishes: {
+      assignments,
+      names: FINISH_NAMES(),
+      ids: [...MATERIAL_FINISHES],
+      from: finishes.from,
+      matched: finishes.matched ?? 0,
+      model: finishes.model ?? null,
+      elapsedMs: finishes.elapsedMs ?? null,
+      error: finishes.error ? (LOOPBACK_ONLY ? finishes.error : "재질 배정을 쓸 수 없습니다") : null,
+    },
+    elapsedMs: Date.now() - started,
+  });
+}
+
 async function handleWrite(req, res, pathname) {
   if (!isTrustedWrite(req)) {
     return sendJson(res, 403, { error: "이 화면에서 보낸 요청이 아니다" });
@@ -376,6 +499,9 @@ async function handleWrite(req, res, pathname) {
     }
     if (pathname === "/api/saved/derived") {
       return sendJson(res, 200, await saveDerived(body, resolveDerived, ratioFor, MATERIALS));
+    }
+    if (pathname === "/api/saved/character") {
+      return sendJson(res, 200, await saveCharacter(body, resolveCharacter, ratioFor, CHARACTER_MATERIALS));
     }
     if (pathname === "/api/saved/ratio") {
       // 옛 항목에 defaultRatio 가 없으면 코퍼스에서 채워 넣도록 조회 함수를 넘긴다.
@@ -586,6 +712,7 @@ function dispatch(req, res, url) {
   }
   if (url.pathname === "/api/export") return handleExport(res, url.searchParams);
   if (url.pathname === "/api/expand") return handleExpand(res, url.searchParams);
+  if (url.pathname === "/api/character") return handleCharacter(res, url.searchParams);
   return serveStatic(res, url.pathname);
 }
 

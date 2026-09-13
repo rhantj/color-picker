@@ -159,7 +159,7 @@ const clip = (value, max) => {
 };
 
 const ID_SHAPE = /^[a-z]+-[a-z0-9]+-[a-z0-9]+$/;
-const VALID_ROUTES = new Set(["palette", "diagnosis", "none"]);
+const VALID_ROUTES = new Set(["palette", "diagnosis", "character", "none"]);
 
 /* ── 대화 내역 ───────────────────────────────────────────── */
 
@@ -184,7 +184,7 @@ export function recordTurn(input) {
     confident: input.confident === true,
     // LLM 을 썼는가는 stage 로 못 센다 — 3단계 뒤에 재작성이 올 수 있다. 따로 받되 불리언만 믿는다.
     usedLlm: input.usedLlm === true,
-    topKind: input.topKind === "diagnosis" ? "diagnosis" : input.topKind === "palette" ? "palette" : null,
+    topKind: ["diagnosis", "palette", "character"].includes(input.topKind) ? input.topKind : null,
     topId: clip(input.topId, 40) || null,
     topLabel: clip(input.topLabel, 80) || null,
   };
@@ -443,6 +443,72 @@ export function saveDerived(input, resolve, ratioFor, materials) {
       ratioAdjusted: merged.ratioAdjusted,
       defaultRatio: defaults,
       note: merged.note,
+    };
+
+    const rest = all.filter((e) => e !== previous);
+    writeJson("saved.json", [entry, ...rest].slice(0, LIMITS.saved));
+    return entry;
+  });
+}
+
+/**
+ * 캐릭터 부위별 색을 저장한다(34단계). **파생 저장과 같은 규칙** — 화면이 보낸 색은 안 믿고 `resolve` 가 부위·종족·배색 쌍
+ * id 로 다시 계산한다. 항목은 `kind: "derived"` · `structureId: "character"` 라 `/saved` 와 엔진 내보내기가 그대로 돈다.
+ *
+ * 같은 키(배색 쌍 · 부위 · 종족)면 덮어쓰고 비율·재질·메모를 이어받는다 — `saveDerived` 와 같은 병합.
+ * 종족표가 준 재질(`finishDefaults`)은 기본표보다 앞선다 — 로봇 피부를 안 보내도 금속으로 남는다.
+ */
+export function saveCharacter(input, resolve, ratioFor, materials) {
+  if (typeof input.query !== "string" || typeof input.paletteId !== "string") {
+    return Promise.reject(new Error("문장과 배색 쌍은 문자열이어야 한다"));
+  }
+  const query = clip(input.query, LIMITS.noteChars);
+  if (!query) return Promise.reject(new Error("문장이 비어 있다"));
+
+  const found = resolve(input);
+  if (!found) return Promise.reject(new Error("모르는 배색 쌍이다"));
+
+  const count = found.colors.length;
+  const defaults = ratioFor({ colors: found.colors });
+  const adjusted = input.shares === undefined ? null : normalizeShares(input.shares, count);
+  if (input.shares !== undefined && !adjusted) {
+    return Promise.reject(new Error(`면적 비율은 ${count}칸 정수 배열이고 합이 100 이어야 한다`));
+  }
+  const key = JSON.stringify([found.seedId, found.parts, found.creature]);
+
+  return serialize(() => {
+    const all = listSaved();
+    const previous = all.find((e) => e.structureId === "character" && e.characterKey === key);
+    const merged = mergeWithPrevious(previous, { adjusted, defaults, note: input.note });
+    const ratio = merged.ratio;
+
+    const roles = found.colors.map((c) => c.role);
+    const sent = pickFinishes(input.finishes, roles, materials.finishes);
+    const inheritFinishes = previous?.finishesAdjusted ? previous.finishes : null;
+    const defaultFor = (role) => found.finishDefaults?.[role] ?? materials.defaultFor(role);
+    const finishes = {};
+    for (const role of roles) finishes[role] = sent[role] ?? inheritFinishes?.[role] ?? defaultFor(role);
+    const finishesAdjusted = roles.some((role) => finishes[role] !== defaultFor(role));
+
+    const entry = {
+      id: newId("save"),
+      savedAt: now(),
+      kind: "derived",
+      seedId: found.seedId,
+      structureId: "character",
+      mode: "light",
+      seedLabel: found.seedLabel,
+      name: `캐릭터 — ${clip(query, 40)}`,
+      principle: found.principle,
+      source: found.source,
+      colors: found.colors.map((c, i) => ({ role: c.role, hex: c.hex, ratio: ratio[i] })),
+      finishes,
+      finishesAdjusted,
+      ratioAdjusted: merged.ratioAdjusted,
+      defaultRatio: defaults,
+      note: merged.note,
+      character: { query, parts: found.parts, creature: found.creature },
+      characterKey: key,
     };
 
     const rest = all.filter((e) => e !== previous);

@@ -2044,3 +2044,71 @@ S33-G3 코퍼스·진단 회귀 — S1 4개 · S4-G6 · S10 7개 · S29-G1·G2 �
   — 그래서 임베딩은 안 바뀌고 BM25 점수만 바뀔 수 있다. 실제 모델 정답은 16/18 그대로였지만, 진단표 문장을 고칠 때마다
   S29-G3 를 다시 재야 한다.
 - 10단계 절의 "이 축에 맞는 조합" 서술은 옛 문구다(S10-G6 는 33단계에서 "이 원인에 맞는 조합" 으로 뒤집었다).
+
+## 34단계 — 캐릭터 외형 설명 → 부위별 색 (대표 요청)
+
+"붉은 머리에 검은 갑옷, 차가운 성격의 기사" 처럼 캐릭터 외형을 문장으로 쓰면 **부위 여섯**(피부·머리·눈·상의·하의·강조)의
+색과 재질을 카드 한 장으로 준다. 홈 검색창 위에 탭 둘(색감 추천 · 캐릭터 색감). LLM 은 문장에서 *부위 → 색 낱말* 과
+*인상* 만 뽑고, 헥스는 전부 코퍼스 80색이거나 그 HSL 연산 결과다. 저장은 부위·종족·배색 쌍 id 만 받아 서버가 색을 다시
+계산한다(`store.js` 규칙 4). 설계: `docs/superpowers/specs/2026-09-13-character-colors-design.md`
+
+S34-G1 파서가 표 밖의 것을 버린다 — 없는 부위·없는 색 낱말·헥스·프로토타입 이름 · 인상은 비면 문장 전체 · 정규식 폴백이 "빨간 머리"·"검은 갑옷"·"금발" 을 잡고 "머리 빨간" 은 안 잡는다
+    CHECK: node scripts/check-stage34.mjs S34-G1
+    EXPECT: S34_G1_OK
+
+S34-G2 낱말표(`data/character-words.json`)와 범위표(`src/color-words.js`)의 id 집합이 같다 · 종족표의 피부 낱말이 전부 낱말표에 있다 · 모든 낱말이 코퍼스 80색 중 하나로 결정적으로 간다 · 두 데이터 파일에 숫자·헥스가 없다
+    CHECK: node scripts/check-stage34.mjs S34-G2
+    EXPECT: S34_G2_OK
+
+S34-G3 **지어낸 색 0** — 픽스처 10건의 모든 헥스가 코퍼스 80색이거나 `basis`(코퍼스)에서 검사기 사본 규칙(l −0.18 · s ×0.85)으로 다시 계산한 값과 같다
+    CHECK: node scripts/check-stage34.mjs S34-G3
+    EXPECT: S34_G3_OK
+
+S34-G4 말한 부위는 고정된다 · 종족이 피부를 정한다(로봇 → gray · 트롤 → green) · 말한 피부가 종족을 이긴다 · 종족 없으면 따뜻한 뉴트럴(음성 대조)
+    CHECK: node scripts/check-stage34.mjs S34-G4
+    EXPECT: S34_G4_OK
+
+S34-G5 픽스처마다 색상각 30° 구획이 정한 수 이상 · 규칙으로 고른 이웃끼리 명도차 ≥ 0.12 · 여섯 부위 순서 고정 · 헥스 중복 없음(말한 색 제외)
+    CHECK: node scripts/check-stage34.mjs S34-G5
+    EXPECT: S34_G5_OK
+
+S34-G6 Ollama 없이 `/api/character` 가 돈다 — 폴백 파서 · 배색 쌍 · 6색 · 빈 q 400 · 홈 HTML 에 "LLM" 없음
+    CHECK: node scripts/check-stage34.mjs S34-G6
+    EXPECT: S34_G6_OK
+
+S34-G7 스텁 Ollama 가 헥스·엉뚱한 부위를 실어 보내도 응답에 안 닿는다 · 모델이 준 인상이 검색에 쓰여 배색 쌍이 그 인상의 답과 같다(`parse.from: "llm"`)
+    CHECK: node scripts/check-stage34.mjs S34-G7
+    EXPECT: S34_G7_OK
+
+S34-G8 저장 왕복 — 본문의 가짜 색을 무시하고 재계산 · 종족 재질이 기본으로 실림 · `/api/saved` 에 6색 파생 항목 · unreal/unity 에 6역할(로봇 피부 metallic 1) · CSS/JSON 은 건너뜀 · `savedFields` 가 "캐릭터"
+    CHECK: node scripts/check-stage34.mjs S34-G8
+    EXPECT: S34_G8_OK
+
+S34-G9 화면 — 탭 둘("색감 추천"·"캐릭터 색감") · 캐릭터 탭이 `/api/character` 로 감 · 저장소 접근은 여전히 ui.js 한 곳 · `tabStore` 가 모르는 값을 안 믿음 · 내역 라벨 · `structureCard` 재사용 (정적 + DOM 스텁)
+    CHECK: node scripts/check-stage34.mjs S34-G9
+    EXPECT: S34_G9_OK
+
+S34-G10 회귀 — S4 7 · S16 11 · S17 12 · S18 13 · S20 7 · S22 6 · S23 6 · S31 3 = 65
+    CHECK: node scripts/check-stage34.mjs S34-G10
+    EXPECT: S34_G10_OK
+
+### 알려진 한계 (34단계)
+
+- **코퍼스에 흰색이 없다** `[실측]`. "흰" 은 가장 밝고 채도 낮은 아이보리(#F5ECC2)가 된다. 검정은 씨앗 풀에 있어 "검은" 은
+  흑록(#0F1A14)이다. 낱말 13개의 최근접 `[실측]`: red 테라코타 · orange 앰버 · yellow Citron Yellow · gold Isabella Color ·
+  green Night Green · teal Green Blue · blue Olympic Blue · purple Aconite Violet · pink Spinel Red · brown Mars Brown Tobacco ·
+  black 흑록 · white 아이보리 · gray Mineral Gray. 코퍼스 80항목 중 유일 헥스는 70개(씨앗 풀이 색을 공유) — 규칙은 헥스로 거른다.
+- **검은 상의는 하의가 더 못 어두워진다.** 하의 = 상의 −0.18 인데 바닥(0.08)에 걸린다. 색을 지어내는 대신 `warnings` 에 남기고
+  화면이 한 줄로 보인다. S34-G5 는 경고가 있으면 그 쌍의 명도차를 안 문다.
+- **색상각 구획 하한은 픽스처마다 다르다**(대부분 3, 회색 픽스처 1~2). 처음 "4개" 로 적었다가 손으로 세 보니 검정·회색은
+  구획에 안 세고 하의·눈이 상의·강조 구획에 앉아 못 지켰다. 구현 첫 실행에서 트롤·좀비 픽스처가 2 였고(배색 쌍이 상의·강조를
+  같은 주황 부근에 앉힘), **눈·머리가 이미 앉은 구획을 피하는 규칙**을 더해 3 이 됐다 `[실측]`.
+- **정규식 폴백이 모델이 놓친 부위를 채운다.** S34-G7 의 스텁이 머리에 헥스를 실어 보내면 헥스는 버려지고 그 자리를
+  정규식("붉은 머리")이 red 로 채운다 — 처음 검사기는 그 자리가 null 이길 기대했고, 헥스만 아니면 되는 것으로 고쳤다.
+- **탭 클릭·방향키 핸들러는 DOM 스텁이 못 탄다.** S34-G9 는 정적 검사와 순수 함수(`tabStore`·`characterStructure`·`sourceLine`)까지다.
+  탭 전환·결과 유지·새로고침 뒤 탭 복원은 브라우저 실측(세션 재개 문서).
+- **진짜 모델의 파싱 품질은 게이트가 못 잰다**(답이 매번 다르다). 실측 2건 — "붉은 머리에 검은 갑옷, 차가운 성격의 기사" →
+  인상 "냉철하고 신비로운 기사", 머리 red·상의 black(19.4초, 콜드) · "녹슨 로봇 병사, 은색 갑옷" → 인상 "고도로 기계적이고
+  미래적인 분위기의 전투 기계", 피부·상의 gray, 재질 전부 metal(10.3초).
+- **`characterKey` 는 문장을 안 본다.** 같은 부위·종족·배색 쌍이면 다른 문장이라도 덮어쓴다(의도 — 색이 같으면 같은 저장이다).
+- **S34-G8 의 `metallic` 은 엔진 변환의 필드 이름이다** — 유니티·언리얼 둘 다 그 이름을 쓴다(`toUnity`·`toUnreal`). 바꾸면 검사기도 바꾼다.

@@ -249,7 +249,8 @@ function enginePalette(entry, spec) {
   if (colors.length === 0) return null;
 
   return {
-    id: `${entry.seedId}-${entry.structureId}-${entry.mode}`,
+    // 캐릭터(34단계)는 같은 배색 쌍에서 여럿이 나오므로 저장 id 가 유일한 이름이다.
+    id: entry.structureId === "character" ? String(entry.id) : `${entry.seedId}-${entry.structureId}-${entry.mode}`,
     name: entry.name,
     seed: entry.seedLabel,
     structure: entry.structureId,

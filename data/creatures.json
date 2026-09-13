@@ -1,0 +1,17 @@
+{
+  "_grade": "[판단]",
+  "_source": "원전에 없는 표다. 대표 지시 — '피부색은 로봇, 트롤 등의 키워드가 있으면 그 키워드의 대표적인 색으로 적용'. 대표 색은 통념으로 내가 정했고, skin 은 data/character-words.json 의 색 낱말 id 다. 낱말을 더하려면 이 파일만 고친다.",
+  "_noNumbersHere": "헥스를 적지 않는다. 색 낱말 id 가 src/color-words.js 를 거쳐 코퍼스 80색 중 하나로 간다 — 그래서 종족 피부도 지어낸 색이 아니다.",
+  "_nullSkin": "skin 이 null 인 종족은 사람 피부다 — 종족 낱말이 없을 때와 같은 따뜻한 뉴트럴이 된다. finish 가 null 이면 캐릭터 기본 재질표를 따른다.",
+  "creatures": [
+    { "id": "robot", "words": ["로봇", "기계", "안드로이드", "사이보그", "메카"], "skin": "gray", "finish": "metal" },
+    { "id": "troll", "words": ["트롤", "오크", "고블린", "오우거"], "skin": "green", "finish": null },
+    { "id": "zombie", "words": ["좀비", "언데드", "구울"], "skin": "gray", "finish": "matte" },
+    { "id": "demon", "words": ["악마", "데몬", "마족"], "skin": "red", "finish": null },
+    { "id": "ghost", "words": ["유령", "고스트", "망령"], "skin": "white", "finish": "emissive" },
+    { "id": "slime", "words": ["슬라임"], "skin": "green", "finish": "gloss" },
+    { "id": "alien", "words": ["외계인", "에일리언"], "skin": "green", "finish": "gloss" },
+    { "id": "angel", "words": ["천사"], "skin": "white", "finish": "gloss" },
+    { "id": "human", "words": ["엘프", "드워프", "인간", "사람", "기사", "마법사", "소녀", "소년", "공주", "왕자"], "skin": null, "finish": null }
+  ]
+}

@@ -1,6 +1,6 @@
 // 홈 화면. 렌더 조각은 ui.js 가 세 화면과 공유한다.
 
-import { api, applyModeButton, diagnosisCard, el, finishEditing, finishOverrides, modeStore, nextMode, paletteCard, refreshRuntime, structureCard } from "./ui.js";
+import { api, applyModeButton, characterStructure, diagnosisCard, el, finishEditing, finishOverrides, modeStore, nextMode, paletteCard, refreshRuntime, sourceLine, structureCard, tabStore } from "./ui.js";
 
 const form = document.getElementById("search-form");
 const input = document.getElementById("q");
@@ -12,6 +12,50 @@ const resultsNote = document.getElementById("results-note");
 const featuredBox = document.getElementById("results-featured");
 const restBox = document.getElementById("results-rest");
 const diagnosisBox = document.getElementById("results-diagnosis");
+
+/* ── 탭(34단계) ───────────────────────────────────────────── */
+const tabs = tabStore();
+const tabButtons = [...document.querySelectorAll("[data-tab-select]")];
+const paletteSection = document.getElementById("results-palette");
+const characterSection = document.getElementById("results-character");
+const characterHead = document.getElementById("character-head");
+const characterStatus = document.getElementById("character-status");
+const characterCard = document.getElementById("character-card");
+const TAB_UI = {
+  palette: { placeholder: input.placeholder, submit: "추천 받기" },
+  character: { placeholder: "캐릭터 외형을 문장으로 — 예: 붉은 머리에 검은 갑옷, 차가운 성격의 기사", submit: "색 맞추기" },
+};
+let tab = "palette";
+
+/** 탭을 바꾼다. 입력은 그대로 두고 안내문·버튼·보이는 결과 영역·예시 칩만 바뀐다 — 결과는 탭마다 따로 남는다. */
+function applyTab(next) {
+  tab = next;
+  tabs.write(next);
+  for (const btn of tabButtons) {
+    const on = btn.dataset.tabSelect === next;
+    btn.setAttribute("aria-selected", String(on));
+    btn.tabIndex = on ? 0 : -1;
+  }
+  paletteSection.hidden = next !== "palette";
+  statusBox.hidden = next !== "palette" || statusBox.childElementCount === 0;
+  characterSection.hidden = next !== "character";
+  input.placeholder = TAB_UI[next].placeholder;
+  submit.textContent = TAB_UI[next].submit;
+  for (const chip of document.querySelectorAll("[data-example]")) chip.hidden = chip.dataset.tab !== next;
+}
+for (const btn of tabButtons) {
+  btn.addEventListener("click", () => applyTab(btn.dataset.tabSelect));
+  btn.addEventListener("keydown", (event) => {
+    const keys = { ArrowRight: 1, ArrowLeft: -1, Home: "first", End: "last" };
+    if (!Object.hasOwn(keys, event.key)) return;
+    event.preventDefault();
+    const i = tabButtons.indexOf(btn);
+    const n = tabButtons.length;
+    const next = keys[event.key] === "first" ? tabButtons[0] : keys[event.key] === "last" ? tabButtons[n - 1] : tabButtons[(i + keys[event.key] + n) % n];
+    applyTab(next.dataset.tabSelect);
+    next.focus();
+  });
+}
 
 const INTENT_LABEL = { palette: "팔레트 탐색", diagnosis: "진단", other: "색과 무관" };
 
@@ -389,6 +433,74 @@ function render(data) {
   rest.forEach((r, i) => restBox.append(resultCard(r, i + 2, false)));
 }
 
+/* ── 캐릭터(34단계) ───────────────────────────────────────── */
+function renderCharacter(data) {
+  characterStatus.replaceChildren();
+  characterStatus.hidden = false;
+  characterStatus.append(el("span", "status__timing", `${data.elapsedMs}ms · 배색 쌍 ${data.palette.name}`));
+  if (data.palette.from === "fallback") {
+    characterStatus.append(el("span", "character__note", "인상을 못 읽어 기본 배색을 썼습니다"));
+  }
+  for (const w of data.warnings ?? []) characterStatus.append(el("span", "character__note", w));
+
+  const struct = characterStructure(data);
+  const base = data.finishes?.assignments && Object.keys(data.finishes.assignments).length ? data.finishes.assignments : null;
+  const overrides = finishOverrides();
+  const editing = base ? finishEditing(overrides, struct, base) : null;
+  const finishes = base ? { assignments: base, names: data.finishes.names, ids: data.finishes.ids } : null;
+  // 색은 안 보낸다 — 부위·종족·배색 쌍 id 로 서버가 다시 계산한다(S34-G8).
+  const onSave = (shares) =>
+    api("/api/saved/character", {
+      query: data.query,
+      parts: data.parse.parts,
+      creature: data.parse.creature,
+      paletteId: data.palette.id,
+      shares,
+      finishes: overrides.forStructure(struct, base),
+    });
+  const card = structureCard(struct, "light", finishes, onSave, editing);
+  card.append(sourceLine(data.colors));
+  characterCard.replaceChildren(card);
+  characterHead.hidden = false;
+}
+
+async function recordCharacterTurn(data) {
+  const saved = await api("/api/conversations/turn", {
+    conversationId,
+    query: data.query,
+    stage: 1,
+    usedLlm: data.parse.from === "llm",
+    route: "character",
+    confident: data.palette.from === "search",
+    topKind: "character",
+    topId: data.palette.id,
+    topLabel: data.palette.name,
+  });
+  conversationId = saved.conversationId;
+}
+
+async function runCharacter(query) {
+  await ready;
+  const ticket = ++latestTicket;
+  submit.disabled = true;
+  lastQuery = query;
+  try {
+    const data = await api(`/api/character?q=${encodeURIComponent(query)}`);
+    if (ticket !== latestTicket) return;
+    renderCharacter(data);
+    recordCharacterTurn(data).catch((err) => {
+      threadMeta.textContent = `기록하지 못했습니다 — ${err.message}`;
+    });
+  } catch (err) {
+    if (ticket === latestTicket) {
+      characterStatus.replaceChildren(el("span", "status__badge status__badge--warn", "오류"), el("span", "status__text", err.message ?? "서버에 닿지 못했습니다"));
+      characterStatus.hidden = false;
+    }
+  } finally {
+    if (ticket === latestTicket) submit.disabled = false;
+  }
+}
+
 /* ── 동작 ────────────────────────────────────────────────── */
 
 // 예시 칩은 제출 버튼 잠금을 거치지 않으므로 빠르게 연달아 누르면 요청이 겹친다.
@@ -436,17 +548,19 @@ async function run(query) {
   }
 }
 
+const go = (query) => (tab === "character" ? runCharacter(query) : run(query));
+
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   const query = input.value.trim() || input.placeholder;
   input.value = query;
-  run(query);
+  go(query);
 });
 
 for (const chip of document.querySelectorAll("[data-example]")) {
   chip.addEventListener("click", () => {
     input.value = chip.dataset.example;
-    run(input.value);
+    go(input.value);
   });
 }
 
@@ -486,6 +600,8 @@ const ready = (async () => {
       history.replaceState(null, "", "/");
     }
   }
+  // ?tab= 이 있으면 그것, 없으면 마지막으로 고른 탭. 내역의 "다시 묻기" 가 캐릭터 질문을 캐릭터 탭으로 보낸다.
+  applyTab(params.get("tab") === "character" ? "character" : tabs.read());
   return params.get("q");
 })();
 
@@ -493,6 +609,6 @@ const ready = (async () => {
 ready.then((query) => {
   if (!query) return;
   input.value = query;
-  run(query);
+  go(query);
 });
 refreshRuntime(0, () => {});

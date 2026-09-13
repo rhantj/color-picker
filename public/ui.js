@@ -337,20 +337,24 @@ export function savedFields(entry) {
       finishes.push({ role: c.role, id });
     }
 
+    // 캐릭터(34단계)는 모드가 정체가 아니다 — 배색 쌍과 문장이 정체다.
+    const isCharacter = e.structureId === "character";
     return {
       kind: "derived",
-      title: or(e.name, "이름 없는 구조"),
-      // 모드가 곧 이 항목의 정체다 — 같은 구조라도 밝은 것과 어두운 것은 색이 다르다.
-      badge: e.mode === "dark" ? "어두운 배경" : "밝은 배경",
+      title: or(e.name, isCharacter ? "이름 없는 캐릭터" : "이름 없는 구조"),
+      badge: isCharacter ? "캐릭터" : e.mode === "dark" ? "어두운 배경" : "밝은 배경",
       text: or(e.principle, ""),
-      coords: [
-        ["씨앗", or(e.seedLabel, or(e.seedId, "모름"))],
-        ["출처", or(e.source, "모름")],
-      ],
+      coords: isCharacter
+        ? [
+            ["배색 쌍", or(e.seedLabel, or(e.seedId, "모름"))],
+            ["설명", or(e.character?.query, "모름")],
+          ]
+        : [
+            ["씨앗", or(e.seedLabel, or(e.seedId, "모름"))],
+            ["출처", or(e.source, "모름")],
+          ],
       colors,
       finishes,
-      // **누가 골랐는지 밝힌다.** 비율은 이 화면에서 바로 고칠 수 있어 출처가 덜 중요하지만,
-      // 재질은 여기서 못 고치므로 "왜 이게 메탈릭이지" 를 답해 줘야 한다.
       finishesAdjusted: Boolean(e.finishesAdjusted),
     };
   }
@@ -499,11 +503,11 @@ export function finishEditing(store, structure, base) {
 /*
  * ── 모드 기억하기(23단계) ────────────────────────────────────
  *
- * **이 저장소의 첫 `localStorage` 다.** 그래서 문을 좁게 연다 — 저장을 만지는 자리는
+ * **이 저장소가 브라우저 저장소를 처음 쓰는 자리다.** 그래서 문을 좁게 연다 — 저장을 만지는 자리는
  * 아래 한 곳뿐이고, 화면 코드는 `modeStore` 를 거친다. 흩어지면 어느 값이 어디 저장됐는지
  * 아무도 모르게 되고, 그때는 되돌릴 수도 없다(`S23-G6` 이 그것을 문다).
  *
- * **뒤집는 것은 원래 결정의 절반뿐이다.** `app.js` 가 *"전역이나 localStorage 에 두지
+ * **뒤집는 것은 원래 결정의 절반뿐이다.** `app.js` 가 *"전역이나 브라우저 저장소에 두지
  * 않는다 — 카드마다 다른 모드로 나란히 비교할 수 있고..."* 라고 적어 뒀는데,
  * **카드별 어긋남은 그대로 둔다**(그것이 그 결정의 값이다). 저장하는 것은 **기본 모드
  * 하나**이고, 새로 펼치는 카드가 그 모드로 시작할 뿐이다.
@@ -519,7 +523,7 @@ const asMode = (value) => (typeof value === "string" && MODES.includes(value) ? 
  * 기본 모드를 기억해 둔다.
  *
  * **저장소가 없거나 던져도 화면이 돌아야 한다.** 시크릿 창 · 사이트 데이터 차단 · 일부
- * 임베드 환경에서 `localStorage` 는 **접근만 해도 던진다.** 감싸지 않으면 홈 화면이
+ * 임베드 환경에서 브라우저 저장소는 **접근만 해도 던진다.** 감싸지 않으면 홈 화면이
  * 통째로 안 뜬다 — 모드를 기억하자고 화면을 잃는 것은 말이 안 된다.
  *
  * **쓰기가 막혀도 토글은 되어야 한다.** 저장은 편의이고 토글은 기능이다.
@@ -547,6 +551,32 @@ export function modeStore(storage = defaultStorage()) {
         storage?.setItem?.(MODE_KEY, mode);
       } catch {
         // 못 저장해도 이번 토글은 그대로 동작한다.
+      }
+    },
+  };
+}
+
+/* ── 탭 기억하기(34단계) — 모드와 같은 문, 같은 불신 ─────────── */
+const TABS = Object.freeze(["palette", "character"]);
+const TAB_KEY = "tonefirst:tab";
+const asTab = (value) => (typeof value === "string" && TABS.includes(value) ? value : "palette");
+
+/** 마지막으로 고른 탭. 저장소가 없거나 던져도 돌고, 저장값은 아는 값만 믿는다 — `modeStore` 와 같은 규칙. */
+export function tabStore(storage = defaultStorage()) {
+  return {
+    read() {
+      try {
+        return asTab(storage?.getItem?.(TAB_KEY));
+      } catch {
+        return "palette";
+      }
+    },
+    write(tab) {
+      if (!TABS.includes(tab)) return;
+      try {
+        storage?.setItem?.(TAB_KEY, tab);
+      } catch {
+        // 못 저장해도 탭 전환은 그대로 된다.
       }
     },
   };
@@ -668,6 +698,33 @@ export function structureColors(structure, mode = "light") {
  *   **`onFinish` 는 담아 두기만 해야 한다** — 거기서 카드를 다시 그리면 사용자가 맞춘 비율과
  *   포커스가 날아간다(`S21-G4` 가 검사한다).
  */
+/**
+ * 캐릭터 응답을 `structureCard` 가 그릴 수 있는 구조 모양으로(34단계). 카드를 새로 만들지 않는다 — 스와치·다색 슬라이더·
+ * 재질 고르개·저장 버튼이 전부 그 카드에 있다. 순수 함수라 게이트가 직접 부른다.
+ */
+export function characterStructure(data) {
+  return {
+    id: "character",
+    name: "캐릭터 부위별 색",
+    source: `배색 쌍 ${data?.palette?.name ?? "모름"}`,
+    principle: data?.parse?.impression ? `인상 — ${data.parse.impression}` : "",
+    colors: (data?.colors ?? []).map((c) => ({ role: c.role, hex: c.hex })),
+  };
+}
+
+const SOURCE_LABEL = Object.freeze({ spoken: "말한 색", pair: "배색 쌍에서", creature: "종족", rule: "규칙" });
+
+/** 부위마다 색이 어디서 왔는지. 사용자가 "왜 이 색이지" 를 답할 수 있어야 한다. */
+export function sourceLine(colors) {
+  const line = el("div", "sources");
+  for (const c of colors ?? []) {
+    const item = el("span", "sources__item");
+    item.append(el("b", null, c.role), document.createTextNode(` ${c.name ?? c.hex} · ${SOURCE_LABEL[c.source] ?? c.source}`));
+    line.append(item);
+  }
+  return line;
+}
+
 export function structureCard(structure, mode = "light", finishes = null, onSave = null, editing = null) {
   const card = el("article", "struct");
 

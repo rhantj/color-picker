@@ -49,14 +49,14 @@ ${catalog.map((f) => `- ${f.id}: ${f.name} — ${f.principle}${f.detail ? ` ${f.
 JSON 으로만 답한다: {"assignments":{"역할":"재질id", ...}}`;
 
 /** 역할 이름이 기본 배정 표에 있는가. 없는 역할은 호출부의 잘못이므로 던진다. */
-function assertRoles(roles) {
+function assertRoles(roles, defaults) {
   if (!Array.isArray(roles) || roles.length === 0) {
     throw new MaterialError(`역할 목록이 비었다: ${Array.isArray(roles) ? "빈 배열" : typeof roles}`);
   }
   for (const role of roles) {
-    if (typeof role !== "string" || !Object.hasOwn(DEFAULT_FINISH_BY_ROLE, role)) {
+    if (typeof role !== "string" || !Object.hasOwn(defaults, role)) {
       const shown = typeof role === "string" ? role : typeof role;
-      throw new MaterialError(`없는 역할이다: ${shown}. 아는 것 — ${Object.keys(DEFAULT_FINISH_BY_ROLE).join(", ")}`);
+      throw new MaterialError(`없는 역할이다: ${shown}. 아는 것 — ${Object.keys(defaults).join(", ")}`);
     }
   }
 }
@@ -68,9 +68,9 @@ function assertRoles(roles) {
  * **던진다.** 없는 역할에 아무거나 물려주면 그 자리가 조용히 다른 재질로 칠해지고,
  * 틀렸다는 신호가 어디에도 남지 않는다.
  */
-export function fallbackAssignment(roles) {
-  assertRoles(roles);
-  return Object.fromEntries(roles.map((role) => [role, DEFAULT_FINISH_BY_ROLE[role]]));
+export function fallbackAssignment(roles, defaults = DEFAULT_FINISH_BY_ROLE) {
+  assertRoles(roles, defaults);
+  return Object.fromEntries(roles.map((role) => [role, defaults[role]]));
 }
 
 /**
@@ -89,8 +89,8 @@ export function fallbackAssignment(roles) {
  * @returns {{assignments: Record<string,string>, matched: number}}
  *   assignments 는 `roles` 전부를 키로 갖고 값은 전부 실재하는 재질이다.
  */
-export function parseAssignment(raw, roles, validFinishes = MATERIAL_FINISHES) {
-  assertRoles(roles);
+export function parseAssignment(raw, roles, validFinishes = MATERIAL_FINISHES, defaults = DEFAULT_FINISH_BY_ROLE) {
+  assertRoles(roles, defaults);
   const known = new Set(validFinishes);
   const wanted = new Set(roles);
 
@@ -128,7 +128,7 @@ export function parseAssignment(raw, roles, validFinishes = MATERIAL_FINISHES) {
     // 파싱 실패는 "아무것도 못 골랐다" 와 같다. 아래에서 전부 기본 배정으로 채워진다.
   }
 
-  const base = fallbackAssignment(roles);
+  const base = fallbackAssignment(roles, defaults);
   return { assignments: { ...base, ...picked }, matched };
 }
 
@@ -175,6 +175,7 @@ async function callModel(model, roles, catalog, query, signal) {
  * @param {string} query 사용자의 질문. **비어 있으면 LLM 을 아예 부르지 않는다** —
  *   고를 근거가 없는데 부르면 비용만 쓰고 답을 지어낸다.
  * @param {string[]} roles 이 결과에 실제로 나오는 역할 이름들
+ * @param {Record<string,string>} [defaults] 역할별 기본 재질표 — 화면 파생은 DEFAULT_FINISH_BY_ROLE, 캐릭터는 CHARACTER_FINISH_BY_ROLE
  * @returns {Promise<{assignments: Record<string,string>, from: "llm"|"fallback",
  *   matched: number, model?: string, elapsedMs?: number, error?: string}>}
  *
@@ -185,11 +186,11 @@ async function callModel(model, roles, catalog, query, signal) {
  *   있는 배정을 하나도 안 줬다면 결과가 기본 배정과 똑같으므로 `"fallback"` 이라고 말한다 —
  *   그러지 않으면 화면 배지가 거짓말을 한다.
  */
-export async function selectFinishes(query, roles) {
-  assertRoles(roles);
+export async function selectFinishes(query, roles, defaults = DEFAULT_FINISH_BY_ROLE) {
+  assertRoles(roles, defaults);
   const fallback = (error, extra = {}) =>
     result({
-      assignments: fallbackAssignment(roles),
+      assignments: fallbackAssignment(roles, defaults),
       from: "fallback",
       matched: 0,
       ...(error ? { error } : {}),
@@ -210,7 +211,7 @@ export async function selectFinishes(query, roles) {
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const raw = await callModel(model, roles, loadFinishes(), text, controller.signal);
-    const { assignments, matched } = parseAssignment(raw, roles);
+    const { assignments, matched } = parseAssignment(raw, roles, MATERIAL_FINISHES, defaults);
     const elapsedMs = Date.now() - started;
     // 모델이 쓸 수 있는 것을 하나도 안 줬으면 결과는 기본 배정과 같다. 그걸 "llm" 이라 부르면
     // 화면이 "질문에 맞춰 배정했다" 고 말하게 된다 — 실제로는 아무것도 배정하지 않았다.

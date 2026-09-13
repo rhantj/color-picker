@@ -37,6 +37,11 @@
       배색사전 16쌍과 진단표 18건을 문장으로 찾습니다. 색 조합을 물으면 조합을, 왜 그런지 물으면 의심할 원인을 답합니다.
     </p>
 
+    <div class="tabs" role="tablist" aria-label="무엇을 물을지">
+      <button class="tabs__tab" type="button" role="tab" id="tab-palette" data-tab-select="palette" aria-selected="true" aria-controls="results-palette">색감 추천</button>
+      <button class="tabs__tab" type="button" role="tab" id="tab-character" data-tab-select="character" aria-selected="false" aria-controls="results-character" tabindex="-1">캐릭터 색감</button>
+    </div>
+
     <form class="searchbar" id="search-form" role="search">
       <label class="searchbar__field" for="q">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" style="color: var(--ink-faint)">
@@ -51,11 +56,14 @@
 
     <div class="examples">
       <span class="examples__label">예시</span>
-      <button class="chip" type="button" data-example="따뜻한데 촌스럽지 않은, 오래된 목조 부엌 같은 색">오래된 목조 부엌</button>
-      <button class="chip" type="button" data-example="병원 앱인데 차갑지 않게">병원 앱, 차갑지 않게</button>
-      <button class="chip" type="button" data-example="느와르 포스터 만들건데 고급스러운 빨강">느와르 포스터</button>
-      <button class="chip" type="button" data-example="대시보드가 탁해 보여요">대시보드가 탁해 보여요</button>
-      <button class="chip" type="button" data-example="만든 화면이 자꾸 답답해 보이는데 왜 그럴까요">답답해 보이는데 왜 그럴까요</button>
+      <button class="chip" type="button" data-tab="palette" data-example="따뜻한데 촌스럽지 않은, 오래된 목조 부엌 같은 색">오래된 목조 부엌</button>
+      <button class="chip" type="button" data-tab="palette" data-example="병원 앱인데 차갑지 않게">병원 앱, 차갑지 않게</button>
+      <button class="chip" type="button" data-tab="palette" data-example="느와르 포스터 만들건데 고급스러운 빨강">느와르 포스터</button>
+      <button class="chip" type="button" data-tab="palette" data-example="대시보드가 탁해 보여요">대시보드가 탁해 보여요</button>
+      <button class="chip" type="button" data-tab="palette" data-example="만든 화면이 자꾸 답답해 보이는데 왜 그럴까요">답답해 보이는데 왜 그럴까요</button>
+      <button class="chip" type="button" data-tab="character" data-example="붉은 머리에 검은 갑옷, 차가운 성격의 기사" hidden>붉은 머리의 기사</button>
+      <button class="chip" type="button" data-tab="character" data-example="금발에 초록 눈, 흰 드레스의 공주" hidden>금발의 공주</button>
+      <button class="chip" type="button" data-tab="character" data-example="녹슨 로봇 병사, 은색 갑옷" hidden>녹슨 로봇</button>
     </div>
   </section>
 
@@ -73,7 +81,7 @@
 
   <section class="status" id="status" hidden aria-live="polite"></section>
 
-  <section aria-labelledby="results-title">
+  <section id="results-palette" role="tabpanel" aria-labelledby="tab-palette">
     <div class="results__head" id="results-head" hidden>
       <h2 class="results__title" id="results-title">추천 조합</h2>
       <span class="results__note" id="results-note">색상각과 톤 좌표를 따로 찍어 정렬했습니다</span>
@@ -81,6 +89,15 @@
     <div class="results__featured" id="results-featured"></div>
     <div class="results__diagnosis" id="results-diagnosis"></div>
     <div class="results__rest" id="results-rest"></div>
+  </section>
+
+  <section class="character" id="results-character" role="tabpanel" aria-labelledby="tab-character" hidden>
+    <div class="results__head" id="character-head" hidden>
+      <h2 class="results__title" id="character-title">캐릭터 부위별 색</h2>
+      <span class="results__note">말한 색은 그대로, 나머지는 인상에 맞는 배색 쌍과 규칙으로 채웠습니다</span>
+    </div>
+    <div class="status" id="character-status" hidden aria-live="polite"></div>
+    <div class="character__card" id="character-card"></div>
   </section>
 
   <div class="page-foot"></div>
