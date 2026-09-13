@@ -94,7 +94,7 @@ BM25 가 확신했는데 임베딩 1위와 다르다는 것은 그 확신이 흔
 ## 지금 상태
 
 - 28단계 게이트 4개 · 회귀 통과. 게이트 211개.
-- **커밋하지 않았다.** 브랜치 `stage-28-distrust-disagreeing-bm25`. 대표 확인 뒤 커밋·머지한다.
+- **커밋 `a617f9c` 로 `main` 에 올라갔다** (`stage-28-distrust-disagreeing-bm25` 브랜치, `--ff-only` 머지, 원격 `rhantj/color-picker`).
 
 ## 다음에 할 일
 
