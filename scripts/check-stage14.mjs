@@ -347,12 +347,11 @@ const gates = {
     if (!/selection\?\.ids/.test(app)) bad.push("고른 id 로 거르는 곳이 없다");
     // 나머지를 지우지 않고 접어 둔다.
     if (!/expand__more/.test(app)) bad.push("나머지를 보여줄 자리가 없다");
-    // **무엇이 골랐는지 밝힌다.** 안 밝히면 폴백일 때도 사용자는 LLM 이 고른 줄 안다.
-    if (!/from === "llm"/.test(app)) bad.push("LLM 이 골랐는지 구분하지 않는다");
-    if (!/LLM 이 고름/.test(app)) bad.push("LLM 이 골랐다는 표시가 없다");
-    if (!/기본 순서/.test(app)) bad.push("폴백이라는 표시가 없다");
+    // 무엇이 골랐는지는 **화면에 안 적는다**(31단계 · 대표 지시). 14단계 때는 "밝힌다" 였고 그 배지가 거짓말하는
+    // 결함을 잡았지만, 배지 자체가 없어졌으므로 이제는 "LLM 이 골랐다는 말이 없다" 를 잰다. 서버의 from 은 그대로다.
+    if (/LLM 이 고름|LLM 이 골랐/.test(app)) bad.push("화면이 아직 LLM 이 골랐다고 말한다 (31단계에서 뺐다)");
 
-    for (const cls of ["expand__more-toggle", "expand__note-text"]) {
+    for (const cls of ["expand__more-toggle"]) { // expand__note-text 는 31단계에서 배지와 함께 뺐다
       if (!css.includes(`.${cls}`)) bad.push(`${cls} 스타일이 없다`);
     }
     const moreRule = css.match(/\.expand__more-toggle\s*\{[^}]*\}/)?.[0] ?? "";

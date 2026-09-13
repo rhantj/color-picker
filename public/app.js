@@ -12,8 +12,6 @@ const resultsNote = document.getElementById("results-note");
 const featuredBox = document.getElementById("results-featured");
 const restBox = document.getElementById("results-rest");
 const diagnosisBox = document.getElementById("results-diagnosis");
-const stageLabel = document.getElementById("stage-label");
-const ladder = document.getElementById("ladder");
 
 const INTENT_LABEL = { palette: "팔레트 탐색", diagnosis: "진단", other: "색과 무관" };
 
@@ -190,62 +188,11 @@ function expansionSection(seedId, query) {
       const chosen = (data.selection?.ids ?? []).map((id) => byId.get(id)).filter(Boolean);
       const rest = data.structures.filter((st) => !data.selection?.ids?.includes(st.id));
 
-      // **무엇이 골랐는지 밝힌다.** LLM 이 골랐는지 카탈로그 순서로 물러섰는지를 안 적으면,
-      // 사용자는 다섯이 자기 질문에 맞춰 뽑힌 것이라고 늘 믿게 된다.
+      // 무엇이 골랐는지는 화면에 적지 않는다(31단계 · 대표 지시). 서버 응답의 selection.from 은 그대로 온다.
       note.replaceChildren();
-      const picked = data.selection?.from === "llm";
-      const matched = data.selection?.matched ?? 0;
-      note.append(
-        el("span", "status__badge", picked ? "LLM 이 고름" : "기본 순서"),
-        el(
-          "span",
-          "expand__note-text",
-          picked
-            ? // 문장을 조각내 잇지 않는다. 조건마다 온전한 문장을 쓴다 —
-              // 잇다가 "골랐고" + "습니다" 가 붙어 "골랐고습니다" 가 나갔다.
-              (matched < chosen.length
-                ? `로컬 LLM 이 ${matched}가지를 골랐고, 나머지 ${chosen.length - matched}가지는 기본 순서로 채웠습니다.`
-                : `질문에 맞는 ${matched}가지를 로컬 LLM 이 골랐습니다.`) +
-              " 색은 씨앗의 HSL 연산으로만 나왔고 LLM 은 색에 닿지 않습니다."
-            : `${data.selection?.error ? `${data.selection.error} — ` : ""}카탈로그 순서로 ${chosen.length}가지를 보여줍니다. 색은 씨앗의 HSL 연산으로만 나왔습니다.`,
-        ),
-      );
-      if (picked && data.selection?.elapsedMs != null) {
-        note.append(el("span", "status__timing", `${data.selection.model} · ${data.selection.elapsedMs}ms`));
-      }
 
-      /*
-       * **재질 배정의 출처를 따로 밝힌다.** 구조 선택 배지와 나란히 두지 않고 줄을 나눈다 —
-       * 둘은 서로 다른 호출이고 한쪽만 실패할 수 있다. 한 줄에 붙이면 "LLM 이 고름" 이 무엇에
-       * 대한 말인지 흐려진다.
-       *
-       * 배지가 거짓말하지 않게 하는 판정은 서버가 이미 했다(S17-G5) — 모델이 쓸 수 있는 배정을
-       * 하나도 안 줬으면 from 이 fallback 이다. 화면은 그것을 그대로 옮긴다.
-       */
+      // 재질 배정의 출처(finishes.from)도 화면에 적지 않는다(31단계). 되돌릴 자리는 고르개의 "(처음 값)" 이 알려 준다.
       const fin = data.finishes;
-      const roleCount = Object.keys(fin?.assignments ?? {}).length;
-      const finNote = el("p", "expand__finish-note");
-      if (fin?.assignments) {
-        const byLlm = fin.from === "llm";
-        finNote.append(
-          el("span", "status__badge", byLlm ? "LLM 이 배정" : "기본 배정"),
-          el(
-            "span",
-            "expand__finish-text",
-            byLlm
-              ? // 문장을 조각내 잇지 않는다. 조건마다 온전한 문장을 쓴다 — 14단계에서 조각을
-                // 이어 붙였다가 "골랐고" + "습니다" 가 붙어 "골랐고습니다" 가 나간 적이 있고,
-                // 여기서는 전부 배정됐는데도 "나머지는 기본 배정" 이라고 말했다(브라우저 실측).
-                fin.matched < roleCount
-                ? `질문에 맞춰 ${fin.matched}자리를 로컬 LLM 이 배정했고, 나머지 ${roleCount - fin.matched}자리는 기본 재질입니다.`
-                : `역할 ${fin.matched}자리의 재질을 질문에 맞춰 로컬 LLM 이 배정했습니다.`
-              : `${fin.error ? `${fin.error} — ` : ""}역할별 기본 재질로 보여줍니다.`,
-          ),
-        );
-        if (byLlm && fin.elapsedMs != null) {
-          finNote.append(el("span", "status__timing", `${fin.model} · ${fin.elapsedMs}ms`));
-        }
-      }
 
       // **토글은 이미 받아 둔 data 로만 다시 그린다 — 네트워크 0, LLM 재호출 0.**
       // 모드를 서버에 물으면 selectStructures 가 다시 돌아 같은 질의인데 보이는 다섯이 바뀐다.
@@ -276,7 +223,8 @@ function expansionSection(seedId, query) {
 
       const grid = el("div", "expand__grid");
 
-      body.replaceChildren(note, ...(finNote.childElementCount ? [finNote] : []), modeBox, grid);
+      // 빈 note 는 안 붙인다 — 비운 <p> 도 12px 여백을 남긴다(리뷰 지적). 실패 경로는 위에서 붙인 note 에 문장을 쓴다.
+      body.replaceChildren(modeBox, grid);
 
       // 나머지는 지우지 않고 접어 둔다. 서버가 이미 계산해 둔 것이고, 고른 다섯이 마음에 안 들 때
       // 사용자가 볼 자리가 있어야 한다.
@@ -390,34 +338,8 @@ function renderStatus(data, error) {
             : "팔레트 코퍼스에도 진단표에도 걸리는 것이 없습니다. 색에 관한 질문이 아닐 수 있습니다.",
       ),
     );
-  } else if (data.stage === 1) {
-    statusBox.append(
-      el("span", "status__badge", "1단계"),
-      el(
-        "span",
-        "status__text",
-        data.route === "diagnosis"
-          ? "전문 검색이 진단표에서 바로 찾았습니다. LLM 을 부르지 않았습니다."
-          : "전문 검색만으로 걸렸습니다. LLM 을 부르지 않았습니다.",
-      ),
-    );
-  } else if (data.stage === 3) {
-    statusBox.append(
-      el("span", "status__badge", "3단계"),
-      el(
-        "span",
-        "status__text",
-        data.usedLlm
-          ? "전문 검색과 임베딩이 못 잡아 로컬 LLM 이 질문을 다시 썼고, 그 검색어를 임베딩과 결합해 골랐습니다."
-          : "전문 검색만으로는 근거가 어긋나 임베딩과 결합해 다시 골랐습니다. LLM 을 부르지 않았습니다.",
-      ),
-    );
-  } else {
-    statusBox.append(
-      el("span", "status__badge", "2단계"),
-      el("span", "status__text", "전문 검색이 못 잡아 로컬 LLM 이 질문을 다시 썼습니다. 아래 검색어로 다시 찾은 결과입니다."),
-    );
   }
+  // 어느 단계가 답했는지 · LLM 을 불렀는지는 화면에 적지 않는다(31단계 · 대표 지시). 기록(usedLlm)과 시간 줄은 그대로다.
 
   const count = data.route === "diagnosis" ? data.diagnostics.length : data.results.length;
   const timing = [`BM25 ${data.elapsedMs}ms`];
@@ -438,13 +360,6 @@ function renderStatus(data, error) {
     for (const term of data.rewrite.terms) strip.append(el("span", "rewrite__term", term));
     strip.append(el("span", "rewrite__meta", `${data.rewrite.model} · ${data.rewrite.elapsedMs}ms`));
     statusBox.append(strip);
-  }
-}
-
-function renderLadder(stage) {
-  stageLabel.textContent = String(stage);
-  for (const step of ladder.children) {
-    step.dataset.active = String(Number(step.dataset.step) <= stage);
   }
 }
 
@@ -544,7 +459,7 @@ function showThread(conversation) {
   threadTitle.textContent = conversation.turns.at(-1)?.query ?? "(빈 대화)";
   // 26단계 전 턴에는 usedLlm 이 없다 — 그때는 2단계가 곧 LLM 이었다(history.js 와 같은 보정).
   const usedLlm = conversation.turns.filter((t) => (t.usedLlm === undefined ? t.stage === 2 : t.usedLlm === true)).length;
-  threadMeta.textContent = `${conversation.turns.length}턴 · LLM ${usedLlm}회`;
+  threadMeta.textContent = `${conversation.turns.length}턴 · 재작성 ${usedLlm}회`; // 31단계: 'LLM' 대신 무엇을 했는지(질문 재작성)로 적는다
   document.getElementById("thread-open").href = `/history#${conversation.id}`;
   threadBox.hidden = false;
 }
@@ -580,5 +495,4 @@ ready.then((query) => {
   input.value = query;
   run(query);
 });
-renderLadder(1);
-refreshRuntime(0, renderLadder);
+refreshRuntime(0, () => {});

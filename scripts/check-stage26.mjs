@@ -515,7 +515,7 @@ say({ first: first.state, early: early.state, late: late.state, stage: r.stage, 
 
   /*
    * 화면 문장은 눈으로 읽는다(17-B). 여기서는 **구조**만 본다 — 3단계 분기가 있는가, LLM 횟수가
-   * stage===2 로 세고 있지 않은가, 사다리가 3까지 켜지는가, 턴 기록이 stage 3 을 받는가.
+   * stage===2 로 세고 있지 않은가, 턴 기록이 stage 3 을 받는가. (배지·사다리는 31단계에서 뺐다 — 기록 쪽만 본다.)
    */
   "S26-G7": async () => {
     const bad = [];
@@ -524,12 +524,9 @@ say({ first: first.state, early: early.state, late: late.state, stage: r.stage, 
     const history = strip(read("public/history.js"));
     const css = read("public/app.css");
 
-    if (!/data\.stage === 3/.test(app)) bad.push("app.js 에 3단계 분기가 없다");
-    if (!/3단계/.test(app)) bad.push("app.js 에 3단계 배지 문구가 없다");
     if (/stage === 2\)\.length|s === 2\)\.length/.test(app + history)) bad.push("LLM 횟수를 아직 stage===2 로 센다 — 3단계 뒤에 2단계가 올 수 있다");
     if (!/usedLlm/.test(app) || !/usedLlm/.test(history)) bad.push("LLM 횟수가 usedLlm 기준이 아니다");
     if (!/\.turn__stage--3/.test(css)) bad.push("app.css 에 .turn__stage--3 이 없다");
-    if (/실측이 요구하기 전까지 올리지 않습니다/.test(read("public/index.html"))) bad.push("사다리 주석이 아직 '올리지 않습니다' 다 — 3단계가 올라갔다");
 
     const stub = await stubOllama();
     try {
@@ -554,7 +551,7 @@ say({ first: first.state, early: early.state, late: late.state, stage: r.stage, 
     }
 
     if (bad.length) throw new Error(bad.join(" / "));
-    out("3단계 분기 · usedLlm · 사다리 · 턴 기록 왕복");
+    out("3단계 분기 · usedLlm · 턴 기록 왕복");
     out("S26_G7_OK");
   },
 };

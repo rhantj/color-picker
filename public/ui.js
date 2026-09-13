@@ -288,7 +288,7 @@ export function finishLine(fields, nameFor = null) {
    *
    * 역할마다 표시하려면 기본 배정표가 화면에 있어야 하는데, 그것은 `src/material.js` 에 있고
    * 화면으로 내리면 사본이 하나 더 생긴다. **아는 만큼만 말하는 쪽**을 골랐다 —
-   * 되돌릴 자리를 정확히 알려 주는 것은 홈 화면의 `(LLM 배정)` 표시가 이미 한다.
+   * 되돌릴 자리를 정확히 알려 주는 것은 홈 화면의 `(처음 값)` 표시가 이미 한다.
    */
   if (fields.finishesAdjusted) line.append(el("span", "card__finish-mark", "직접 고른 재질 있음"));
   return line;
@@ -399,7 +399,7 @@ export function savedFields(entry) {
  * 이름은 카탈로그(`data/finishes.json`)가 갖고 있고 서버가 `finishes.names` 로 보낸다.
  * 이름이 없으면 id 로 물러선다 — 고르개가 통째로 비는 것보다 낫다.
  *
- * **LLM 이 고른 것에 표시를 붙인다.** 사용자가 이것저것 바꿔 본 뒤 원래로 돌아가려 할 때,
+ * **처음 배정된 것에 표시를 붙인다.** (31단계부터 LLM 이 골랐는지는 화면에 안 적는다 — 표시는 되돌릴 자리다.) 사용자가 이것저것 바꿔 본 뒤 원래로 돌아가려 할 때,
  * 어느 것이 원래였는지 알 방법이 필요하다. 되돌리기 버튼과 그 상태를 따로 만드는 대신
  * **목록 안에 적어** 상태를 하나도 안 늘린다.
  *
@@ -412,7 +412,7 @@ export function finishOptions(ids, names, assigned) {
   return list.map((id) => {
     // 자기 속성만 본다. 카탈로그가 손상되면 `__proto__` 같은 이름이 값을 물고 나온다.
     const name = names && Object.hasOwn(names, id) && typeof names[id] === "string" ? names[id] : id;
-    return { id, label: id === assigned ? `${name} (LLM 배정)` : name };
+    return { id, label: id === assigned ? `${name} (처음 값)` : name };
   });
 }
 

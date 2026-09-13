@@ -463,57 +463,6 @@ a:hover {
   font-weight: 500;
 }
 
-/* ── 검색 단계 사다리 ────────────────────────────────────── */
-
-.ladder {
-  margin: 56px var(--gutter) 0;
-  padding-top: 28px;
-  border-top: 1px solid var(--line);
-}
-.ladder__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 18px;
-  gap: 16px;
-}
-.ladder__title {
-  font-size: 14px;
-  font-weight: 600;
-}
-.ladder__note {
-  font-size: 13px;
-  color: var(--ink-muted);
-}
-.ladder__steps {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-.ladder__step {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-faint);
-}
-.ladder__step::before {
-  content: "";
-  height: 5px;
-  border-radius: 999px;
-  background: var(--line);
-}
-.ladder__step[data-active="true"] {
-  color: var(--ink);
-}
-.ladder__step[data-active="true"]::before {
-  background: var(--accent);
-}
-
 .page-foot {
   padding: 56px var(--gutter) 72px;
 }
@@ -601,9 +550,6 @@ a:hover {
     width: 100%;
     height: 48px;
     margin-top: 12px;
-  }
-  .ladder__steps {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1493,37 +1439,12 @@ a.action--primary:hover {
   color: var(--accent-ink);
 }
 
-/* ── 고른 다섯 / 나머지 셋 (14단계) ────────────────────────
-   무엇이 골랐는지(LLM / 기본 순서)를 배지로 밝힌다. 안 적으면 사용자는 다섯이 늘 자기 질문에
-   맞춰 뽑힌 것이라고 믿게 된다 — Ollama 가 죽어 있어도 화면은 똑같이 다섯 장이기 때문이다. */
-.expand__note-text {
-  flex: 1 1 320px;
-  min-width: 0;
-}
-
 /* 보기 방식을 바꾸는 버튼이지 내용을 여는 버튼이 아니다. 그래서 펼치기(.expand__toggle)보다
    물러서고, 나머지 보기(.expand__more-toggle)와는 같은 무게로 둔다 - 둘 다 보조 조작이다.
    지금 모드는 색이 아니라 채워진 사각형으로 말한다(색만으로 상태를 알리지 않는다).
    **`aria-pressed` 가 아니라 `data-mode` 를 훅으로 쓴다** — 이 버튼의 이름이 갈 곳을
    말하므로 `aria-pressed` 를 붙이면 화면을 못 보는 사람에게 거꾸로 읽힌다(23단계).
    읽어 주는 말은 `aria-label` 이 따로 한다. */
-/* 재질 배정 출처. 구조 선택 배지(.expand__note)와 **줄을 나눈다** — 둘은 서로 다른 호출이고
-   한쪽만 실패할 수 있다. 한 줄에 붙이면 "LLM 이 고름" 이 무엇에 대한 말인지 흐려진다. */
-.expand__finish-note {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: -4px 0 12px;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--ink-faint);
-}
-.expand__finish-text {
-  flex: 1 1 320px;
-  min-width: 0;
-}
-
 .expand__mode {
   margin: -4px 0 12px;
 }

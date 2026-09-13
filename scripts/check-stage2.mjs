@@ -53,7 +53,7 @@ const gates = {
       return `/ 의 content-type 이 ${res.headers.get("content-type")}`;
     }
     const html = await res.text();
-    for (const needle of ["search-form", "ladder", 'id="results-featured"', "/app.css", "/app.js"]) {
+    for (const needle of ["search-form", 'id="results-featured"', "/app.css", "/app.js"] /* 사다리(ladder)는 31단계에서 뺐다 */) {
       if (!html.includes(needle)) return `홈 화면에 ${needle} 없음`;
     }
     for (const asset of ["/app.css", "/app.js"]) {

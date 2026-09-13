@@ -880,11 +880,12 @@ const GATES = {
     // 화면이 응답의 finishes 를 카드에 넘긴다.
     const sec = between(app, "function expansionSection", "function renderStatus", "expansionSection");
     if (!/data\.finishes/.test(sec)) bad.push("펼침 영역이 data.finishes 를 안 읽는다");
-    if (!/finishBadge|expand__finish/.test(sec)) bad.push("재질 배정 출처 배지가 없다");
+    // 출처 배지("LLM 이 배정 / 기본 배정")는 31단계에서 뺐다 — 있으면 안 된다. 서버의 finishes.from 은 그대로다.
+    if (/finishBadge|expand__finish/.test(sec)) bad.push("재질 배정 출처 배지가 아직 있다 (31단계에서 뺐다)");
 
     // JS 가 쓰는 클래스가 전부 스타일시트에 있다. S15-G13 이 같은 대조를 한다.
     const used = [...new Set([...(app.match(/expand__finish[\w-]*/g) ?? []), ...(ui.match(/struct__finishes[\w-]*/g) ?? [])])];
-    if (used.length < 2) bad.push(`재질 관련 클래스가 ${used.length}개뿐이다`);
+    if (used.length < 1) bad.push("재질 관련 클래스가 하나도 없다");
     const missing = used.filter((cls) => !new RegExp(`\\.${cls}(?![\\w-])`).test(css));
     if (missing.length) bad.push(`화면이 쓰는데 스타일시트에 없는 클래스: ${missing.join(", ")}`);
 

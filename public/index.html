@@ -35,8 +35,7 @@
     </p>
     <h1 class="hero__title">찾는 색을 문장으로 쓰세요</h1>
     <p class="hero__lead">
-      배색사전 16쌍을 전문 검색으로 뒤집니다. 임베딩도 벡터DB도 쓰지 않습니다.
-      전문 검색이 잡으면 거기서 끝나고, 못 잡을 때만 로컬 LLM 이 질문을 검색어로 바꿉니다.
+      배색사전 16쌍과 진단표 18건을 문장으로 찾습니다. 색 조합을 물으면 조합을, 왜 그런지 물으면 의심할 축을 답합니다.
     </p>
 
     <form class="searchbar" id="search-form" role="search">
@@ -83,21 +82,6 @@
     <div class="results__featured" id="results-featured"></div>
     <div class="results__diagnosis" id="results-diagnosis"></div>
     <div class="results__rest" id="results-rest"></div>
-  </section>
-
-  <section class="ladder" aria-labelledby="ladder-title">
-    <div class="ladder__head">
-      <span class="ladder__title" id="ladder-title">검색 구조 · 지금은 <span id="stage-label">1</span>단계</span>
-      <span class="ladder__note">코퍼스 34건. 3단계까지 올렸습니다 — 실측 18건 중 11건이 틀려서.</span>
-    </div>
-    <ol class="ladder__steps" id="ladder">
-      <li class="ladder__step" data-step="1">1 전문검색</li>
-      <li class="ladder__step" data-step="2">2 질의재작성</li>
-      <li class="ladder__step" data-step="3">3 하이브리드</li>
-      <li class="ladder__step" data-step="4">4 온디맨드</li>
-      <li class="ladder__step" data-step="5">5 핫·콜드</li>
-      <li class="ladder__step" data-step="6">6 전체 사전임베딩</li>
-    </ol>
   </section>
 
   <div class="page-foot"></div>

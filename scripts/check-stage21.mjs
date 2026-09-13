@@ -72,12 +72,12 @@ const GATES = {
       }
       if (!String(found.label).includes(FINISH_KO[id])) bad.push(`${id} 가 한글 이름을 안 쓴다 (${found.label})`);
     }
-    // LLM 이 고른 것에 표시가 붙는다 — 되돌릴 길이 상태 없이 생긴다.
+    // 처음 배정된 것에 표시가 붙는다 — 되돌릴 길이 상태 없이 생긴다. 31단계부터 "(처음 값)" 이다(LLM 문구 제거).
     const llm = list.find((o) => o.id === "gloss");
     const others = list.filter((o) => o.id !== "gloss");
-    if (!/LLM/.test(String(llm?.label))) bad.push(`LLM 배정에 표시가 없다 (${llm?.label})`);
+    if (!/\(처음 값\)/.test(String(llm?.label))) bad.push(`처음 배정에 표시가 없다 (${llm?.label})`);
     for (const o of others) {
-      if (/LLM/.test(String(o.label))) bad.push(`${o.id} 에 엉뚱한 LLM 표시가 있다 (${o.label})`);
+      if (/처음 값|LLM/.test(String(o.label))) bad.push(`${o.id} 에 엉뚱한 표시가 있다 (${o.label})`);
     }
     // 이름을 모를 때도 고를 수는 있어야 한다. 화면이 통째로 비는 것보다 낫다.
     const nameless = finishOptions(FINISH_IDS, null, null);
@@ -276,11 +276,11 @@ const GATES = {
     if (opened.get("강조") !== finishes.assignments.강조) {
       bad.push(`안 바꾼 강조가 ${opened.get("강조")} 로 열린다`);
     }
-    // `(LLM 배정)` 표시는 **원래** 배정을 따른다 — 되돌릴 자리를 알려 주는 것이 그 목적이다.
+    // `(처음 값)` 표시는 **원래** 배정을 따른다 — 되돌릴 자리를 알려 주는 것이 그 목적이다(31단계 전엔 "(LLM 배정)").
     const bodyOpts = findAll(after, (n) => n.tag === "select").find((s) => s.attrs["data-role"] === "본문");
-    const marked = bodyOpts.children.filter((o) => /LLM/.test(o.textContent)).map((o) => o.value);
+    const marked = bodyOpts.children.filter((o) => /처음 값/.test(o.textContent)).map((o) => o.value);
     if (String(marked) !== finishes.assignments.본문) {
-      bad.push(`LLM 표시가 [${marked}] 에 붙었다 — 원래 배정(${finishes.assignments.본문})에 붙어야 한다`);
+      bad.push(`처음 값 표시가 [${marked}] 에 붙었다 — 원래 배정(${finishes.assignments.본문})에 붙어야 한다`);
     }
 
     // **고르개를 안 준 옛 호출은 그대로 돈다.** 17단계의 읽기 전용 표시가 회귀하지 않게.
