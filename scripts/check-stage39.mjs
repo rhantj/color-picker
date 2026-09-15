@@ -37,6 +37,8 @@ const ROUTE_TABLE = [
   { text: "머리", routes: ["character"], unclear: "character" },
   { text: "색으로 봐줘", redirect: "color" },
   { text: "캐릭터로", redirect: "character" },
+  { text: "검정 안경", routes: ["palette"] },
+  { text: "포인트 강조 화려하게 해줘", routes: ["palette"] },
 ];
 // 음성 = 그 경로가 아닌 것을 확인하는 행. 캐릭터가 아닌 행 + 진단이 아닌 행이 절반을 넘는다.
 const NEGATIVE_MIN = Math.ceil(ROUTE_TABLE.length / 2);
