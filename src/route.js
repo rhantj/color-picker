@@ -39,7 +39,11 @@ function surfaceHits(text, forms) {
 }
 
 export function createRouter({ words: table, diagnostics, corpus, creatures = [] }) {
-  const partForms = Object.values(table.parts ?? {}).flat();
+  // 부위 표면형 중 1글자짜리는 뺀다 — data/character-words.json 자체가 "검"(강조) 같은 1글자 형태가
+  // "검정"("black") 안에서 오탐을 낸다고 적어뒀다.
+  const partsTable = table.parts ?? {};
+  const partForms = Object.values(partsTable).flat().filter((f) => f.length >= 2);
+  const formToRole = new Map(Object.entries(partsTable).flatMap(([role, forms]) => forms.filter((f) => f.length >= 2).map((f) => [f, role])));
   const colorForms = Object.values(table.colorWords ?? {}).flat();
   const compoundForms = Object.keys(table.compounds ?? {});
   const creatureForms = creatures.flatMap((c) => c.words ?? []);
@@ -57,7 +61,7 @@ export function createRouter({ words: table, diagnostics, corpus, creatures = []
 
     // 2. 입력 전체가 색 하나 — 다른 신호와 겹칠 수 없다
     const color = parseColorInput(text, corpus);
-    if (color) return { kind: "route", routes: ["color"], unclear: false, signals: { color: color.hex, parts: [], colorWords: [], compounds: [], creatures: [], diagnosis: [], partsOnly: false } };
+    if (color) return { kind: "route", routes: ["color"], unclear: false, signals: { color: color.hex, parts: [], colorWords: [], compounds: [], creatures: [], diagnosis: [], partsOnly: false, partRoles: [] } };
 
     // 3. 캐릭터 신호
     const parts = surfaceHits(text, partForms);
@@ -67,13 +71,16 @@ export function createRouter({ words: table, diagnostics, corpus, creatures = []
     // 부위 낱말을 걷어내면 아무것도 안 남는가 — "머리" 처럼 부위만 말한 것
     const stripped = parts.reduce((acc, f) => acc.replaceAll(f, ""), text).replace(/\s+/g, "");
     const partsOnly = parts.length > 0 && colorWords.length === 0 && compounds.length === 0 && stripped.length === 0;
-    const strong = compounds.length > 0 || (parts.length > 0 && (colorWords.length > 0 || creatureHits.length > 0)) || new Set(parts).size >= 2;
+    // 표면형이 아니라 역할(부위 종류) 수를 센다 — "포인트"·"강조" 는 같은 강조 역할의 동의어라 둘 다 걸려도
+    // 부위 하나로 친다. "상의는 갈색 하의는 검정" 처럼 역할이 실제로 둘(상의·하의)일 때만 강한 신호다.
+    const partRoles = [...new Set(parts.map((f) => formToRole.get(f)))];
+    const strong = compounds.length > 0 || (parts.length > 0 && (colorWords.length > 0 || creatureHits.length > 0)) || partRoles.length >= 2;
     const weak = parts.length > 0 && !strong && !partsOnly;
 
     // 4. 진단 신호
     const diagnosis = diagnosisHits(text, tokens, diagnostics);
 
-    const signals = { color: null, parts, colorWords, compounds, creatures: creatureHits, diagnosis, partsOnly };
+    const signals = { color: null, parts, colorWords, compounds, creatures: creatureHits, diagnosis, partsOnly, partRoles };
 
     if (partsOnly) return { kind: "route", routes: ["character"], unclear: "character", signals };
     const routes = [];
