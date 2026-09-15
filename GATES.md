@@ -2182,3 +2182,49 @@ S36-G5 회귀 — S9 6 · S18 13 · S19 6 · S20 7 · S22 6 · S35 6 = 44
 - **씨앗 풀 쌍의 저장 항목에는 유형·색상각·톤 관계가 없다.** 원전 해설이 없는 것을 지어내지 않는다(`seeds.js` 규칙). `/saved` 는 "유형 모름" 으로 그린다.
 - **재질은 기본 배정이다.** 헥스에는 인상이 없어 LLM 에 묻지 않는다. 고르개로 바꾸면 저장에 실린다(21단계 경로).
 - **탭 전환은 검색창만 비운다.** 결과 영역은 탭마다 따로 남는다(34단계 결정 그대로).
+
+## 39단계 — 탭 통합 · 결정적 라우터 · 되묻기 (대표 결정)
+
+홈의 탭 셋을 없앤다. 입력 한 줄을 서버가 어휘표만으로 네 경로(추천·진단·캐릭터·색)로 가르고, 겹치거나(캐릭터×진단)
+모자라면(부위 낱말만 · 검색 끝까지 저신뢰) **한 번만 되묻는다.** 화면은 대화 기록 하나(사용자 턴 10개). 판정과 입출력은
+LangSmith 로 보내되 키가 없으면 아무 데도 안 보낸다. 설계: `docs/superpowers/specs/2026-09-15-unified-chat-router-design.md`.
+
+S39-G1 라우터 입력표 — 고정 입력 16건(양성·음성·겹침·불명·바로잡기)이 기대 경로와 같다 · 음성 사례가 절반 이상
+    CHECK: node scripts/check-stage39.mjs S39-G1
+    EXPECT: S39_G1_OK
+
+S39-G2 결정성 — 같은 입력 16건을 두 번 넣으면 판정이 같다 · 라우터가 `fetch`·파일을 안 부른다(순수)
+    CHECK: node scripts/check-stage39.mjs S39-G2
+    EXPECT: S39_G2_OK
+
+S39-G3 되묻기 1회 — "도적 상의가 탁해" 가 `ask`(ambiguous · 후보 character,diagnosis) · 칩 `diagnosis` 로 답하면 `answer` · 문장으로 또 애매하게 답해도 다시 안 묻고 첫 후보(character)로 답한다 · "머리" 가 `ask`(unclear) 이고 "빨간" 을 이어 쓰면 character 로 답한다
+    CHECK: node scripts/check-stage39.mjs S39-G3
+    EXPECT: S39_G3_OK
+
+S39-G4 대화 상한 — 같은 대화에 10턴을 넣은 뒤 11번째는 새 `conversationId` 로 오고 옛 대화는 10턴 그대로 · `LIMITS.turnsPerConversation === 10`
+    CHECK: node scripts/check-stage39.mjs S39-G4
+    EXPECT: S39_G4_OK
+
+S39-G5 키 없음 — `LANGSMITH_API_KEY` 없이 `LANGSMITH_ENDPOINT` 를 가짜 서버로 주고 `/api/chat` 4건을 부르면 가짜 서버에 요청 0건 · 응답은 정상
+    CHECK: node scripts/check-stage39.mjs S39-G5
+    EXPECT: S39_G5_OK
+
+S39-G6 키 있음 — 가짜 서버에 부모 런(name `chat.turn`)과 자식 런(`route`, `ask` 또는 `search`/`color`/`character`)이 `x-api-key` 와 함께 오고 `parent_run_id`·`trace_id`·`dotted_order`·`session_name` 이 맞다 · 엔드포인트가 죽은 포트여도 `/api/chat` 이 1초 안에 200
+    CHECK: node scripts/check-stage39.mjs S39-G6
+    EXPECT: S39_G6_OK
+
+S39-G7 로컬 기록 — `var/traces.jsonl`(TONEFIRST_DATA_DIR 아래)에 턴마다 한 줄 · G1 입력 중 6건을 넣으면 각 줄의 `route.outputs.routes` 가 G1 기대와 같다
+    CHECK: node scripts/check-stage39.mjs S39-G7
+    EXPECT: S39_G7_OK
+
+S39-G8 탭 소멸 — `index.html` 에 `tablist`·`data-tab-select` 없음 · `<ol class="chat"` 있음 · `app.js`·`ui.js` 에 `RUN_BY_TAB`·`tabStore`·`asTab`·`applyTab`·`tab=` 없음 · `app.js` 가 `/api/chat` 을 부르고 `/api/conversations/turn` 은 안 부름 · 홈 HTML·app.js 에 "LLM" 없음
+    CHECK: node scripts/check-stage39.mjs S39-G8
+    EXPECT: S39_G8_OK
+
+S39-G9 바로잡기 — "여름 화장품 브랜드" 로 답한 뒤 "캐릭터로" 를 보내면 같은 원문을 character 로 다시 푼 `answer` 가 오고 `original` 이 첫 문장이다 · 직전 답이 없는 대화에서 "색으로 봐줘" 는 보통 문장으로 처리된다
+    CHECK: node scripts/check-stage39.mjs S39-G9
+    EXPECT: S39_G9_OK
+
+S39-G10 회귀 — S4(7)·S22(6)·S34(10)·S35(6)·S36(5) 검사기 전부 통과(실측: 각 파일의 GATES 키 수)
+    CHECK: node scripts/check-stage39.mjs S39-G10
+    EXPECT: S39_G10_OK
