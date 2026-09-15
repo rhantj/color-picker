@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 // 저장 위치. 검사가 사용자 데이터를 오염시키지 않도록 환경변수로 갈아끼울 수 있게 둔다.
-const DATA_DIR = process.env.TONEFIRST_DATA_DIR || fileURLToPath(new URL("../var/", import.meta.url));
+export const DATA_DIR = process.env.TONEFIRST_DATA_DIR || fileURLToPath(new URL("../var/", import.meta.url));
 
 // 한쪽이 가질 수 있는 최소·최대 지분. 이 밖으로 나가면 사실상 단색이 된다.
 export const RATIO_MIN = 10;
@@ -80,7 +80,8 @@ export const LIMITS = {
   ratioMin: RATIO_MIN,
   ratioMax: RATIO_MAX,
   conversations: 50,
-  turnsPerConversation: 100,
+  // 39단계: 대화 하나는 사용자 턴 10개. 넘으면 chat.js 가 새 대화를 연다 — 여기의 slice 는 안전망일 뿐이다.
+  turnsPerConversation: 10,
   saved: 200,
   queryChars: 500,
   noteChars: 200,
@@ -159,12 +160,28 @@ const clip = (value, max) => {
 };
 
 const ID_SHAPE = /^[a-z]+-[a-z0-9]+-[a-z0-9]+$/;
-const VALID_ROUTES = new Set(["palette", "diagnosis", "character", "color", "none"]);
+// 39단계: 되물은 턴은 route "ask" 로 남긴다.
+const VALID_ROUTES = new Set(["palette", "diagnosis", "character", "color", "ask", "none"]);
 
 /* ── 대화 내역 ───────────────────────────────────────────── */
 
 export function listConversations() {
   return readJson("conversations.json", []);
+}
+
+/** id 로 대화 하나. 없으면 null. chat.js 가 pending 과 턴 수를 읽는 데 쓴다. */
+export function findConversation(id) {
+  if (typeof id !== "string") return null;
+  return listConversations().find((c) => c.id === id) ?? null;
+}
+
+/** 되묻기 상태의 형태를 강제한다. 화면이 아니라 서버(chat.js)가 만들지만, 파일에서 읽어 올 때도 이 꼴이어야 한다. */
+function normalizePending(value) {
+  if (!value || typeof value !== "object") return null;
+  const original = clip(value.original, LIMITS.queryChars);
+  if (!original) return null;
+  const choices = Array.isArray(value.choices) ? value.choices.filter((c) => VALID_ROUTES.has(c) && c !== "ask" && c !== "none") : [];
+  return { original, choices, reason: value.reason === "unclear" ? "unclear" : "ambiguous", askedAt: now() };
 }
 
 /**
@@ -178,6 +195,7 @@ export function recordTurn(input) {
   const turn = {
     at: now(),
     query,
+    kind: input.kind === "ask" ? "ask" : "answer", // 39단계
     // 3단계(임베딩 결합)가 생겼다. 열거값 위조는 여전히 1 로 떨어진다(S4-G5).
     stage: [1, 2, 3].includes(input.stage) ? input.stage : 1,
     route: VALID_ROUTES.has(input.route) ? input.route : "none",
@@ -195,11 +213,13 @@ export function recordTurn(input) {
     let conversation = wanted ? all.find((c) => c.id === wanted) : null;
 
     if (!conversation) {
-      conversation = { id: newId("conv"), startedAt: turn.at, updatedAt: turn.at, turns: [] };
+      conversation = { id: newId("conv"), startedAt: turn.at, updatedAt: turn.at, turns: [], pending: null };
       all.unshift(conversation);
     }
 
     conversation.turns.push(turn);
+    // 39단계: pending 을 명시적으로 주면 덮는다(null 포함). 안 주면 그대로 — 옛 호출부(/api/conversations/turn)가 지우지 않게.
+    if (Object.hasOwn(input, "pending")) conversation.pending = normalizePending(input.pending);
     if (conversation.turns.length > LIMITS.turnsPerConversation) {
       conversation.turns = conversation.turns.slice(-LIMITS.turnsPerConversation);
     }
