@@ -23,7 +23,7 @@ S1-G4 의존성 0 — node_modules 없이 node 만으로 돌아간다
 
 ## 2단계 — HTTP 서버 + 홈 화면 (완료)
 
-S2-G1 서버가 뜨고 `/` 가 홈 화면 HTML 을, `/app.css`·`/app.js` 를 200 으로 준다
+S2-G1 서버가 뜨고 `/` 가 홈 화면 HTML 을, `/app.css`·`/app.js` 를 200 으로 준다(결과 자리 표식은 `<ol class="chat"` — 39단계가 옛 결과 영역 단정을 대체)
     CHECK: node scripts/check-stage2.mjs S2-G1
     EXPECT: S2_G1_OK
 
@@ -1964,7 +1964,7 @@ S30-G4 26단계 게이트 7개가 그대로 통과한다
 `(LLM 배정)` 표시는 되돌릴 자리를 알려 주는 것이라 **`(처음 값)`** 으로 바꿔 남긴다(21단계 결정 유지). 서버·기록·
 `usedLlm` 은 그대로 — 화면 문구만이다. 14·26단계의 "배지가 거짓말하지 않는가" 게이트는 "배지가 없다" 로 뒤집는다.
 
-S31-G1 화면 원본에 사다리·LLM 문구·단계 배지가 없다 — index.html/app.js/ui.js/app.css 정적 검사 (주석 제외)
+S31-G1 화면 원본에 사다리·LLM 문구·단계 배지가 없다 — index.html/app.js/ui.js/app.css 정적 검사 (주석 제외) · index.html 에 검색 폼과 `<ol class="chat"` 결과 자리(39단계가 옛 결과 영역 단정을 대체)
     CHECK: node scripts/check-stage31.mjs S31-G1
     EXPECT: S31_G1_OK
 
@@ -1972,7 +1972,7 @@ S31-G2 서버가 내주는 홈에 사다리와 "LLM" 이 없고, 재질 고르�
     CHECK: node scripts/check-stage31.mjs S31-G2
     EXPECT: S31_G2_OK
 
-S31-G3 화면 게이트 회귀 — S2-G1 · S14-G7 · S21-G1 · S26-G7 · S27-G7 이 뒤집힌 판정으로 통과한다
+S31-G3 화면 게이트 회귀 — S2-G1 · S14-G7 · S21-G1 · S26-G7 · S27-G7 이 뒤집힌 판정으로 통과한다(39단계가 옛 결과 영역 단정을 대체)
     CHECK: node scripts/check-stage31.mjs S31-G3
     EXPECT: S31_G3_OK
 

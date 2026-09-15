@@ -67,7 +67,7 @@ const GATES = {
     const ui = stripJs(read("public/ui.js"));
     const css = stripCss(read("public/app.css"));
 
-    if (!/id="search-form"/.test(html) || !/id="results-featured"/.test(html)) bad.push("index.html 에 검색 폼·결과 자리가 없다 — 파일이 비었나");
+    if (!/id="search-form"/.test(html) || !html.includes('<ol class="chat"')) bad.push("index.html 에 검색 폼·채팅 목록이 없다 — 파일이 비었나(39단계가 옛 결과 영역 단정을 대체)");
     if (/ladder|stage-label|사전임베딩|온디맨드|핫·콜드/.test(html)) bad.push("index.html 에 사다리가 남아 있다");
     if (/LLM/.test(html)) bad.push("index.html 에 'LLM' 이 남아 있다");
     if (/벡터DB도 쓰지 않습니다/.test(html)) bad.push("소개 문장이 아직 '임베딩도 벡터DB도 쓰지 않습니다' 다 — 사실과 다르다");
