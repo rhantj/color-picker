@@ -4,6 +4,9 @@ var/
 # 의존성 — 이 프로젝트는 0개지만 방어적으로 둔다
 node_modules/
 
+# 로컬 비밀 (LangSmith 키 등). 저장소에는 .env.example 만 둔다
+.env
+
 # OS
 .DS_Store
 Thumbs.db
