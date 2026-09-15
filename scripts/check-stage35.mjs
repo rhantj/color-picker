@@ -14,7 +14,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expandAll, hexToHsl, loadStructures } from "../src/expand.js";
-import { installDom } from "./lib/dom-stub.mjs";
 
 const out = (line = "") => process.stdout.write(Buffer.from(line + "\n", "utf8"));
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -24,8 +23,6 @@ const stripJs = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'`])\
 const stripHtml = (s) => s.replace(/<!--[\s\S]*?-->/g, " ");
 
 /* ── 사본 ─────────────────────────────────────────────────── */
-const TAB_KEY = "tonefirst:tab";
-const TAB_LABELS = ["색감 추천", "캐릭터 색감", "코드 및 색상"];
 const PARTNER_COUNT = 3;
 const STRUCTURE_COUNT = 8;
 const up = (hex) => String(hex).toUpperCase();
@@ -285,7 +282,7 @@ const GATES = {
 
       const html = stripHtml(await (await fetch(`http://127.0.0.1:${port}/`)).text());
       if (/LLM/.test(html)) bad.push("홈 HTML 에 'LLM' 이 있다");
-      if (!html.includes("코드 및 색상")) bad.push("홈 HTML 에 코드 및 색상 탭이 없다");
+      if (!html.includes('<ol class="chat"')) bad.push("홈 HTML 에 채팅 목록이 없다(39단계가 탭 단정을 대체)");
     } finally {
       server.kill();
     }
@@ -297,48 +294,29 @@ const GATES = {
   "S35-G5": async () => {
     const bad = [];
     const html = stripHtml(read("public/index.html"));
-    if (!/role="tablist"/.test(html)) bad.push("tablist 가 없다");
-    const tabs = [...html.matchAll(/<button[^>]*role="tab"[^>]*>([^<]*)<\/button>/g)].map((m) => m[1].trim());
-    if (tabs.join("|") !== TAB_LABELS.join("|")) bad.push(`탭이 ${tabs.join("|")} (기대 ${TAB_LABELS.join("|")})`);
-    if (!/data-tab-select="color"/.test(html)) bad.push("색 탭 버튼에 data-tab-select 가 없다");
-    if (!/id="tab-color"[^>]*aria-controls="results-color"/.test(html) && !/aria-controls="results-color"[^>]*id="tab-color"/.test(html)) bad.push("색 탭이 결과 영역을 가리키지 않는다");
-    if (!/id="results-color"[^>]*role="tabpanel"[^>]*aria-labelledby="tab-color"/.test(html)) bad.push("색 탭 결과 영역이 tabpanel 이 아니다");
+    if (!html.includes('<ol class="chat"')) bad.push("index.html 에 채팅 목록이 없다(39단계가 탭 단정을 대체)");
     // 38단계: 예시 칩을 뺐다(대표 지시). 칩 검사는 없다.
     if (/LLM/.test(html)) bad.push("index.html 에 'LLM'");
 
     const app = stripJs(read("public/app.js"));
-    if (!app.includes("/api/color?q=")) bad.push("app.js 가 /api/color 를 안 부른다");
-    if (!/asTab\(\s*params\.get\("tab"\)\s*\)/.test(app)) bad.push("app.js 가 ?tab= 을 asTab 으로 읽지 않는다");
-    if (!/route:\s*"color"/.test(app)) bad.push("색 턴 기록에 route color 가 없다");
+    if (!app.includes('"/api/chat"')) bad.push("app.js 가 /api/chat 을 안 부른다(39단계가 탭 단정을 대체)");
+    if (/tabStore\(|asTab\(/.test(app)) bad.push("app.js 에 tabStore·asTab 이 남아있다(39단계가 탭 단정을 대체)");
+    if (!/color:\s*\(data\)\s*=>\s*colorBlock\(data\)/.test(app)) bad.push("BLOCK_BY_ROUTE 에 색 블록이 없다(39단계가 탭 단정을 대체)");
     if (!/structureCard\(/.test(app) || !/swatchView\(/.test(app)) bad.push("색 탭이 structureCard·swatchView 를 재사용하지 않는다");
     if (/LLM/.test(app)) bad.push("app.js 에 'LLM'");
 
     const ui = read("public/ui.js");
     const hits = [...ui.matchAll(/localStorage/g)].length;
     if (hits !== 1) bad.push(`ui.js 가 저장소를 ${hits}곳에서 만진다 (한 곳이어야 한다 — 주석 포함)`);
-    if (!ui.includes(`"${TAB_KEY}"`)) bad.push(`ui.js 에 탭 키 ${TAB_KEY} 가 없다`);
+    if (/tabStore|asTab|tonefirst:tab/.test(ui)) bad.push("ui.js 에 tabStore·asTab 이 남아있다(39단계가 탭 단정을 대체)");
     for (const p of ["public/app.js", "public/history.js", "public/saved.js"]) if (/localStorage|sessionStorage/.test(stripJs(read(p)))) bad.push(`${p} 가 저장소를 직접 만진다`);
 
     const hist = stripJs(read("public/history.js"));
-    if (!/color:\s*"[^"]*색상[^"]*"/.test(hist)) bad.push("history.js 라벨에 색상이 없다");
-    if (!hist.includes("tab=color")) bad.push("다시 묻기 링크가 색 탭을 안 넘긴다");
+    if (!/color:\s*"색"/.test(hist)) bad.push("history.js 라벨에 색이 없다(39단계가 라벨을 짧게 바꿨다)");
+    if (!/ask:\s*"되물음"/.test(hist)) bad.push("history.js ROUTE_LABEL 에 되물음이 없다(39단계가 탭 단정을 대체)");
 
-    installDom();
-    const { tabStore, asTab } = await import("../public/ui.js");
-    if (typeof asTab !== "function") bad.push("ui.js 가 asTab 을 내보내지 않는다");
-    else {
-      if (asTab("color") !== "color" || asTab("character") !== "character" || asTab("palette") !== "palette") bad.push("asTab 이 아는 탭을 안 돌려준다");
-      if (asTab("purple") !== "palette" || asTab(null) !== "palette" || asTab(undefined) !== "palette") bad.push("asTab 이 모르는 값을 믿었다");
-    }
-    const mem = new Map();
-    const fake = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
-    const store = tabStore(fake);
-    store.write("color");
-    if (mem.get(TAB_KEY) !== "color" || store.read() !== "color") bad.push("color 탭 저장·읽기가 안 된다");
-    store.write("purple");
-    if (mem.get(TAB_KEY) !== "color") bad.push("모르는 탭 값을 저장했다");
     if (bad.length) throw new Error(bad.join(" / "));
-    out("탭 셋 · tabpanel · /api/color · asTab · tabStore color · 내역 라벨 · 재사용 · 저장소 한 곳");
+    out("채팅 목록 · /api/chat · tabStore 없음 · 내역 라벨 · 재사용 · 저장소 한 곳");
     out("S35_G5_OK");
   },
 

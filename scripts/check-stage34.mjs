@@ -34,8 +34,6 @@ const NEIGHBOR_MIN_L_GAP = 0.12;
 const HUE_BUCKET = 30;
 const CHROMATIC_MIN_S = 0.15;
 const IMPRESSION_MAX = 120;
-const TAB_KEY = "tonefirst:tab";
-const TAB_LABELS = ["색감 추천", "캐릭터 색감", "코드 및 색상"]; // 35단계가 셋째 탭을 더했다
 
 /** 코퍼스 80색. 팔레트 16쌍 + 씨앗 24쌍. 대상(server.js)이 아니라 데이터에서 직접 읽는다. */
 function corpus() {
@@ -387,7 +385,7 @@ const GATES = {
 
       const html = stripHtml(await (await fetch(`http://127.0.0.1:${port}/`)).text());
       if (/LLM/.test(html)) bad.push("홈 HTML 에 'LLM' 이 있다");
-      if (!html.includes("캐릭터 색감")) bad.push("홈 HTML 에 캐릭터 탭이 없다");
+      if (!html.includes('<ol class="chat"')) bad.push("홈 HTML 에 채팅 목록이 없다(39단계가 탭 단정을 대체)");
     } finally {
       server.kill();
     }
@@ -528,50 +526,32 @@ const GATES = {
   "S34-G9": async () => {
     const bad = [];
     const html = stripHtml(read("public/index.html"));
-    if (!/role="tablist"/.test(html)) bad.push("tablist 가 없다");
-    const tabs = [...html.matchAll(/<button[^>]*role="tab"[^>]*>([^<]*)<\/button>/g)].map((m) => m[1].trim());
-    if (tabs.join("|") !== TAB_LABELS.join("|")) bad.push(`탭이 ${tabs.join("|")} (기대 ${TAB_LABELS.join("|")})`);
-    if (!/data-tab-select="palette"/.test(html) || !/data-tab-select="character"/.test(html)) bad.push("탭 버튼에 data-tab-select 가 없다");
-    if (!/id="results-character"/.test(html) || !/id="results-palette"/.test(html)) bad.push("탭별 결과 영역이 없다");
+    if (!html.includes('<ol class="chat"')) bad.push("index.html 에 채팅 목록이 없다(39단계가 탭 단정을 대체)");
     // 38단계: 예시 칩을 뺐다(대표 지시). 칩 검사는 없다.
     if (/LLM/.test(html)) bad.push("index.html 에 'LLM'");
 
     const app = stripJs(read("public/app.js"));
-    if (!app.includes("/api/character?q=")) bad.push("app.js 가 /api/character 를 안 부른다");
+    if (!app.includes('"/api/chat"')) bad.push("app.js 가 /api/chat 을 안 부른다(39단계가 탭 단정을 대체)");
     if (!app.includes("/api/saved/character")) bad.push("app.js 가 캐릭터 저장을 안 부른다");
-    if (!/tabStore\(/.test(app)) bad.push("app.js 가 tabStore 를 안 쓴다");
+    if (/tabStore\(|asTab\(/.test(app)) bad.push("app.js 에 tabStore·asTab 이 남아있다(39단계가 탭 단정을 대체)");
     if (!/characterStructure\(/.test(app) || !/structureCard\(/.test(app)) bad.push("캐릭터 카드가 structureCard 를 재사용하지 않는다");
-    if (!/route:\s*"character"/.test(app)) bad.push("캐릭터 턴 기록에 route character 가 없다");
+    if (!/character:\s*\(data\)\s*=>\s*characterBlock\(data\)/.test(app)) bad.push("BLOCK_BY_ROUTE 에 캐릭터 블록이 없다(39단계가 탭 단정을 대체)");
     if (/LLM/.test(app)) bad.push("app.js 에 'LLM'");
     if (!app.includes("인상을 못 읽어 기본 배색을 썼습니다")) bad.push("폴백 안내 문장이 없다");
 
     const ui = read("public/ui.js");
     const hits = [...ui.matchAll(/localStorage/g)].length;
     if (hits !== 1) bad.push(`ui.js 가 저장소를 ${hits}곳에서 만진다 (한 곳이어야 한다 — 주석 포함)`);
-    if (!ui.includes(`"${TAB_KEY}"`)) bad.push(`ui.js 에 탭 키 ${TAB_KEY} 가 없다`);
+    if (/tabStore|asTab|tonefirst:tab/.test(ui)) bad.push("ui.js 에 tabStore·asTab 이 남아있다(39단계가 탭 단정을 대체)");
     for (const p of ["public/app.js", "public/history.js", "public/saved.js"]) if (/localStorage|sessionStorage/.test(stripJs(read(p)))) bad.push(`${p} 가 저장소를 직접 만진다`);
 
     const hist = stripJs(read("public/history.js"));
     if (!/character:\s*"캐릭터"/.test(hist)) bad.push("history.js 라벨에 캐릭터가 없다");
-    if (!hist.includes("tab=character")) bad.push("다시 묻기 링크가 탭을 안 넘긴다");
+    if (!/ask:\s*"되물음"/.test(hist)) bad.push("history.js ROUTE_LABEL 에 되물음이 없다(39단계가 탭 단정을 대체)");
 
     // DOM 스텁으로 순수 함수를 직접 부른다
     installDom();
-    const { tabStore, characterStructure, sourceLine } = await import("../public/ui.js");
-    const mem = new Map();
-    const fake = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
-    const store = tabStore(fake);
-    if (store.read() !== "palette") bad.push(`빈 저장소에서 ${store.read()} (기대 palette)`);
-    store.write("character");
-    if (mem.get(TAB_KEY) !== "character" || store.read() !== "character") bad.push("탭 저장·읽기가 안 된다");
-    store.write("purple");
-    if (mem.get(TAB_KEY) !== "character") bad.push("모르는 탭 값을 저장했다");
-    mem.set(TAB_KEY, "purple");
-    if (store.read() !== "palette") bad.push("저장된 이상한 값을 믿었다");
-    const throwing = { getItem: () => { throw new Error("막힘"); }, setItem: () => { throw new Error("막힘"); } };
-    const t = tabStore(throwing);
-    if (t.read() !== "palette") bad.push("던지는 저장소에서 안 돈다");
-    t.write("character");
+    const { characterStructure, sourceLine } = await import("../public/ui.js");
 
     const sample = {
       query: "q", parse: { parts: {}, creature: null, impression: "차가운 기사", from: "fallback" },
@@ -586,7 +566,7 @@ const GATES = {
     if (!/말한 색/.test(line.textContent) || !/규칙/.test(line.textContent)) bad.push(`출처 줄 문구: ${line.textContent}`);
     if (/LLM|llm/.test(line.textContent)) bad.push("출처 줄에 LLM");
     if (bad.length) throw new Error(bad.join(" / "));
-    out("탭 셋(순서 고정) · /api/character · 저장소 한 곳 · tabStore 불신 · 내역 라벨 · structureCard 재사용 · 출처 줄");
+    out("채팅 목록 · /api/chat · 저장소 한 곳 · tabStore 없음 · 내역 라벨 · structureCard 재사용 · 출처 줄");
     out("S34_G9_OK");
   },
 

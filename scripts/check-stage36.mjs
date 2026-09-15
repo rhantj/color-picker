@@ -218,23 +218,22 @@ const GATES = {
   "S36-G4": async () => {
     const bad = [];
     const app = stripJs(read("public/app.js"));
-    // 주석은 벗겨져 있으므로 함수 이름으로 절을 자른다
-    const colorSection = app.slice(app.indexOf("function inputCard"), app.indexOf("async function runColor"));
-    if (colorSection.length < 200) bad.push("색 탭 절을 못 찾았다");
-    if (!/`hex-\$\{[^`]*\}`/.test(colorSection)) bad.push("색 탭 저장이 hex- 씨앗 id 를 안 만든다");
-    if (!/api\("\/api\/saved\/derived",\s*\{\s*seedId/.test(colorSection)) bad.push("색 탭이 구조 저장을 씨앗 id 로 안 부른다");
-    if (!/api\("\/api\/saved",\s*\{[^}]*paletteId:\s*p\.pairId/.test(colorSection)) bad.push("짝 카드가 paletteId 로 /api/saved 를 안 부른다");
-    if (!/finishEditing\(/.test(colorSection) || !/finishOverrides\(/.test(colorSection)) bad.push("색 탭이 재질 고르개를 안 쓴다");
-    if (!/applyModeButton\(/.test(colorSection) || !/nextMode\(/.test(colorSection)) bad.push("색 탭에 모드 토글이 없다");
+    // 39단계가 탭 절 경계(주석)를 없앴다 — colorBlock 함수 몸통으로 자른다(39단계가 탭 단정을 대체)
+    const colorSection = app.slice(app.indexOf("function colorBlock"), app.indexOf("function inputCard"));
+    if (colorSection.length < 200) bad.push("색 블록 절을 못 찾았다");
+    if (!/`hex-\$\{[^`]*\}`/.test(colorSection)) bad.push("색 블록 저장이 hex- 씨앗 id 를 안 만든다");
+    if (!/api\("\/api\/saved\/derived",\s*\{\s*seedId/.test(colorSection)) bad.push("색 블록이 구조 저장을 씨앗 id 로 안 부른다");
+    if (!/api\("\/api\/saved",\s*\{[^}]*paletteId:\s*p\.pairId/.test(app)) bad.push("짝 카드가 paletteId 로 /api/saved 를 안 부른다");
+    if (!/finishEditing\(/.test(colorSection) || !/finishOverrides\(/.test(colorSection)) bad.push("색 블록이 재질 고르개를 안 쓴다");
+    if (!/applyModeButton\(/.test(colorSection) || !/nextMode\(/.test(colorSection)) bad.push("색 블록에 모드 토글이 없다");
     if (!/overrides\.forStructure\(/.test(colorSection)) bad.push("저장에 손으로 바꾼 재질이 안 실린다");
-    const applyTab = app.slice(app.indexOf("function applyTab"), app.indexOf("\n}\n", app.indexOf("function applyTab")));
-    if (!/if \(next !== tab\)[^\n]*\n?[^\n]*input\.value = ""/.test(applyTab) && !/next !== tab[\s\S]{0,40}input\.value = ""/.test(applyTab)) bad.push("applyTab 이 탭이 바뀔 때만 검색창을 비우지 않는다");
+    if (!/input\.value = "";\s*send\(\{\s*text\s*\}\);/.test(app)) bad.push("form submit 이 입력을 비운 뒤 send({ text }) 를 부르지 않는다(39단계가 탭 단정을 대체)");
     if (/LLM/.test(app)) bad.push("app.js 에 'LLM'");
     const ui = read("public/ui.js");
     if ([...ui.matchAll(/localStorage/g)].length !== 1) bad.push("ui.js 저장소 접근이 한 곳이 아니다");
     for (const p of ["public/app.js", "public/history.js", "public/saved.js"]) if (/localStorage|sessionStorage/.test(stripJs(read(p)))) bad.push(`${p} 가 저장소를 직접 만진다`);
     if (bad.length) throw new Error(bad.join(" / "));
-    out("hex- 씨앗 저장 · 짝 paletteId 저장 · 고르개·토글 재사용 · 탭 바뀔 때만 초기화 · 저장소 한 곳");
+    out("hex- 씨앗 저장 · 짝 paletteId 저장 · 고르개·토글 재사용 · submit 이 입력을 비우고 send · 저장소 한 곳");
     out("S36_G4_OK");
   },
 

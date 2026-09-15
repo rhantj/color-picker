@@ -2072,7 +2072,7 @@ S34-G5 픽스처마다 색상각 30° 구획이 정한 수 이상 · 규칙으�
     CHECK: node scripts/check-stage34.mjs S34-G5
     EXPECT: S34_G5_OK
 
-S34-G6 Ollama 없이 `/api/character` 가 돈다 — 폴백 파서 · 배색 쌍 · 6색 · 빈 q 400 · 홈 HTML 에 "LLM" 없음
+S34-G6 Ollama 없이 `/api/character` 가 돈다 — 폴백 파서 · 배색 쌍 · 6색 · 빈 q 400 · 홈 HTML 에 "LLM" 없음 · 홈 HTML 에 `<ol class="chat"`(39단계가 탭 단정을 대체)
     CHECK: node scripts/check-stage34.mjs S34-G6
     EXPECT: S34_G6_OK
 
@@ -2084,7 +2084,7 @@ S34-G8 저장 왕복 — 본문의 가짜 색을 무시하고 재계산 · 종�
     CHECK: node scripts/check-stage34.mjs S34-G8
     EXPECT: S34_G8_OK
 
-S34-G9 화면 — 탭("색감 추천"·"캐릭터 색감" — 35단계부터 "코드 및 색상" 이 셋째) · 캐릭터 탭이 `/api/character` 로 감 · 저장소 접근은 여전히 ui.js 한 곳 · `tabStore` 가 모르는 값을 안 믿음 · 내역 라벨 · `structureCard` 재사용 (정적 + DOM 스텁)
+S34-G9 화면 — `index.html` 에 `<ol class="chat"` · `app.js` 가 `"/api/chat"` 을 부름 · `app.js`·`ui.js` 에 `tabStore`·`asTab` 없음 · 저장소 접근은 여전히 ui.js 한 곳 · `BLOCK_BY_ROUTE` 에 `character: (data) => characterBlock(data)` · 내역 `ROUTE_LABEL` 에 `ask: "되물음"` · `structureCard` 재사용 (정적 + DOM 스텁)(39단계가 탭 단정을 대체)
     CHECK: node scripts/check-stage34.mjs S34-G9
     EXPECT: S34_G9_OK
 
@@ -2132,11 +2132,11 @@ S35-G3 배색 구조 — 입력 하나로 카탈로그 8구조 전부 · 각 구
     CHECK: node scripts/check-stage35.mjs S35-G3
     EXPECT: S35_G3_OK
 
-S35-G4 서버 `GET /api/color` — Ollama 없이 헥스·이름·낱말 입력이 200 · 응답 형태(input·partners 3·structures 8·colorsDark·elapsedMs) · 응답에 Ollama 흔적 없음 · 빈 q·못 읽는 색·너무 긴 q 가 400 이고 오류 문구에 내부 경로 없음 · 홈 HTML 에 "LLM" 없음
+S35-G4 서버 `GET /api/color` — Ollama 없이 헥스·이름·낱말 입력이 200 · 응답 형태(input·partners 3·structures 8·colorsDark·elapsedMs) · 응답에 Ollama 흔적 없음 · 빈 q·못 읽는 색·너무 긴 q 가 400 이고 오류 문구에 내부 경로 없음 · 홈 HTML 에 "LLM" 없음 · 홈 HTML 에 `<ol class="chat"`(39단계가 탭 단정을 대체)
     CHECK: node scripts/check-stage35.mjs S35-G4
     EXPECT: S35_G4_OK
 
-S35-G5 화면 — 탭 셋("색감 추천"·"캐릭터 색감"·"코드 및 색상") · 색 탭 결과 영역이 tabpanel · 색 탭이 `/api/color` 로 감 · `?tab=` 을 `asTab` 으로 읽음 · `tabStore` 가 `color` 를 받고 모르는 값은 불신 · 내역 라벨·`tab=color` 링크 · `structureCard`·`swatchView` 재사용 · 저장소 접근은 ui.js 한 곳 · 화면에 "LLM" 없음
+S35-G5 화면 — `index.html` 에 `<ol class="chat"` · `app.js`·`ui.js` 에 `tabStore`·`asTab` 없음 · `app.js` 가 `"/api/chat"` 을 부름 · `BLOCK_BY_ROUTE` 에 `color: (data) => colorBlock(data)` · 내역 라벨("색")·`ROUTE_LABEL` 에 `ask: "되물음"` · `structureCard`·`swatchView` 재사용 · 저장소 접근은 ui.js 한 곳 · 화면에 "LLM" 없음(39단계가 탭 단정을 대체)
     CHECK: node scripts/check-stage35.mjs S35-G5
     EXPECT: S35_G5_OK
 
@@ -2169,7 +2169,7 @@ S36-G3 `/api/color` 가 재질 기본 배정을 준다 — 모든 구조의 모�
     CHECK: node scripts/check-stage36.mjs S36-G3
     EXPECT: S36_G3_OK
 
-S36-G4 화면 — 색 탭 구조 카드가 `hex-` 씨앗으로 `/api/saved/derived` 를 부름 · 재질 고르개(`finishEditing`)·모드 토글(`applyModeButton`) 재사용 · 짝 카드에 `/api/saved` 저장 버튼(`paletteId`) · `applyTab` 이 탭이 바뀔 때만 검색창을 비움 · 저장소 접근은 ui.js 한 곳
+S36-G4 화면 — `colorBlock` 구조 카드가 `hex-` 씨앗으로 `/api/saved/derived` 를 부름 · 재질 고르개(`finishEditing`)·모드 토글(`applyModeButton`) 재사용 · 짝 카드에 `/api/saved` 저장 버튼(`paletteId`) · `form` submit 이 `input.value = ""` 뒤 `send({ text })` · 저장소 접근은 ui.js 한 곳(39단계가 탭 단정을 대체)
     CHECK: node scripts/check-stage36.mjs S36-G4
     EXPECT: S36_G4_OK
 
