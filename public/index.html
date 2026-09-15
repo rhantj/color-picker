@@ -34,23 +34,6 @@
     </p>
     <h1 class="hero__title">찾는 색을 문장으로 쓰세요</h1>
 
-    <div class="tabs" role="tablist" aria-label="무엇을 물을지">
-      <button class="tabs__tab" type="button" role="tab" id="tab-palette" data-tab-select="palette" aria-selected="true" aria-controls="results-palette">색감 추천</button>
-      <button class="tabs__tab" type="button" role="tab" id="tab-character" data-tab-select="character" aria-selected="false" aria-controls="results-character" tabindex="-1">캐릭터 색감</button>
-      <button class="tabs__tab" type="button" role="tab" id="tab-color" data-tab-select="color" aria-selected="false" aria-controls="results-color" tabindex="-1">코드 및 색상</button>
-    </div>
-
-    <form class="searchbar" id="search-form" role="search">
-      <label class="searchbar__field" for="q">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" style="color: var(--ink-faint)">
-          <circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5 L21 21"></path>
-        </svg>
-        <input class="searchbar__input" id="q" name="q" type="search" autocomplete="off"
-               placeholder="따뜻한데 촌스럽지 않은, 오래된 목조 부엌 같은 색"
-               aria-label="찾는 색을 문장으로 입력">
-      </label>
-      <button class="searchbar__submit" type="submit">추천 받기</button>
-    </form>
   </section>
 
   <section class="thread" id="thread" hidden>
@@ -65,41 +48,19 @@
     </div>
   </section>
 
-  <section class="status" id="status" hidden aria-live="polite"></section>
+  <ol class="chat" id="chat" aria-live="polite"></ol>
 
-  <section id="results-palette" role="tabpanel" aria-labelledby="tab-palette">
-    <div class="results__head" id="results-head" hidden>
-      <h2 class="results__title" id="results-title">추천 조합</h2>
-      <span class="results__note" id="results-note">색상각과 톤 좌표를 따로 찍어 정렬했습니다</span>
-    </div>
-    <div class="results__featured" id="results-featured"></div>
-    <div class="results__diagnosis" id="results-diagnosis"></div>
-    <div class="results__rest" id="results-rest"></div>
-  </section>
-
-  <section class="character" id="results-character" role="tabpanel" aria-labelledby="tab-character" hidden>
-    <div class="results__head" id="character-head" hidden>
-      <h2 class="results__title" id="character-title">캐릭터 부위별 색</h2>
-      <span class="results__note">말한 색은 그대로, 나머지는 인상에 맞는 배색 쌍과 규칙으로 채웠습니다</span>
-    </div>
-    <div class="status" id="character-status" hidden aria-live="polite"></div>
-    <div class="character__card" id="character-card"></div>
-  </section>
-
-  <section class="colorin" id="results-color" role="tabpanel" aria-labelledby="tab-color" hidden>
-    <div class="status" id="color-status" hidden aria-live="polite"></div>
-    <div class="colorin__input" id="color-input"></div>
-    <div class="results__head" id="color-partners-head" hidden>
-      <h2 class="results__title">배색사전에서 어울리는 짝</h2>
-      <span class="results__note">입력 색과 가장 가까운 색이 든 쌍 셋 — 그 쌍의 다른 색이 짝입니다</span>
-    </div>
-    <div class="colorin__partners" id="color-partners"></div>
-    <div class="results__head" id="color-structures-head" hidden>
-      <h2 class="results__title">배색 구조 여덟</h2>
-      <span class="results__note">입력 색을 씨앗으로 명도·채도·색상각만 움직였습니다</span>
-    </div>
-    <div class="colorin__grid" id="color-structures"></div>
-  </section>
+  <form class="searchbar searchbar--dock" id="search-form" role="search">
+    <label class="searchbar__field" for="q">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" style="color: var(--ink-faint)">
+        <circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5 L21 21"></path>
+      </svg>
+      <input class="searchbar__input" id="q" name="q" type="search" autocomplete="off"
+             placeholder="찾는 색, 고칠 배색, 캐릭터 외형, 또는 #RRGGBB"
+             aria-label="문장으로 입력">
+    </label>
+    <button class="searchbar__submit" type="submit">보내기</button>
+  </form>
 
   <div class="page-foot"></div>
 </main>

@@ -1,79 +1,20 @@
-// 홈 화면. 렌더 조각은 ui.js 가 세 화면과 공유한다.
+// 홈 화면 — 채팅창 하나(39단계). 렌더 조각은 ui.js 가 세 화면과 공유한다.
 
-import { api, applyModeButton, asTab, characterStructure, diagnosisCard, el, finishEditing, finishOverrides, modeStore, nextMode, paletteCard, refreshRuntime, sourceLine, structureCard, swatchView, tabStore } from "./ui.js";
+import { api, applyModeButton, characterStructure, diagnosisCard, el, finishEditing, finishOverrides, modeStore, nextMode, paletteCard, refreshRuntime, sourceLine, structureCard, swatchView } from "./ui.js";
 
 const form = document.getElementById("search-form");
 const input = document.getElementById("q");
 const submit = form.querySelector(".searchbar__submit");
-const statusBox = document.getElementById("status");
-const resultsHead = document.getElementById("results-head");
-const resultsTitle = document.getElementById("results-title");
-const resultsNote = document.getElementById("results-note");
-const featuredBox = document.getElementById("results-featured");
-const restBox = document.getElementById("results-rest");
-const diagnosisBox = document.getElementById("results-diagnosis");
-
-/* ── 탭(34단계) ───────────────────────────────────────────── */
-const tabs = tabStore();
-const tabButtons = [...document.querySelectorAll("[data-tab-select]")];
-const paletteSection = document.getElementById("results-palette");
-const characterSection = document.getElementById("results-character");
-const characterHead = document.getElementById("character-head");
-const characterStatus = document.getElementById("character-status");
-const characterCard = document.getElementById("character-card");
-const colorSection = document.getElementById("results-color");
-const colorStatus = document.getElementById("color-status");
-const colorInputBox = document.getElementById("color-input");
-const colorPartnersHead = document.getElementById("color-partners-head");
-const colorPartners = document.getElementById("color-partners");
-const colorStructuresHead = document.getElementById("color-structures-head");
-const colorStructures = document.getElementById("color-structures");
-const TAB_UI = {
-  palette: { placeholder: input.placeholder, submit: "추천 받기" },
-  character: { placeholder: "캐릭터 외형을 문장으로 — 예: 붉은 머리에 검은 갑옷, 차가운 성격의 기사", submit: "색 맞추기" },
-  color: { placeholder: "#RRGGBB 헥스나 색 이름 — 예: #E07A5F, 테라코타, 파랑", submit: "어울리는 색 찾기" },
-};
-let tab = "palette";
-
-/** 탭을 바꾼다. 안내문·버튼·보이는 결과 영역이 바뀌고 검색창은 비운다 — 결과는 탭마다 따로 남는다. */
-function applyTab(next) {
-  // 탭이 실제로 바뀔 때만 검색창을 비운다(36단계 · 대표 지시). 같은 탭을 다시 눌러 쓰던 글이 사라지면 안 된다.
-  if (next !== tab) input.value = "";
-  tab = next;
-  tabs.write(next);
-  for (const btn of tabButtons) {
-    const on = btn.dataset.tabSelect === next;
-    btn.setAttribute("aria-selected", String(on));
-    btn.tabIndex = on ? 0 : -1;
-  }
-  paletteSection.hidden = next !== "palette";
-  statusBox.hidden = next !== "palette" || statusBox.childElementCount === 0;
-  characterSection.hidden = next !== "character";
-  colorSection.hidden = next !== "color";
-  input.placeholder = TAB_UI[next].placeholder;
-  submit.textContent = TAB_UI[next].submit;
-}
-for (const btn of tabButtons) {
-  btn.addEventListener("click", () => applyTab(btn.dataset.tabSelect));
-  btn.addEventListener("keydown", (event) => {
-    const keys = { ArrowRight: 1, ArrowLeft: -1, Home: "first", End: "last" };
-    if (!Object.hasOwn(keys, event.key)) return;
-    event.preventDefault();
-    const i = tabButtons.indexOf(btn);
-    const n = tabButtons.length;
-    const next = keys[event.key] === "first" ? tabButtons[0] : keys[event.key] === "last" ? tabButtons[n - 1] : tabButtons[(i + keys[event.key] + n) % n];
-    applyTab(next.dataset.tabSelect);
-    next.focus();
-  });
-}
+const chatList = document.getElementById("chat");
 
 const INTENT_LABEL = { palette: "팔레트 탐색", diagnosis: "진단", other: "색과 무관" };
+const ROUTE_LABEL = { palette: "추천", diagnosis: "진단", character: "캐릭터", color: "색" };
 
 // 서버의 LIMITS.noteChars 와 **같아야 한다.** 어긋나면 사용자는 다 썼다고 보는데 서버가 조용히
 // 잘라, 저장된 뒤에야 알게 된다. 홈은 한계값을 받아오지 않으므로 S8-G4 가 두 값을 대조한다.
 const NOTE_MAX = 200;
 
-// 한 번 검색하면 그 뒤로는 같은 대화에 이어 붙인다. 새로고침하면 새 대화가 열린다 —
+// 한 번 보내면 그 뒤로는 같은 대화에 이어 붙인다. 새로고침하면 새 대화가 열린다 —
 // 대화의 경계를 사용자가 선언하게 만들지 않고 세션으로 잡는다.
 let conversationId = null;
 let lastQuery = "";
@@ -82,7 +23,7 @@ const threadBox = document.getElementById("thread");
 const threadTitle = document.getElementById("thread-title");
 const threadMeta = document.getElementById("thread-meta");
 
-/* ── 렌더 ────────────────────────────────────────────────── */
+/* ── 답 카드 ─────────────────────────────────────────────── */
 
 /**
  * 결과 카드 하나. 슬라이더로 조정한 비율을 들고 있다가 저장할 때 함께 보낸다 —
@@ -248,7 +189,7 @@ function expansionSection(seedId, query) {
       // 재질 배정의 출처(finishes.from)도 화면에 적지 않는다(31단계). 되돌릴 자리는 고르개의 "(처음 값)" 이 알려 준다.
       const fin = data.finishes;
 
-      // **토글은 이미 받아 둔 data 로만 다시 그린다 — 네트워크 0, LLM 재호출 0.**
+      // **토글은 이미 받아 둔 data 로만 다시 그린다 — 네트워크 0, 재계산 0.**
       // 모드를 서버에 물으면 selectStructures 가 다시 돌아 같은 질의인데 보이는 다섯이 바뀐다.
       // 서버가 두 모드를 한 번에 보내 주므로(S15-G10) 여기서는 어느 쪽을 그릴지만 고른다.
       const modeBox = el("div", "expand__mode");
@@ -312,7 +253,7 @@ function expansionSection(seedId, query) {
        * 사용자의 판단이고, 그것을 안 보내면 슬라이더로 맞춘 것이 저장에서 사라진다.
        */
       /*
-       * **재질 배정도 함께 보낸다.** 색과 달리 서버가 다시 계산할 수 없다 — LLM 이 정하는
+       * **재질 배정도 함께 보낸다.** 색과 달리 서버가 다시 계산할 수 없다 — 인상을 읽어 정하는
        * 것이라 재계산하면 사용자가 화면에서 본 것과 다른 재질이 나온다. 그래서 화면이 보내고
        * 서버가 검증한다(`S19-G1`).
        *
@@ -321,7 +262,7 @@ function expansionSection(seedId, query) {
        * 스스로 알고 보내는 편이 맞다.
        */
       const saveDerived = (st) => (shares) => {
-        // 손으로 바꾼 것이 있으면 그것이, 없으면 LLM 배정이 실린다. 그 합치기는
+        // 손으로 바꾼 것이 있으면 그것이, 없으면 기본 배정이 실린다. 그 합치기는
         // `forStructure` 한 곳에서 하고 화면이 다시 적지 않는다 — 두 곳에 적으면 갈라진다.
         const finishes = overrides.forStructure(st, fin?.assignments);
         return api("/api/saved/derived", { seedId, structureId: st.id, mode, shares, finishes });
@@ -342,7 +283,7 @@ function expansionSection(seedId, query) {
        *      모드 토글이 이미 겪고 `focus()` 로 막아 둔 바로 그 문제다.
        *
        * **애초에 다시 그릴 필요가 없었다.** 고르개는 사용자가 고른 값을 이미 스스로 보이고
-       * 있고, 이 카드에서 재질에 딸린 것은 그것 하나뿐이다 — 스와치·비율·`(LLM 배정)` 표시는
+       * 있고, 이 카드에서 재질에 딸린 것은 그것 하나뿐이다 — 스와치·비율·"(기본 배정)" 표시는
        * 전부 재질과 무관하다(표시는 **원래** 배정 기준이라 안 바뀐다).
        *
        * 담아 두기만 한다. 다음에 격자가 갈릴 때(모드 토글) `forStructure` 가 합쳐서 넘긴다.
@@ -369,149 +310,100 @@ function expansionSection(seedId, query) {
   return box;
 }
 
-function renderStatus(data, error) {
-  statusBox.replaceChildren();
-  statusBox.hidden = false;
-
-  if (error) {
-    statusBox.append(el("span", "status__badge status__badge--warn", "오류"), el("span", "status__text", error));
-    return;
-  }
-
+/** 검색 답(추천·진단) 한 덩어리. 전의 renderStatus + render 를 합쳐 요소로 돌려준다. */
+function searchBlock(data) {
+  const box = el("div", "answer");
+  const status = el("div", "status");
   if (!data.confident) {
     const hasAny = data.results.length > 0 || data.diagnostics.length > 0;
-    statusBox.append(
+    status.append(
       el("span", "status__badge status__badge--warn", "못 잡음"),
-      el(
-        "span",
-        "status__text",
-        data.rewriteError
-          ? `전문 검색이 못 잡았고 재작성도 실패했습니다 — ${data.rewriteError}`
-          : hasAny
-            ? "어절 전체로 겹친 항이 없습니다 — 조각이나 기능어만 맞았습니다. 아래 결과는 근거가 약하니 그대로 믿지 마세요."
-            : "팔레트 코퍼스에도 진단표에도 걸리는 것이 없습니다. 색에 관한 질문이 아닐 수 있습니다.",
-      ),
+      el("span", "status__text", data.rewriteError ? `전문 검색이 못 잡았고 재작성도 실패했습니다 — ${data.rewriteError}` : hasAny ? "어절 전체로 겹친 항이 없습니다 — 아래 결과는 근거가 약하니 그대로 믿지 마세요." : "팔레트 코퍼스에도 진단표에도 걸리는 것이 없습니다."),
     );
   }
-  // 어느 단계가 답했는지 · LLM 을 불렀는지는 화면에 적지 않는다(31단계 · 대표 지시). 기록(usedLlm)과 시간 줄은 그대로다.
-
   const count = data.route === "diagnosis" ? data.diagnostics.length : data.results.length;
   const timing = [`BM25 ${data.elapsedMs}ms`];
   if (data.hybrid) timing.push(`임베딩 ${data.hybrid.elapsedMs}ms · 코사인 ${data.hybrid.cosine}`);
-  statusBox.append(el("span", "status__timing", `${timing.join(" · ")} · ${count}건`));
-
-  // 임베딩을 못 썼는데 확신 답을 냈다면 그 사실을 숨기지 않는다 — BM25 만 믿은 답이다.
-  if (data.hybridError && data.confident) {
-    statusBox.append(el("span", "status__timing", `임베딩은 못 썼습니다 — ${data.hybridError}`));
-  }
-
+  status.append(el("span", "status__timing", `${timing.join(" · ")} · ${count}건`));
+  if (data.hybridError && data.confident) status.append(el("span", "status__timing", `임베딩은 못 썼습니다 — ${data.hybridError}`));
   if (data.rewrite) {
     const strip = el("div", "rewrite");
-    strip.append(
-      el("span", "status__badge", "재작성"),
-      el("span", "rewrite__label", `의도 ${INTENT_LABEL[data.rewrite.intent] ?? data.rewrite.intent} · 검색어`),
-    );
+    strip.append(el("span", "status__badge", "재작성"), el("span", "rewrite__label", `의도 ${INTENT_LABEL[data.rewrite.intent] ?? data.rewrite.intent} · 검색어`));
     for (const term of data.rewrite.terms) strip.append(el("span", "rewrite__term", term));
     strip.append(el("span", "rewrite__meta", `${data.rewrite.model} · ${data.rewrite.elapsedMs}ms`));
-    statusBox.append(strip);
+    status.append(strip);
   }
-}
+  box.append(status);
 
-function render(data) {
-  renderStatus(data);
-  featuredBox.replaceChildren();
-  restBox.replaceChildren();
-  diagnosisBox.replaceChildren();
-
-  const isDiagnosis = data.route === "diagnosis";
-  const items = isDiagnosis ? data.diagnostics : data.results;
-  resultsHead.hidden = items.length === 0;
-
-  if (isDiagnosis) {
-    // 진단은 팔레트를 주지 않는다. 색 조합이 아니라 어느 축을 의심할지가 답이기 때문이다.
-    // 다만 축이 조합의 관계를 그대로 말하는 진단은 코퍼스가 조합을 가리킬 수 있다 — 그때만 잇는다.
-    resultsTitle.textContent = "진단";
-    resultsNote.textContent = "색 조합이 아니라 어느 원인을 의심할지가 답입니다";
-    data.diagnostics.forEach((dx, i) => diagnosisBox.append(diagnosisCard(dx, i + 1)));
-    return;
+  if (data.route === "diagnosis") {
+    box.append(el("h2", "results__title", "진단"), el("p", "results__note", "색 조합이 아니라 어느 원인을 의심할지가 답입니다"));
+    data.diagnostics.forEach((dx, i) => box.append(diagnosisCard(dx, i + 1)));
+    return box;
   }
-
-  resultsTitle.textContent = "추천 조합";
-  resultsNote.textContent = "색상각과 톤 좌표를 따로 찍어 정렬했습니다";
+  if (data.results.length) box.append(el("h2", "results__title", "추천 조합"), el("p", "results__note", "색상각과 톤 좌표를 따로 찍어 정렬했습니다"));
   const [first, ...rest] = data.results;
-  if (first) featuredBox.append(resultCard(first, 1, true));
-  rest.forEach((r, i) => restBox.append(resultCard(r, i + 2, false)));
+  if (first) box.append(resultCard(first, 1, true));
+  rest.forEach((r, i) => box.append(resultCard(r, i + 2, false)));
+  return box;
 }
 
-/* ── 캐릭터(34단계) ───────────────────────────────────────── */
-function renderCharacter(data) {
-  characterStatus.replaceChildren();
-  characterStatus.hidden = false;
-  characterStatus.append(el("span", "status__timing", `${data.elapsedMs}ms · 배색 쌍 ${data.palette.name}`));
-  if (data.palette.from === "fallback") {
-    characterStatus.append(el("span", "character__note", "인상을 못 읽어 기본 배색을 썼습니다"));
-  }
-  for (const w of data.warnings ?? []) characterStatus.append(el("span", "character__note", w));
+/** 캐릭터 답. 전의 renderCharacter 를 요소로. */
+function characterBlock(data) {
+  const box = el("div", "answer");
+  const status = el("div", "status");
+  status.append(el("span", "status__timing", `${data.elapsedMs}ms · 배색 쌍 ${data.palette.name}`));
+  if (data.palette.from === "fallback") status.append(el("span", "character__note", "인상을 못 읽어 기본 배색을 썼습니다"));
+  for (const w of data.warnings ?? []) status.append(el("span", "character__note", w));
+  box.append(status, el("h2", "results__title", "캐릭터 부위별 색"));
 
   const struct = characterStructure(data);
   const base = data.finishes?.assignments && Object.keys(data.finishes.assignments).length ? data.finishes.assignments : null;
   const overrides = finishOverrides();
   const editing = base ? finishEditing(overrides, struct, base) : null;
   const finishes = base ? { assignments: base, names: data.finishes.names, ids: data.finishes.ids } : null;
-  // 색은 안 보낸다 — 부위·종족·배색 쌍 id 로 서버가 다시 계산한다(S34-G8).
-  const onSave = (shares) =>
-    api("/api/saved/character", {
-      query: data.query,
-      parts: data.parse.parts,
-      creature: data.parse.creature,
-      paletteId: data.palette.id,
-      shares,
-      finishes: overrides.forStructure(struct, base),
-    });
+  const onSave = (shares) => api("/api/saved/character", { query: data.query, parts: data.parse.parts, creature: data.parse.creature, paletteId: data.palette.id, shares, finishes: overrides.forStructure(struct, base) });
   const card = structureCard(struct, "light", finishes, onSave, editing);
   card.append(sourceLine(data.colors));
-  characterCard.replaceChildren(card);
-  characterHead.hidden = false;
+  box.append(card);
+  return box;
 }
 
-async function recordCharacterTurn(data) {
-  const saved = await api("/api/conversations/turn", {
-    conversationId,
-    query: data.query,
-    stage: 1,
-    usedLlm: data.parse.from === "llm",
-    route: "character",
-    confident: data.palette.from === "search",
-    topKind: "character",
-    topId: data.palette.id,
-    topLabel: data.palette.name,
+/** 색 답. 전의 renderColor 를 요소로. */
+function colorBlock(data) {
+  const box = el("div", "answer");
+  const status = el("div", "status");
+  status.append(el("span", "status__timing", `${data.elapsedMs}ms · 짝 ${data.partners.length}쌍 · 구조 ${data.structures.length}가지`));
+  box.append(status, inputCard(data));
+  if (data.partners.length) box.append(el("h2", "results__title", "배색사전에서 어울리는 짝"));
+  data.partners.forEach((p, i) => box.append(partnerCard(p, i + 1)));
+
+  const modes = modeStore();
+  let mode = modes.read();
+  const overrides = finishOverrides();
+  const fin = data.finishes?.assignments ? data.finishes : null;
+  const seedId = `hex-${data.input.hex.slice(1)}`;
+  const saveDerived = (st) => (shares) => api("/api/saved/derived", { seedId, structureId: st.id, mode, shares, finishes: overrides.forStructure(st, fin?.assignments) });
+  const modeBtn = el("button", "expand__mode-toggle");
+  modeBtn.type = "button";
+  applyModeButton(modeBtn, mode);
+  const grid = el("div", "expand__grid");
+  const redraw = () => grid.replaceChildren(...data.structures.map((st) => structureCard(st, mode, fin, saveDerived(st), fin ? finishEditing(overrides, st, fin.assignments) : null)));
+  modeBtn.addEventListener("click", () => {
+    mode = nextMode(modes, mode);
+    applyModeButton(modeBtn, mode);
+    modeBtn.focus();
+    redraw();
   });
-  conversationId = saved.conversationId;
+  redraw();
+  const modeBox = el("div", "expand__mode");
+  modeBox.append(modeBtn);
+  box.append(el("h2", "results__title", "배색 구조 여덟"), modeBox, grid);
+  return box;
 }
 
-async function runCharacter(query) {
-  await ready;
-  const ticket = ++latestTicket;
-  submit.disabled = true;
-  lastQuery = query;
-  try {
-    const data = await api(`/api/character?q=${encodeURIComponent(query)}`);
-    if (ticket !== latestTicket) return;
-    renderCharacter(data);
-    recordCharacterTurn(data).catch((err) => {
-      threadMeta.textContent = `기록하지 못했습니다 — ${err.message}`;
-    });
-  } catch (err) {
-    if (ticket === latestTicket) {
-      characterStatus.replaceChildren(el("span", "status__badge status__badge--warn", "오류"), el("span", "status__text", err.message ?? "서버에 닿지 못했습니다"));
-      characterStatus.hidden = false;
-    }
-  } finally {
-    if (ticket === latestTicket) submit.disabled = false;
-  }
-}
+const BLOCK_BY_ROUTE = { palette: searchBlock, diagnosis: searchBlock, character: characterBlock, color: colorBlock };
 
-/* ── 코드 및 색상(35단계) ─────────────────────────────────── */
+/* ── 코드 및 색상 ─────────────────────────────────────────── */
 const INPUT_FROM = { hex: "헥스", name: "코퍼스 색 이름", word: "색 낱말" };
 
 /** 입력 색 한 장. 코퍼스에 없는 헥스면 가장 가까운 코퍼스 색을 옆에 적는다 — 짝은 그 색으로 찾았기 때문이다. */
@@ -565,154 +457,114 @@ function partnerCard(p, rank) {
   return card;
 }
 
-function renderColor(data) {
-  colorStatus.replaceChildren(el("span", "status__timing", `${data.elapsedMs}ms · 짝 ${data.partners.length}쌍 · 구조 ${data.structures.length}가지`));
-  colorStatus.hidden = false;
-  colorInputBox.replaceChildren(inputCard(data));
-  colorPartners.replaceChildren(...data.partners.map((p, i) => partnerCard(p, i + 1)));
-  colorPartnersHead.hidden = data.partners.length === 0;
-
-  /*
-   * 구조 카드는 펼치기(expansionSection)와 같은 부품으로 그린다 — 모드 토글 · 재질 고르개 · 저장.
-   * **저장은 씨앗 id `hex-RRGGBB` · 구조 id · 모드 · 비율 · 재질만 보낸다.** 색은 서버가 `structuresFor` 로
-   * 다시 계산한다(`store.js` 규칙 4 · S36-G1). 재질은 기본 배정에서 시작하고 고르개로 바꾼 것이 실린다(21단계 경로).
-   */
-  const modes = modeStore();
-  let mode = modes.read();
-  const overrides = finishOverrides();
-  const fin = data.finishes?.assignments ? data.finishes : null;
-  const seedId = `hex-${data.input.hex.slice(1)}`;
-  const saveDerived = (st) => (shares) =>
-    api("/api/saved/derived", { seedId, structureId: st.id, mode, shares, finishes: overrides.forStructure(st, fin?.assignments) });
-  const modeBox = el("div", "expand__mode");
-  const modeBtn = el("button", "expand__mode-toggle");
-  modeBtn.type = "button";
-  applyModeButton(modeBtn, mode);
-  const grid = el("div", "expand__grid");
-  const redraw = () => {
-    grid.replaceChildren(...data.structures.map((st) => structureCard(st, mode, fin, saveDerived(st), fin ? finishEditing(overrides, st, fin.assignments) : null)));
-  };
-  modeBtn.addEventListener("click", () => {
-    mode = nextMode(modes, mode);
-    applyModeButton(modeBtn, mode);
-    // 다시 그리기 전에 포커스를 확정한다 — 펼치기 카드가 겪은 "포커스가 body 로 떨어짐" 과 같은 자리.
-    modeBtn.focus();
-    redraw();
-  });
-  modeBox.append(modeBtn);
-  redraw();
-  colorStructures.replaceChildren(modeBox, grid);
-  colorStructuresHead.hidden = data.structures.length === 0;
+/* ── 대화 기록 ─────────────────────────────────────────────── */
+function userItem(text) {
+  const li = el("li", "chat__item chat__item--user");
+  li.append(el("p", "chat__bubble", text));
+  return li;
 }
 
-async function recordColorTurn(data) {
-  const saved = await api("/api/conversations/turn", {
-    conversationId,
-    query: data.query,
-    stage: 1,
-    usedLlm: false,
-    route: "color",
-    confident: true,
-    topKind: "color",
-    topId: data.partners[0]?.pairId ?? null,
-    topLabel: data.partners[0]?.pairName ?? null,
-  });
-  conversationId = saved.conversationId;
+function agentItem(...children) {
+  const li = el("li", "chat__item chat__item--agent");
+  li.append(...children);
+  return li;
 }
 
-async function runColor(query) {
-  await ready;
-  const ticket = ++latestTicket;
-  submit.disabled = true;
-  lastQuery = query;
-  try {
-    const data = await api(`/api/color?q=${encodeURIComponent(query)}`);
-    if (ticket !== latestTicket) return;
-    renderColor(data);
-    recordColorTurn(data).catch((err) => {
-      threadMeta.textContent = `기록하지 못했습니다 — ${err.message}`;
-    });
-  } catch (err) {
-    if (ticket === latestTicket) {
-      colorStatus.replaceChildren(el("span", "status__badge status__badge--warn", "오류"), el("span", "status__text", err.message ?? "서버에 닿지 못했습니다"));
-      colorStatus.hidden = false;
+/** 확인 질문. 칩을 누르면 choice 로, 문장을 치면 text 로 간다 — 입력창은 그대로 쓴다. */
+function askItem(turn) {
+  const box = el("div", "ask");
+  box.append(el("p", "ask__question", turn.question));
+  if (turn.choices.length) {
+    const chips = el("div", "ask__chips");
+    for (const c of turn.choices) {
+      const chip = el("button", "ask__chip", c.label);
+      chip.type = "button";
+      chip.dataset.choice = c.id;
+      chip.addEventListener("click", () => {
+        for (const b of chips.querySelectorAll("button")) b.disabled = true;
+        chip.classList.add("ask__chip--picked");
+        send({ choice: c.id });
+      });
+      chips.append(chip);
     }
-  } finally {
-    if (ticket === latestTicket) submit.disabled = false;
+    box.append(chips);
   }
+  return agentItem(box);
 }
 
-/* ── 동작 ────────────────────────────────────────────────── */
+function answerItem(turn) {
+  const head = el("p", "answer__route", `${ROUTE_LABEL[turn.route] ?? turn.route}으로 읽었습니다`);
+  const block = (BLOCK_BY_ROUTE[turn.route] ?? searchBlock)(turn.payload);
+  return agentItem(head, block);
+}
 
-// 내역의 ?q= 자동 실행과 제출이 겹치면 요청이 겹친다.
-// 번호표를 끊어 최신 요청의 응답만 그린다.
+function errorItem(message) {
+  const box = el("div", "status");
+  box.append(el("span", "status__badge status__badge--warn", "오류"), el("span", "status__text", message));
+  return agentItem(box);
+}
+
 let latestTicket = 0;
 
-// 대화 기록은 화면이 명시적으로 남긴다. 검색(GET)이 부수효과로 쓰기를 하면
-// 게이트 실행이나 새로고침까지 내역에 쌓인다.
-async function recordTurn(data) {
-  const top = data.route === "diagnosis" ? data.diagnostics[0] : data.results[0];
-  const saved = await api("/api/conversations/turn", {
-    conversationId,
-    query: data.query,
-    stage: data.stage,
-    usedLlm: data.usedLlm === true,
-    route: data.route,
-    confident: data.confident,
-    topKind: top ? data.route : null,
-    topId: top?.id ?? null,
-    topLabel: top ? (top.name ?? top.symptom) : null,
-  });
-  conversationId = saved.conversationId;
-}
-
-async function run(query) {
-  // 대화 확인이 끝나기 전에 기록하면, 그 턴은 새 대화로 가는데 화면은 이어 쓰는 중이라고 말한다.
-  // 리스너는 이미 붙어 있으므로(사용자가 바로 검색할 수 있다) 여기서 기다린다.
+/** 서버에 한 턴을 보낸다. 사용자 말풍선은 먼저 붙이고, 답이 오면 그 아래에 붙인다. */
+async function send(body) {
   await ready;
   const ticket = ++latestTicket;
   submit.disabled = true;
-  lastQuery = query;
+  if (body.text) {
+    lastQuery = body.text;
+    chatList.append(userItem(body.text));
+  }
+  const waiting = agentItem(el("p", "chat__waiting", "생각 중…"));
+  chatList.append(waiting);
+  waiting.scrollIntoView({ block: "end" });
   try {
-    const data = await api(`/api/search?q=${encodeURIComponent(query)}&limit=3`);
+    const data = await api("/api/chat", { conversationId, ...body });
     if (ticket !== latestTicket) return;
-    render(data);
-    // 기록 실패가 검색을 막지는 않지만, 조용히 넘기지도 않는다 —
-    // 이어 쓰는 중이라고 표시해 놓고 기록이 안 되면 사용자가 속는다.
-    recordTurn(data).catch((err) => {
-      threadMeta.textContent = `기록하지 못했습니다 — ${err.message}`;
-    });
+    if (data.conversationId !== conversationId) {
+      conversationId = data.conversationId;
+      showThread({ id: conversationId, turns: [] });
+    }
+    waiting.replaceWith(data.turn.kind === "ask" ? askItem(data.turn) : answerItem(data.turn));
+    if (data.turn.kind === "answer") lastQuery = data.turn.original;
+    chatList.lastElementChild?.scrollIntoView({ block: "end" });
   } catch (err) {
-    if (ticket === latestTicket) renderStatus(null, err.message ?? "서버에 닿지 못했습니다");
+    if (ticket === latestTicket) waiting.replaceWith(errorItem(err.message ?? "서버에 닿지 못했습니다"));
   } finally {
-    if (ticket === latestTicket) submit.disabled = false;
+    if (ticket === latestTicket) {
+      submit.disabled = false;
+      input.focus();
+    }
   }
 }
-
-const RUN_BY_TAB = { palette: run, character: runCharacter, color: runColor };
-const go = (query) => (RUN_BY_TAB[tab] ?? run)(query);
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  // 비어 있으면 아무것도 안 한다 — 전에는 자리표시 문장을 대신 검색했다(38단계 · 대표 지시로 뺐다).
-  const query = input.value.trim();
-  if (!query) {
+  const text = input.value.trim();
+  if (!text) {
     input.focus();
     return;
   }
-  go(query);
+  input.value = "";
+  send({ text });
 });
 
 /* ── 대화 이어하기 ───────────────────────────────────────────
-   내역에서 넘어온 ?conv= 를 받아 그 대화에 이어 붙인다. ?q= 가 있으면 바로 한 번 돌린다.
+   내역에서 넘어온 ?conv= 를 받아 그 대화에 이어 붙인다. ?q= 가 있으면 바로 한 번 보낸다.
    없는 대화 id 면 이어 쓰는 척하지 않는다 — 조용히 새 대화를 열면 사용자가 어디에 쓰고 있는지 잃는다. */
 
+/**
+ * 이어 쓰는 중 배너만 채운다. **chat 목록은 건드리지 않는다** — send() 안에서
+ * (새 대화가 막 만들어졌을 때) 이 함수를 부르면, 그 순간 화면에는 방금 붙인 사용자
+ * 말풍선과 "생각 중…" 이 떠 있다. 여기서 목록을 지우면 그 둘이 통째로 사라진다.
+ * 옛 턴을 그리는 것은 `?conv=` 로 들어왔을 때만 필요하므로 ready() 쪽에서 따로 한다.
+ */
 function showThread(conversation) {
   conversationId = conversation.id;
   threadTitle.textContent = conversation.turns.at(-1)?.query ?? "(빈 대화)";
-  // 26단계 전 턴에는 usedLlm 이 없다 — 그때는 2단계가 곧 LLM 이었다(history.js 와 같은 보정).
+  // 26단계 전 턴에는 usedLlm 이 없다 — 그때는 2단계가 곧 그 자리였다(history.js 와 같은 보정).
   const usedLlm = conversation.turns.filter((t) => (t.usedLlm === undefined ? t.stage === 2 : t.usedLlm === true)).length;
-  threadMeta.textContent = `${conversation.turns.length}턴 · 재작성 ${usedLlm}회`; // 31단계: 'LLM' 대신 무엇을 했는지(질문 재작성)로 적는다
+  threadMeta.textContent = `${conversation.turns.length}턴 · 재작성 ${usedLlm}회`; // 31단계: 무엇을 했는지(질문 재작성)로 적는다
   document.getElementById("thread-open").href = `/history#${conversation.id}`;
   threadBox.hidden = false;
 }
@@ -720,11 +572,12 @@ function showThread(conversation) {
 document.getElementById("thread-new").addEventListener("click", () => {
   conversationId = null;
   threadBox.hidden = true;
+  chatList.replaceChildren();
   history.replaceState(null, "", "/");
 });
 
-// 대화 확인이 끝나야 기록이 어디로 갈지 정해진다. run() 이 이 프로미스를 기다린다.
-// 안에서 run() 을 부르지 않는다 — run 이 ready 를 기다리므로 교착한다.
+// 대화 확인이 끝나야 기록이 어디로 갈지 정해진다. send() 가 이 프로미스를 기다린다.
+// 안에서 send() 를 부르지 않는다 — send 가 ready 를 기다리므로 교착한다.
 const ready = (async () => {
   const params = new URLSearchParams(location.search);
   const conv = params.get("conv");
@@ -733,21 +586,22 @@ const ready = (async () => {
     try {
       const { conversation } = await api(`/api/conversations?id=${encodeURIComponent(conv)}`);
       showThread(conversation);
+      // 옛 턴을 그린다 — 답은 저장돼 있지 않다(다시 묻기가 그 역할이다). 사용자 말풍선만 붙인다.
+      // send() 가 아직 한 번도 안 불렸을 이 시점에만 한다 — 그 뒤에 부르면 막 붙인 말풍선을 지운다.
+      chatList.replaceChildren();
+      for (const t of conversation.turns) chatList.append(userItem(t.query));
     } catch (err) {
       // 이어 쓸 수 없다는 것을 화면에 말한다.
-      renderStatus(null, `그 대화를 이어 쓸 수 없습니다 — ${err.message}. 새 대화로 시작합니다.`);
+      chatList.append(errorItem(`그 대화를 이어 쓸 수 없습니다 — ${err.message}. 새 대화로 시작합니다.`));
       history.replaceState(null, "", "/");
     }
   }
-  // ?tab= 이 있으면 그것(모르는 값은 첫 탭), 없으면 마지막으로 고른 탭. 내역의 "다시 묻기" 가 질문을 그 탭으로 보낸다.
-  applyTab(params.has("tab") ? asTab(params.get("tab")) : tabs.read());
   return params.get("q");
 })();
 
-// 자동 실행은 확인이 끝난 뒤에. 이 시점에 ready 는 이미 해소돼 있어 run 이 막히지 않는다.
+// 자동 실행은 확인이 끝난 뒤에. 이 시점에 ready 는 이미 해소돼 있어 send 가 막히지 않는다.
 ready.then((query) => {
   if (!query) return;
-  input.value = query;
-  go(query);
+  send({ text: query });
 });
 refreshRuntime(0, () => {});
