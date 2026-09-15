@@ -16,6 +16,14 @@ export const PARTNER_COUNT = 3;
 
 const HEX6 = /^#?([0-9a-f]{6})$/i;
 const HEX3 = /^#?([0-9a-f]{3})$/i;
+// 저장이 쓰는 씨앗 id 꼴. `#` 을 안 쓴다 — 엔진 내보내기 id 와 URL 에 그대로 들어가기 때문이다.
+const HEX_SEED_ID = /^hex-([0-9A-F]{6})$/;
+
+/** 저장용 씨앗 id `hex-RRGGBB` → 헥스. 꼴이 아니면 null. 만드는 쪽은 화면(app.js)이라 여기엔 읽는 방향만 둔다. */
+export const hexFromSeedId = (seedId) => {
+  const m = typeof seedId === "string" ? HEX_SEED_ID.exec(seedId) : null;
+  return m ? `#${m[1]}` : null;
+};
 
 // 낱말표는 한 번만 읽는다(34단계 리뷰가 잡은 것과 같은 자리).
 let wordsCache = null;

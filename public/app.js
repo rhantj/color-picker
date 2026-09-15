@@ -37,6 +37,8 @@ let tab = "palette";
 
 /** 탭을 바꾼다. 입력은 그대로 두고 안내문·버튼·보이는 결과 영역·예시 칩만 바뀐다 — 결과는 탭마다 따로 남는다. */
 function applyTab(next) {
+  // 탭이 실제로 바뀔 때만 검색창을 비운다(36단계 · 대표 지시). 같은 탭을 다시 눌러 쓰던 글이 사라지면 안 된다.
+  if (next !== tab) input.value = "";
   tab = next;
   tabs.write(next);
   for (const btn of tabButtons) {
@@ -530,7 +532,12 @@ function inputCard(data) {
   return card;
 }
 
-/** 배색사전 짝 한 장 — 왼쪽이 입력에 가까운 코퍼스 색, 오른쪽이 그 쌍의 다른 색(짝). */
+/**
+ * 배색사전 짝 한 장 — 왼쪽이 입력에 가까운 코퍼스 색, 오른쪽이 그 쌍의 다른 색(짝).
+ *
+ * **저장은 쌍 id 만 보낸다.** 코퍼스 쌍이든 씨앗 풀 쌍이든 서버가 자기 자료에서 색을 꺼낸다 — 화면이 보낸 색을
+ * 안 믿는 규칙(S4) 그대로. 비율은 안 보낸다(이 카드에는 슬라이더가 없다). `/saved` 에서 고칠 수 있다.
+ */
 function partnerCard(p, rank) {
   const card = el("article", "colorin__partner");
   const head = el("div", "struct__head");
@@ -538,7 +545,24 @@ function partnerCard(p, rank) {
   const colors = [{ hex: p.near.hex, role: p.near.name }, { hex: p.partner.hex, role: p.partner.name }];
   const view = swatchView(colors, [50, 50]);
   const note = el("p", "colorin__partner-note", `${String(rank).padStart(2, "0")} · 짝 ${p.partner.hex} · 가까운 색 ${p.near.name} ${p.near.hex}`);
-  card.append(head, view.node, note);
+
+  const actions = el("div", "card__actions");
+  const button = el("button", "action action--primary", "조합 저장");
+  button.type = "button";
+  const feedback = el("span", "action__feedback");
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      await api("/api/saved", { paletteId: p.pairId, fromQuery: lastQuery });
+      button.textContent = "저장됨";
+      feedback.textContent = "‘추천 받은 조합’ 에서 볼 수 있습니다";
+    } catch (err) {
+      feedback.textContent = err.message;
+      button.disabled = false;
+    }
+  });
+  actions.append(button, feedback);
+  card.append(head, view.node, note, actions);
   return card;
 }
 
@@ -548,10 +572,37 @@ function renderColor(data) {
   colorInputBox.replaceChildren(inputCard(data));
   colorPartners.replaceChildren(...data.partners.map((p, i) => partnerCard(p, i + 1)));
   colorPartnersHead.hidden = data.partners.length === 0;
-  // 저장 버튼은 없다 — 사용자 헥스는 씨앗 id 가 아니라 파생 저장 경로를 못 탄다(35단계 알려진 한계).
+
+  /*
+   * 구조 카드는 펼치기(expansionSection)와 같은 부품으로 그린다 — 모드 토글 · 재질 고르개 · 저장.
+   * **저장은 씨앗 id `hex-RRGGBB` · 구조 id · 모드 · 비율 · 재질만 보낸다.** 색은 서버가 `structuresFor` 로
+   * 다시 계산한다(`store.js` 규칙 4 · S36-G1). 재질은 기본 배정에서 시작하고 고르개로 바꾼 것이 실린다(21단계 경로).
+   */
   const modes = modeStore();
-  const mode = modes.read();
-  colorStructures.replaceChildren(...data.structures.map((st) => structureCard(st, mode)));
+  let mode = modes.read();
+  const overrides = finishOverrides();
+  const fin = data.finishes?.assignments ? data.finishes : null;
+  const seedId = `hex-${data.input.hex.slice(1)}`;
+  const saveDerived = (st) => (shares) =>
+    api("/api/saved/derived", { seedId, structureId: st.id, mode, shares, finishes: overrides.forStructure(st, fin?.assignments) });
+  const modeBox = el("div", "expand__mode");
+  const modeBtn = el("button", "expand__mode-toggle");
+  modeBtn.type = "button";
+  applyModeButton(modeBtn, mode);
+  const grid = el("div", "expand__grid");
+  const redraw = () => {
+    grid.replaceChildren(...data.structures.map((st) => structureCard(st, mode, fin, saveDerived(st), fin ? finishEditing(overrides, st, fin.assignments) : null)));
+  };
+  modeBtn.addEventListener("click", () => {
+    mode = nextMode(modes, mode);
+    applyModeButton(modeBtn, mode);
+    // 다시 그리기 전에 포커스를 확정한다 — 펼치기 카드가 겪은 "포커스가 body 로 떨어짐" 과 같은 자리.
+    modeBtn.focus();
+    redraw();
+  });
+  modeBox.append(modeBtn);
+  redraw();
+  colorStructures.replaceChildren(modeBox, grid);
   colorStructuresHead.hidden = data.structures.length === 0;
 }
 

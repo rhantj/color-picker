@@ -36,7 +36,7 @@ import { cleanQuery } from "./src/query.js";
 import { prepare as prepareEmbeddings, refresh as refreshEmbeddings } from "./src/embed.js";
 import { CHARACTER_FINISH_BY_ROLE, DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, loadFinishes } from "./src/material.js";
 import { loadSeeds, seedLabel } from "./src/seeds.js";
-import { PARTNER_COUNT, parseColorInput, partnersFor, structuresFor } from "./src/from-color.js";
+import { PARTNER_COUNT, hexFromSeedId, parseColorInput, partnersFor, structuresFor } from "./src/from-color.js";
 import { FORMATS } from "./src/export.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("./public/", import.meta.url));
@@ -318,6 +318,13 @@ const seedById = (id) => {
  * 그래서 여기서 걸러 낼 것은 씨앗 조회뿐이다.
  */
 const resolveDerived = (seedId, structureId, mode) => {
+  // 36단계 — 사용자 헥스(`hex-RRGGBB`)도 씨앗이다. 색은 저장 요청이 아니라 여기서 다시 계산한다.
+  const hex = hexFromSeedId(seedId);
+  if (hex) {
+    const st = structuresFor(hex, fullCatalog).find((x) => x.id === structureId);
+    if (!st) return null;
+    return { colors: mode === "dark" ? st.colorsDark : st.colors, name: st.name, principle: st.principle, source: st.source, seedLabel: hex };
+  }
   const found = seedById(seedId);
   if (!found) return null;
   const st = expandSeed(found.seed, structureId, fullCatalog, { mode });
@@ -371,6 +378,17 @@ const corpusColors = () => [
   ...seedPool.flatMap((s) => s.colors.map((c) => ({ hex: c.hex, name: c.origName }))),
 ];
 
+/**
+ * 저장이 쓰는 조회 — 코퍼스 16쌍 뒤에 씨앗 풀 24쌍(36단계). 풀 쌍에는 유형·해설이 없고 **지어내지 않는다** —
+ * 이름은 두 원명, 색 이름은 원명뿐이라 `/saved` 가 "유형 모름" 으로 그린다. 검색 색인과는 무관하다(S12-G2).
+ */
+const paletteOrPoolById = (id) => {
+  const corpus = paletteById(id);
+  if (corpus) return corpus;
+  const pooled = seedPool.find((s) => s.id === id);
+  return pooled ? { id: pooled.id, name: seedLabel(pooled), colors: pooled.colors.map((c) => ({ name: c.origName, hex: c.hex })) } : null;
+};
+
 /** 짝 찾기가 훑는 씨앗 40쌍 — 코퍼스 16(이름 있음) 뒤에 풀 24. 순서가 동률의 우선순위다. */
 const seedsForPartners = () => [
   ...pipeline.palettes.map((p) => ({ id: p.id, name: p.name, colors: p.colors })),
@@ -381,7 +399,7 @@ const seedsForPartners = () => [
  * 색 하나 → 어울리는 색(35단계). **LLM 도 검색도 안 부른다** — 헥스에는 인상이 없다.
  * 못 읽는 입력은 400 이고, 무엇을 받는지 문구로 말한다.
  */
-function handleColor(res, params) {
+async function handleColor(res, params) {
   pipeline.reloadIfChanged();
   const query = cleanQuery(params.get("q"));
   if (!query) return sendJson(res, 400, { error: "q 가 비어 있다" });
@@ -393,6 +411,10 @@ function handleColor(res, params) {
   if (!input) return sendJson(res, 400, { error: "색을 못 읽었다 — #RRGGBB 헥스나 색 이름(테라코타 · 빨강)을 넣는다" });
 
   const partners = partnersFor(input.hex, seedsForPartners(), PARTNER_COUNT);
+  const structures = structuresFor(input.hex, fullCatalog);
+  // 재질은 기본 배정이다 — 빈 질의로 부르면 `selectFinishes` 가 모델을 안 부르고 기본표를 낸다(S17-G3 과 같은 경로).
+  const roles = [...new Set(structures.flatMap((st) => st.colors.map((c) => c.role)))];
+  const finishes = await selectFinishes("", roles);
   // 헥스 입력은 코퍼스 밖일 수 있어 1위 쌍의 가까운 색이 "가장 가까운 코퍼스 색" 이다. 이름·낱말은 이미 코퍼스 색이다.
   const nearest =
     input.from === "hex"
@@ -402,7 +424,9 @@ function handleColor(res, params) {
     query,
     input: { hex: input.hex, from: input.from, label: input.label, wordId: input.wordId ?? null, nearest },
     partners,
-    structures: structuresFor(input.hex, fullCatalog),
+    structures,
+    // 이름표만 싣고 model·error 키는 안 싣는다 — 이 응답에는 Ollama 가 닿지 않는다(S35-G4 가 그 흔적을 잰다).
+    finishes: { assignments: finishes.assignments, names: FINISH_NAMES(), from: finishes.from },
     elapsedMs: Date.now() - started,
   });
 }
@@ -532,7 +556,7 @@ async function handleWrite(req, res, pathname) {
       return sendJson(res, 200, await recordTurn(body));
     }
     if (pathname === "/api/saved") {
-      return sendJson(res, 200, await savePalette(body, paletteById, ratioFor));
+      return sendJson(res, 200, await savePalette(body, paletteOrPoolById, ratioFor));
     }
     if (pathname === "/api/saved/derived") {
       return sendJson(res, 200, await saveDerived(body, resolveDerived, ratioFor, MATERIALS));
