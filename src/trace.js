@@ -13,7 +13,7 @@ import { dirname } from "node:path";
 
 const POST_TIMEOUT_MS = 3000;
 
-/** dotted_order 의 시각 조각: 20260915T101530123456Z 꼴(마이크로초 6자리 — ms 뒤에 000). */
+/** dotted_order 의 시각 조각: 20260915T101530123000Z 꼴(ms 3자리 뒤에 "000" 을 붙여 6자리로 맞춘 것 — 실제 마이크로초가 아니다). */
 function orderStamp(iso) {
   return iso.replace(/[-:]/g, "").replace(".", "").replace("Z", "000Z");
 }
@@ -24,16 +24,22 @@ export function createTracer({ apiKey = "", project = "color-picker", endpoint =
 
   function post(body) {
     if (!enabled) return;
-    fetchImpl(`${base}/runs`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": apiKey },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(POST_TIMEOUT_MS),
-    })
-      .then((res) => {
-        if (!res.ok) log(`LangSmith 가 ${res.status} 를 돌려줬다 (${body.name})`);
+    try {
+      fetchImpl(`${base}/runs`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": apiKey },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(POST_TIMEOUT_MS),
       })
-      .catch((err) => log(`LangSmith 전송 실패 (${body.name}): ${err.message}`));
+        .then((res) => {
+          if (!res.ok) log(`LangSmith 가 ${res.status} 를 돌려줬다 (${body.name})`);
+        })
+        .catch((err) => log(`LangSmith 전송 실패 (${body.name}): ${err.message}`));
+    } catch (err) {
+      // fetchImpl 이 프라미스를 돌려주기 전에 동기적으로 던지는 경우(예: 커스텀 fetchImpl 버그) —
+      // 관측이 요청 경로를 막으면 안 되므로(S39-G6) 비동기 실패와 같은 모양으로 로그만 남긴다.
+      log(`LangSmith 전송 실패 (${body.name}): ${err.message}`);
+    }
   }
 
   function appendLine(record) {
