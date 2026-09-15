@@ -233,12 +233,18 @@ a:hover {
 }
 
 /* ── 대화(39단계) ───────────────────────────────────────── */
-.chat { list-style: none; margin: 0; padding: 0 0 6rem; display: grid; gap: 1.25rem; }
+/* .chat 와 .searchbar--dock 는 form이 .hero 밖으로 나오며 --gutter 여백을 잃었다 — thread 의
+   가로 여백과 맞춘다(리뷰 지적). .answer 안 .status 는 이 카드가 이미 자기 여백(padding)을
+   갖고 있는데 옛 44px var(--gutter) 바깥 여백까지 겹쳐 붙어 대화 카드마다 위아래로 크게
+   벌어졌다 — 여기서는 0으로 되돌린다. */
+.chat { list-style: none; margin: 0; padding: 0 var(--gutter) 6rem; display: grid; gap: 1.25rem; }
 .chat__item { display: grid; gap: .5rem; }
 .chat__item--user { justify-items: end; }
 .chat__bubble { margin: 0; padding: .6rem .9rem; border-radius: 1rem 1rem .25rem 1rem; background: var(--ink); color: var(--bg); max-width: 42rem; }
+.chat__bubble--agent { background: var(--surface-sunken); color: var(--ink); border: 1px solid var(--line); border-radius: 1rem 1rem 1rem .25rem; }
 .chat__waiting { margin: 0; color: var(--ink-faint); }
 .answer { display: grid; gap: .75rem; }
+.answer .status { margin: 0; }
 .answer__route { margin: 0; font-size: .85rem; color: var(--ink-faint); }
 .ask { display: grid; gap: .6rem; padding: .9rem 1rem; border: 1px solid var(--line); border-radius: .75rem; }
 .ask__question { margin: 0; }
@@ -247,21 +253,13 @@ a:hover {
 .ask__chip:hover, .ask__chip:focus-visible { border-color: var(--ink); }
 .ask__chip--picked { background: var(--ink); color: var(--bg); }
 .ask__chip:disabled { cursor: default; opacity: .7; }
-.searchbar--dock { position: sticky; bottom: 0; background: var(--bg); padding-block: .75rem; }
-.character__card {
-  margin-top: 16px;
-  max-width: 760px;
-}
+.searchbar--dock { position: sticky; bottom: 0; background: var(--bg); padding-inline: var(--gutter); padding-block: .75rem; }
 .character__note {
   font-size: 13px;
   color: var(--ink-muted);
 }
 
 /* ── 코드 및 색상(35단계) ───────────────────────────────── */
-.colorin__input {
-  margin: 16px var(--gutter) 0;
-  max-width: 1000px;
-}
 .colorin__card .swatch {
   height: 88px;
   border-radius: 10px;
@@ -279,13 +277,6 @@ a:hover {
   color: var(--ink);
   font-family: var(--font-mono);
 }
-.colorin__partners {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
-  margin: 0 var(--gutter);
-  max-width: 1000px;
-}
 .colorin__partner {
   padding: 14px 16px;
   border: 1px solid var(--line);
@@ -302,10 +293,6 @@ a:hover {
   margin: 10px 0 0;
   font-size: 12px;
   color: var(--ink-muted);
-}
-.colorin__grid {
-  margin: 0 var(--gutter);
-  max-width: 1000px;
 }
 .sources {
   display: flex;
@@ -362,16 +349,6 @@ a:hover {
 
 /* ── 결과 ────────────────────────────────────────────────── */
 
-.results__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin: 52px var(--gutter) 20px;
-  gap: 16px;
-}
-.results__head[hidden] {
-  display: none;
-}
 .results__title {
   font-family: var(--font-display);
   font-size: 24px;
@@ -381,16 +358,6 @@ a:hover {
 .results__note {
   font-size: 13px;
   color: var(--ink-muted);
-}
-
-.results__featured {
-  margin: 0 var(--gutter);
-}
-.results__rest {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
-  margin: 24px var(--gutter) 0;
 }
 
 .card {
@@ -535,9 +502,6 @@ a:hover {
     width: auto;
     height: 148px;
   }
-  .results__rest {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 /* ── 상단바만 쓰는 브레이크포인트 ───────────────────────────
@@ -595,13 +559,6 @@ a:hover {
 /* ── 진단 답변 ───────────────────────────────────────────────
    팔레트가 아니라 처방이다. 스와치가 없으므로 위계를 타이포로 만든다 —
    처방 문장을 본문보다 크게 세워, 카드 그리드와 섞여도 다른 종류의 답이라는 게 먼저 읽히게 한다. */
-
-.results__diagnosis {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin: 0 var(--gutter);
-}
 
 .dx {
   background: var(--surface);

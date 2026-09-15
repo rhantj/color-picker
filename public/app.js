@@ -8,7 +8,7 @@ const submit = form.querySelector(".searchbar__submit");
 const chatList = document.getElementById("chat");
 
 const INTENT_LABEL = { palette: "팔레트 탐색", diagnosis: "진단", other: "색과 무관" };
-const ROUTE_LABEL = { palette: "추천", diagnosis: "진단", character: "캐릭터", color: "색" };
+const ROUTE_LABEL = { palette: "추천으로", diagnosis: "진단으로", character: "캐릭터로", color: "색으로" };
 
 // 서버의 LIMITS.noteChars 와 **같아야 한다.** 어긋나면 사용자는 다 썼다고 보는데 서버가 조용히
 // 잘라, 저장된 뒤에야 알게 된다. 홈은 한계값을 받아오지 않으므로 S8-G4 가 두 값을 대조한다.
@@ -17,7 +17,6 @@ const NOTE_MAX = 200;
 // 한 번 보내면 그 뒤로는 같은 대화에 이어 붙인다. 새로고침하면 새 대화가 열린다 —
 // 대화의 경계를 사용자가 선언하게 만들지 않고 세션으로 잡는다.
 let conversationId = null;
-let lastQuery = "";
 
 const threadBox = document.getElementById("thread");
 const threadTitle = document.getElementById("thread-title");
@@ -29,7 +28,7 @@ const threadMeta = document.getElementById("thread-meta");
  * 결과 카드 하나. 슬라이더로 조정한 비율을 들고 있다가 저장할 때 함께 보낸다 —
  * 비율은 코퍼스가 모르는 값이고 사용자의 판단이므로, 저장되는 것이 기본값이 아니라 조정한 값이어야 한다.
  */
-function resultCard(result, rank, featured) {
+function resultCard(result, rank, featured, original) {
   let ratio = null; // null 이면 서버가 규칙의 기본값을 쓴다
 
   const box = el("div", "card__actions");
@@ -73,7 +72,7 @@ function resultCard(result, rank, featured) {
     try {
       await api("/api/saved", {
         paletteId: result.id,
-        fromQuery: lastQuery,
+        fromQuery: original,
         ...(ratio ? { ratio: ratio[0] } : {}),
         ...(note ? { note } : {}),
       });
@@ -101,7 +100,7 @@ function resultCard(result, rank, featured) {
   });
 
   button.addEventListener("click", save);
-  box.append(memo, button, feedback, expansionSection(result.id, lastQuery));
+  box.append(memo, button, feedback, expansionSection(result.id, original));
 
   return paletteCard(result, rank, {
     featured,
@@ -311,7 +310,7 @@ function expansionSection(seedId, query) {
 }
 
 /** 검색 답(추천·진단) 한 덩어리. 전의 renderStatus + render 를 합쳐 요소로 돌려준다. */
-function searchBlock(data) {
+function searchBlock(data, original) {
   const box = el("div", "answer");
   const status = el("div", "status");
   if (!data.confident) {
@@ -342,8 +341,8 @@ function searchBlock(data) {
   }
   if (data.results.length) box.append(el("h2", "results__title", "추천 조합"), el("p", "results__note", "색상각과 톤 좌표를 따로 찍어 정렬했습니다"));
   const [first, ...rest] = data.results;
-  if (first) box.append(resultCard(first, 1, true));
-  rest.forEach((r, i) => box.append(resultCard(r, i + 2, false)));
+  if (first) box.append(resultCard(first, 1, true, original));
+  rest.forEach((r, i) => box.append(resultCard(r, i + 2, false, original)));
   return box;
 }
 
@@ -375,7 +374,7 @@ function colorBlock(data) {
   status.append(el("span", "status__timing", `${data.elapsedMs}ms · 짝 ${data.partners.length}쌍 · 구조 ${data.structures.length}가지`));
   box.append(status, inputCard(data));
   if (data.partners.length) box.append(el("h2", "results__title", "배색사전에서 어울리는 짝"));
-  data.partners.forEach((p, i) => box.append(partnerCard(p, i + 1)));
+  data.partners.forEach((p, i) => box.append(partnerCard(p, i + 1, data.query)));
 
   const modes = modeStore();
   let mode = modes.read();
@@ -401,7 +400,12 @@ function colorBlock(data) {
   return box;
 }
 
-const BLOCK_BY_ROUTE = { palette: searchBlock, diagnosis: searchBlock, character: characterBlock, color: colorBlock };
+const BLOCK_BY_ROUTE = {
+  palette: (data, original) => searchBlock(data, original),
+  diagnosis: (data, original) => searchBlock(data, original),
+  character: (data) => characterBlock(data),
+  color: (data) => colorBlock(data),
+};
 
 /* ── 코드 및 색상 ─────────────────────────────────────────── */
 const INPUT_FROM = { hex: "헥스", name: "코퍼스 색 이름", word: "색 낱말" };
@@ -429,7 +433,7 @@ function inputCard(data) {
  * **저장은 쌍 id 만 보낸다.** 코퍼스 쌍이든 씨앗 풀 쌍이든 서버가 자기 자료에서 색을 꺼낸다 — 화면이 보낸 색을
  * 안 믿는 규칙(S4) 그대로. 비율은 안 보낸다(이 카드에는 슬라이더가 없다). `/saved` 에서 고칠 수 있다.
  */
-function partnerCard(p, rank) {
+function partnerCard(p, rank, fromQuery) {
   const card = el("article", "colorin__partner");
   const head = el("div", "struct__head");
   head.append(el("h4", "struct__name", p.partner.name), el("span", "struct__source", `배색사전 ${p.pairName}`));
@@ -444,7 +448,7 @@ function partnerCard(p, rank) {
   button.addEventListener("click", async () => {
     button.disabled = true;
     try {
-      await api("/api/saved", { paletteId: p.pairId, fromQuery: lastQuery });
+      await api("/api/saved", { paletteId: p.pairId, fromQuery });
       button.textContent = "저장됨";
       feedback.textContent = "‘추천 받은 조합’ 에서 볼 수 있습니다";
     } catch (err) {
@@ -473,7 +477,9 @@ function agentItem(...children) {
 /** 확인 질문. 칩을 누르면 choice 로, 문장을 치면 text 로 간다 — 입력창은 그대로 쓴다. */
 function askItem(turn) {
   const box = el("div", "ask");
-  box.append(el("p", "ask__question", turn.question));
+  const question = el("p", "ask__question", turn.question);
+  question.setAttribute("aria-live", "polite");
+  box.append(question);
   if (turn.choices.length) {
     const chips = el("div", "ask__chips");
     for (const c of turn.choices) {
@@ -493,8 +499,8 @@ function askItem(turn) {
 }
 
 function answerItem(turn) {
-  const head = el("p", "answer__route", `${ROUTE_LABEL[turn.route] ?? turn.route}으로 읽었습니다`);
-  const block = (BLOCK_BY_ROUTE[turn.route] ?? searchBlock)(turn.payload);
+  const head = el("p", "answer__route", `${ROUTE_LABEL[turn.route] ?? `${turn.route}으로`} 읽었습니다`);
+  const block = (BLOCK_BY_ROUTE[turn.route] ?? searchBlock)(turn.payload, turn.original);
   return agentItem(head, block);
 }
 
@@ -511,25 +517,27 @@ async function send(body) {
   await ready;
   const ticket = ++latestTicket;
   submit.disabled = true;
-  if (body.text) {
-    lastQuery = body.text;
-    chatList.append(userItem(body.text));
-  }
-  const waiting = agentItem(el("p", "chat__waiting", "생각 중…"));
+  if (body.text) chatList.append(userItem(body.text));
+  const waitingText = el("p", "chat__waiting", "생각 중…");
+  waitingText.setAttribute("aria-live", "polite");
+  const waiting = agentItem(waitingText);
   chatList.append(waiting);
   waiting.scrollIntoView({ block: "end" });
   try {
     const data = await api("/api/chat", { conversationId, ...body });
-    if (ticket !== latestTicket) return;
-    if (data.conversationId !== conversationId) {
-      conversationId = data.conversationId;
-      showThread({ id: conversationId, turns: [] });
+    if (ticket !== latestTicket) {
+      // 이 응답을 기다리는 사이 다른 턴이 시작됐다 — 낡은 "생각 중…" 을 남겨 두면 화면에 두 개가 겹친다.
+      waiting.remove();
+      return;
     }
+    // conversationId 는 여기서 갱신하되, 배너(showThread)는 안 띄운다 — 이 시점의 conversation 은
+    // turns:[] 뿐이라 "(빈 대화) · 0턴" 이라는 거짓 배너가 뜬다. 배너는 `?conv=` 로 이어 쓸 때만 의미가 있다.
+    conversationId = data.conversationId;
     waiting.replaceWith(data.turn.kind === "ask" ? askItem(data.turn) : answerItem(data.turn));
-    if (data.turn.kind === "answer") lastQuery = data.turn.original;
     chatList.lastElementChild?.scrollIntoView({ block: "end" });
   } catch (err) {
     if (ticket === latestTicket) waiting.replaceWith(errorItem(err.message ?? "서버에 닿지 못했습니다"));
+    else waiting.remove();
   } finally {
     if (ticket === latestTicket) {
       submit.disabled = false;
@@ -554,10 +562,10 @@ form.addEventListener("submit", (event) => {
    없는 대화 id 면 이어 쓰는 척하지 않는다 — 조용히 새 대화를 열면 사용자가 어디에 쓰고 있는지 잃는다. */
 
 /**
- * 이어 쓰는 중 배너만 채운다. **chat 목록은 건드리지 않는다** — send() 안에서
- * (새 대화가 막 만들어졌을 때) 이 함수를 부르면, 그 순간 화면에는 방금 붙인 사용자
- * 말풍선과 "생각 중…" 이 떠 있다. 여기서 목록을 지우면 그 둘이 통째로 사라진다.
- * 옛 턴을 그리는 것은 `?conv=` 로 들어왔을 때만 필요하므로 ready() 쪽에서 따로 한다.
+ * 이어 쓰는 중 배너만 채운다. **`?conv=` 로 들어왔을 때만 부른다** — send() 안에서는
+ * 부르지 않는다. send() 가 만드는 conversation 은 그 순간 `turns:[]` 뿐이라, 여기서 부르면
+ * "(빈 대화) · 0턴" 이라는 거짓 배너가 뜬다(리뷰 지적). 옛 턴을 chat 목록에 그리는 것도
+ * 이 함수의 일이 아니다 — ready() 쪽에서 따로 한다.
  */
 function showThread(conversation) {
   conversationId = conversation.id;
@@ -581,6 +589,7 @@ document.getElementById("thread-new").addEventListener("click", () => {
 const ready = (async () => {
   const params = new URLSearchParams(location.search);
   const conv = params.get("conv");
+  const q = params.get("q");
 
   if (conv) {
     try {
@@ -588,15 +597,25 @@ const ready = (async () => {
       showThread(conversation);
       // 옛 턴을 그린다 — 답은 저장돼 있지 않다(다시 묻기가 그 역할이다). 사용자 말풍선만 붙인다.
       // send() 가 아직 한 번도 안 불렸을 이 시점에만 한다 — 그 뒤에 부르면 막 붙인 말풍선을 지운다.
+      // 마지막 턴이 이번 ?q= 와 같으면 건너뛴다 — 아니면 그 말풍선이 그려진 뒤 곧 send(q) 가
+      // 같은 문장으로 하나 더 붙여 화면에 같은 말풍선이 두 번 보인다(리뷰 지적).
       chatList.replaceChildren();
-      for (const t of conversation.turns) chatList.append(userItem(t.query));
+      const turns = conversation.turns;
+      const skipLast = q && turns.at(-1)?.query === q;
+      turns.slice(0, skipLast ? -1 : undefined).forEach((t) => chatList.append(userItem(t.query)));
     } catch (err) {
       // 이어 쓸 수 없다는 것을 화면에 말한다.
       chatList.append(errorItem(`그 대화를 이어 쓸 수 없습니다 — ${err.message}. 새 대화로 시작합니다.`));
       history.replaceState(null, "", "/");
     }
   }
-  return params.get("q");
+
+  // 빈 채팅에 안내 한 줄 — 대화가 없고(?conv= 도 없고) 아무것도 안 그려졌을 때만(스펙 5절).
+  if (!conv && chatList.childElementCount === 0) {
+    chatList.append(agentItem(el("p", "chat__bubble chat__bubble--agent", "찾는 색, 고칠 배색, 캐릭터 외형, 또는 #RRGGBB 를 문장으로 쓰세요.")));
+  }
+
+  return q;
 })();
 
 // 자동 실행은 확인이 끝난 뒤에. 이 시점에 ready 는 이미 해소돼 있어 send 가 막히지 않는다.
