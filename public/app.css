@@ -282,6 +282,57 @@ a:hover {
   font-size: 13px;
   color: var(--ink-muted);
 }
+
+/* ── 코드 및 색상(35단계) ───────────────────────────────── */
+.colorin__input {
+  margin: 16px var(--gutter) 0;
+  max-width: 1000px;
+}
+.colorin__card .swatch {
+  height: 88px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.colorin__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+.colorin__meta b {
+  color: var(--ink);
+  font-family: var(--font-mono);
+}
+.colorin__partners {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin: 0 var(--gutter);
+  max-width: 1000px;
+}
+.colorin__partner {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.colorin__partner .swatch {
+  height: 64px;
+  margin-top: 10px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.colorin__partner-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.colorin__grid {
+  margin: 0 var(--gutter);
+  max-width: 1000px;
+}
 .sources {
   display: flex;
   flex-wrap: wrap;

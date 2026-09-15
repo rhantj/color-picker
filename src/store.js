@@ -159,7 +159,7 @@ const clip = (value, max) => {
 };
 
 const ID_SHAPE = /^[a-z]+-[a-z0-9]+-[a-z0-9]+$/;
-const VALID_ROUTES = new Set(["palette", "diagnosis", "character", "none"]);
+const VALID_ROUTES = new Set(["palette", "diagnosis", "character", "color", "none"]);
 
 /* ── 대화 내역 ───────────────────────────────────────────── */
 
@@ -184,7 +184,7 @@ export function recordTurn(input) {
     confident: input.confident === true,
     // LLM 을 썼는가는 stage 로 못 센다 — 3단계 뒤에 재작성이 올 수 있다. 따로 받되 불리언만 믿는다.
     usedLlm: input.usedLlm === true,
-    topKind: ["diagnosis", "palette", "character"].includes(input.topKind) ? input.topKind : null,
+    topKind: ["diagnosis", "palette", "character", "color"].includes(input.topKind) ? input.topKind : null,
     topId: clip(input.topId, 40) || null,
     topLabel: clip(input.topLabel, 80) || null,
   };

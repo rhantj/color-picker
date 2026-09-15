@@ -35,7 +35,7 @@ const HUE_BUCKET = 30;
 const CHROMATIC_MIN_S = 0.15;
 const IMPRESSION_MAX = 120;
 const TAB_KEY = "tonefirst:tab";
-const TAB_LABELS = ["색감 추천", "캐릭터 색감"];
+const TAB_LABELS = ["색감 추천", "캐릭터 색감", "코드 및 색상"]; // 35단계가 셋째 탭을 더했다
 
 /** 코퍼스 80색. 팔레트 16쌍 + 씨앗 24쌍. 대상(server.js)이 아니라 데이터에서 직접 읽는다. */
 function corpus() {
@@ -586,7 +586,7 @@ const GATES = {
     if (!/말한 색/.test(line.textContent) || !/규칙/.test(line.textContent)) bad.push(`출처 줄 문구: ${line.textContent}`);
     if (/LLM|llm/.test(line.textContent)) bad.push("출처 줄에 LLM");
     if (bad.length) throw new Error(bad.join(" / "));
-    out("탭 둘 · /api/character · 저장소 한 곳 · tabStore 불신 · 내역 라벨 · structureCard 재사용 · 출처 줄");
+    out("탭 셋(순서 고정) · /api/character · 저장소 한 곳 · tabStore 불신 · 내역 라벨 · structureCard 재사용 · 출처 줄");
     out("S34_G9_OK");
   },
 

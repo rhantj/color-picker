@@ -2084,7 +2084,7 @@ S34-G8 저장 왕복 — 본문의 가짜 색을 무시하고 재계산 · 종�
     CHECK: node scripts/check-stage34.mjs S34-G8
     EXPECT: S34_G8_OK
 
-S34-G9 화면 — 탭 둘("색감 추천"·"캐릭터 색감") · 캐릭터 탭이 `/api/character` 로 감 · 저장소 접근은 여전히 ui.js 한 곳 · `tabStore` 가 모르는 값을 안 믿음 · 내역 라벨 · `structureCard` 재사용 (정적 + DOM 스텁)
+S34-G9 화면 — 탭("색감 추천"·"캐릭터 색감" — 35단계부터 "코드 및 색상" 이 셋째) · 캐릭터 탭이 `/api/character` 로 감 · 저장소 접근은 여전히 ui.js 한 곳 · `tabStore` 가 모르는 값을 안 믿음 · 내역 라벨 · `structureCard` 재사용 (정적 + DOM 스텁)
     CHECK: node scripts/check-stage34.mjs S34-G9
     EXPECT: S34_G9_OK
 
@@ -2112,3 +2112,42 @@ S34-G10 회귀 — S4 7 · S16 11 · S17 12 · S18 13 · S20 7 · S22 6 · S23 6
   미래적인 분위기의 전투 기계", 피부·상의 gray, 재질 전부 metal(10.3초).
 - **`characterKey` 는 문장을 안 본다.** 같은 부위·종족·배색 쌍이면 다른 문장이라도 덮어쓴다(의도 — 색이 같으면 같은 저장이다).
 - **S34-G8 의 `metallic` 은 엔진 변환의 필드 이름이다** — 유니티·언리얼 둘 다 그 이름을 쓴다(`toUnity`·`toUnreal`). 바꾸면 검사기도 바꾼다.
+
+## 35단계 — 코드 및 색상 탭: 헥스·색 이름 → 어울리는 색 (대표 요청)
+
+`#E07A5F` 같은 헥스나 "테라코타"·"빨강" 같은 색 이름을 주면 **그 색과 어울리는 색**을 준다. 홈 검색창 위 탭 셋째
+"코드 및 색상". 답은 둘 — ① **배색사전 짝**: 씨앗 40쌍 중 입력 색과 가장 가까운 색을 가진 쌍 3개, 그 쌍의 다른 색이 짝
+(원전 근거, 헥스는 전부 코퍼스 80색) · ② **배색 구조 8가지**: 입력 색을 씨앗으로 `expandAll`(두 모드). LLM 호출 0, 지어낸 색 0.
+저장은 이 단계 범위 밖(`docs/com/open-work.md`).
+
+S35-G1 입력 해석 — `#E07A5F`·`e07a5f`·`#abc`·`ABC` 가 정규화된 헥스로 · 코퍼스 이름(한글·원명, 대소문자 무시)이 그 헥스로 · 색 낱말("빨강"·"파란")이 코퍼스 색으로 결정적으로 · 쓰레기(`hello`·`#GGGGGG`·`#12345`·`constructor`·빈 문자열·비문자열)는 null
+    CHECK: node scripts/check-stage35.mjs S35-G1
+    EXPECT: S35_G1_OK
+
+S35-G2 배색사전 짝 — 40쌍 × 2색 = 80건 전부에서 그 색을 넣으면 자기 쌍이 3위 안에 있고 짝은 그 쌍의 다른 색(양성 대조) · 결과 헥스 전부 코퍼스 80색 · 쌍 id 중복 없음 · 거리 오름차순 · 결정적 · 거리 함수가 대칭·자기 자신은 0
+    CHECK: node scripts/check-stage35.mjs S35-G2
+    EXPECT: S35_G2_OK
+
+S35-G3 배색 구조 — 입력 하나로 카탈로그 8구조 전부 · 각 구조 3~4색 · 두 모드 · 검사기가 같은 합성 씨앗으로 `expandSeed` 를 직접 불러 헥스 전부 일치(지어낸 색 0) · `accent-by-chroma`·`warm-neutral` 의 강조가 입력 헥스 그대로 · 결정적
+    CHECK: node scripts/check-stage35.mjs S35-G3
+    EXPECT: S35_G3_OK
+
+S35-G4 서버 `GET /api/color` — Ollama 없이 헥스·이름·낱말 입력이 200 · 응답 형태(input·partners 3·structures 8·colorsDark·elapsedMs) · 응답에 Ollama 흔적 없음 · 빈 q·못 읽는 색·너무 긴 q 가 400 이고 오류 문구에 내부 경로 없음 · 홈 HTML 에 "LLM" 없음
+    CHECK: node scripts/check-stage35.mjs S35-G4
+    EXPECT: S35_G4_OK
+
+S35-G5 화면 — 탭 셋("색감 추천"·"캐릭터 색감"·"코드 및 색상") · 색 탭 결과 영역이 tabpanel · 색 탭이 `/api/color` 로 감 · `?tab=` 을 `asTab` 으로 읽음 · `tabStore` 가 `color` 를 받고 모르는 값은 불신 · 내역 라벨·`tab=color` 링크 · `structureCard`·`swatchView` 재사용 · 저장소 접근은 ui.js 한 곳 · 화면에 "LLM" 없음
+    CHECK: node scripts/check-stage35.mjs S35-G5
+    EXPECT: S35_G5_OK
+
+S35-G6 회귀 — S11 10 · S22 6 · S31 3 · S34 10 = 29
+    CHECK: node scripts/check-stage35.mjs S35-G6
+    EXPECT: S35_G6_OK
+
+### 알려진 한계 (35단계)
+
+- **짝의 거리는 `[판단]`** — 지각 채도 평면(c·cos h, c·sin h)과 명도의 유클리드 거리. 원전은 "가까운 색" 을 정의하지 않는다.
+- **저장이 없다.** 파생 저장은 씨앗 id 로 서버가 색을 다시 계산하는데(`store.js` 규칙 4) 사용자 헥스는 씨앗이 아니다.
+  헥스를 저장 키로 받는 새 경로는 이 단계에 안 넣었다(`docs/com/open-work.md`).
+- **구조 8가지를 전부 보인다 — LLM 이 다섯을 고르지 않는다.** 헥스에는 인상(질의)이 없어 고를 근거가 없다.
+- **"흰색" 은 코퍼스에 없다** — 34단계 한계 그대로. 낱말 입력은 코퍼스 최근접으로 간다.

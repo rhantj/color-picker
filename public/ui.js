@@ -557,9 +557,10 @@ export function modeStore(storage = defaultStorage()) {
 }
 
 /* ── 탭 기억하기(34단계) — 모드와 같은 문, 같은 불신 ─────────── */
-const TABS = Object.freeze(["palette", "character"]);
+const TABS = Object.freeze(["palette", "character", "color"]);
 const TAB_KEY = "tonefirst:tab";
-const asTab = (value) => (typeof value === "string" && TABS.includes(value) ? value : "palette");
+/** 아는 탭 이름만 돌려주고 나머지는 첫 탭. 저장소 값과 `?tab=` 둘 다 이것으로 읽는다 — 두 곳이 갈리지 않게. */
+export const asTab = (value) => (typeof value === "string" && TABS.includes(value) ? value : "palette");
 
 /** 마지막으로 고른 탭. 저장소가 없거나 던져도 돌고, 저장값은 아는 값만 믿는다 — `modeStore` 와 같은 규칙. */
 export function tabStore(storage = defaultStorage()) {

@@ -1,6 +1,6 @@
 // 홈 화면. 렌더 조각은 ui.js 가 세 화면과 공유한다.
 
-import { api, applyModeButton, characterStructure, diagnosisCard, el, finishEditing, finishOverrides, modeStore, nextMode, paletteCard, refreshRuntime, sourceLine, structureCard, tabStore } from "./ui.js";
+import { api, applyModeButton, asTab, characterStructure, diagnosisCard, el, finishEditing, finishOverrides, modeStore, nextMode, paletteCard, refreshRuntime, sourceLine, structureCard, swatchView, tabStore } from "./ui.js";
 
 const form = document.getElementById("search-form");
 const input = document.getElementById("q");
@@ -21,9 +21,17 @@ const characterSection = document.getElementById("results-character");
 const characterHead = document.getElementById("character-head");
 const characterStatus = document.getElementById("character-status");
 const characterCard = document.getElementById("character-card");
+const colorSection = document.getElementById("results-color");
+const colorStatus = document.getElementById("color-status");
+const colorInputBox = document.getElementById("color-input");
+const colorPartnersHead = document.getElementById("color-partners-head");
+const colorPartners = document.getElementById("color-partners");
+const colorStructuresHead = document.getElementById("color-structures-head");
+const colorStructures = document.getElementById("color-structures");
 const TAB_UI = {
   palette: { placeholder: input.placeholder, submit: "추천 받기" },
   character: { placeholder: "캐릭터 외형을 문장으로 — 예: 붉은 머리에 검은 갑옷, 차가운 성격의 기사", submit: "색 맞추기" },
+  color: { placeholder: "#RRGGBB 헥스나 색 이름 — 예: #E07A5F, 테라코타, 파랑", submit: "어울리는 색 찾기" },
 };
 let tab = "palette";
 
@@ -39,6 +47,7 @@ function applyTab(next) {
   paletteSection.hidden = next !== "palette";
   statusBox.hidden = next !== "palette" || statusBox.childElementCount === 0;
   characterSection.hidden = next !== "character";
+  colorSection.hidden = next !== "color";
   input.placeholder = TAB_UI[next].placeholder;
   submit.textContent = TAB_UI[next].submit;
   for (const chip of document.querySelectorAll("[data-example]")) chip.hidden = chip.dataset.tab !== next;
@@ -501,6 +510,88 @@ async function runCharacter(query) {
   }
 }
 
+/* ── 코드 및 색상(35단계) ─────────────────────────────────── */
+const INPUT_FROM = { hex: "헥스", name: "코퍼스 색 이름", word: "색 낱말" };
+
+/** 입력 색 한 장. 코퍼스에 없는 헥스면 가장 가까운 코퍼스 색을 옆에 적는다 — 짝은 그 색으로 찾았기 때문이다. */
+function inputCard(data) {
+  const card = el("article", "colorin__card");
+  const view = swatchView([{ hex: data.input.hex }], [100]);
+  const meta = el("div", "colorin__meta");
+  meta.append(el("b", null, data.input.label), el("span", null, ` · ${INPUT_FROM[data.input.from] ?? data.input.from}`));
+  const near = data.input.nearest;
+  if (near && near.hex.toUpperCase() !== data.input.hex.toUpperCase()) {
+    meta.append(el("span", "colorin__near", `가장 가까운 코퍼스 색 ${near.name ?? near.hex} ${near.hex}`));
+  } else if (data.input.from === "word" && near?.name) {
+    // 낱말("파란")은 코퍼스의 어느 색으로 갔는지 이름을 적는다. 코퍼스 이름 입력은 이미 그 이름이라 안 적는다.
+    meta.append(el("span", "colorin__near", `코퍼스 ${near.name} ${near.hex}`));
+  }
+  card.append(view.node, meta);
+  return card;
+}
+
+/** 배색사전 짝 한 장 — 왼쪽이 입력에 가까운 코퍼스 색, 오른쪽이 그 쌍의 다른 색(짝). */
+function partnerCard(p, rank) {
+  const card = el("article", "colorin__partner");
+  const head = el("div", "struct__head");
+  head.append(el("h4", "struct__name", p.partner.name), el("span", "struct__source", `배색사전 ${p.pairName}`));
+  const colors = [{ hex: p.near.hex, role: p.near.name }, { hex: p.partner.hex, role: p.partner.name }];
+  const view = swatchView(colors, [50, 50]);
+  const note = el("p", "colorin__partner-note", `${String(rank).padStart(2, "0")} · 짝 ${p.partner.hex} · 가까운 색 ${p.near.name} ${p.near.hex}`);
+  card.append(head, view.node, note);
+  return card;
+}
+
+function renderColor(data) {
+  colorStatus.replaceChildren(el("span", "status__timing", `${data.elapsedMs}ms · 짝 ${data.partners.length}쌍 · 구조 ${data.structures.length}가지`));
+  colorStatus.hidden = false;
+  colorInputBox.replaceChildren(inputCard(data));
+  colorPartners.replaceChildren(...data.partners.map((p, i) => partnerCard(p, i + 1)));
+  colorPartnersHead.hidden = data.partners.length === 0;
+  // 저장 버튼은 없다 — 사용자 헥스는 씨앗 id 가 아니라 파생 저장 경로를 못 탄다(35단계 알려진 한계).
+  const modes = modeStore();
+  const mode = modes.read();
+  colorStructures.replaceChildren(...data.structures.map((st) => structureCard(st, mode)));
+  colorStructuresHead.hidden = data.structures.length === 0;
+}
+
+async function recordColorTurn(data) {
+  const saved = await api("/api/conversations/turn", {
+    conversationId,
+    query: data.query,
+    stage: 1,
+    usedLlm: false,
+    route: "color",
+    confident: true,
+    topKind: "color",
+    topId: data.partners[0]?.pairId ?? null,
+    topLabel: data.partners[0]?.pairName ?? null,
+  });
+  conversationId = saved.conversationId;
+}
+
+async function runColor(query) {
+  await ready;
+  const ticket = ++latestTicket;
+  submit.disabled = true;
+  lastQuery = query;
+  try {
+    const data = await api(`/api/color?q=${encodeURIComponent(query)}`);
+    if (ticket !== latestTicket) return;
+    renderColor(data);
+    recordColorTurn(data).catch((err) => {
+      threadMeta.textContent = `기록하지 못했습니다 — ${err.message}`;
+    });
+  } catch (err) {
+    if (ticket === latestTicket) {
+      colorStatus.replaceChildren(el("span", "status__badge status__badge--warn", "오류"), el("span", "status__text", err.message ?? "서버에 닿지 못했습니다"));
+      colorStatus.hidden = false;
+    }
+  } finally {
+    if (ticket === latestTicket) submit.disabled = false;
+  }
+}
+
 /* ── 동작 ────────────────────────────────────────────────── */
 
 // 예시 칩은 제출 버튼 잠금을 거치지 않으므로 빠르게 연달아 누르면 요청이 겹친다.
@@ -548,7 +639,8 @@ async function run(query) {
   }
 }
 
-const go = (query) => (tab === "character" ? runCharacter(query) : run(query));
+const RUN_BY_TAB = { palette: run, character: runCharacter, color: runColor };
+const go = (query) => (RUN_BY_TAB[tab] ?? run)(query);
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -600,8 +692,8 @@ const ready = (async () => {
       history.replaceState(null, "", "/");
     }
   }
-  // ?tab= 이 있으면 그것, 없으면 마지막으로 고른 탭. 내역의 "다시 묻기" 가 캐릭터 질문을 캐릭터 탭으로 보낸다.
-  applyTab(params.get("tab") === "character" ? "character" : tabs.read());
+  // ?tab= 이 있으면 그것(모르는 값은 첫 탭), 없으면 마지막으로 고른 탭. 내역의 "다시 묻기" 가 질문을 그 탭으로 보낸다.
+  applyTab(params.has("tab") ? asTab(params.get("tab")) : tabs.read());
   return params.get("q");
 })();
 

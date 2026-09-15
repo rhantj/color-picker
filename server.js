@@ -36,6 +36,7 @@ import { cleanQuery } from "./src/query.js";
 import { prepare as prepareEmbeddings, refresh as refreshEmbeddings } from "./src/embed.js";
 import { CHARACTER_FINISH_BY_ROLE, DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, loadFinishes } from "./src/material.js";
 import { loadSeeds, seedLabel } from "./src/seeds.js";
+import { PARTNER_COUNT, parseColorInput, partnersFor, structuresFor } from "./src/from-color.js";
 import { FORMATS } from "./src/export.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("./public/", import.meta.url));
@@ -366,9 +367,45 @@ const FINISH_NAMES = () => Object.fromEntries(loadFinishes().map((f) => [f.id, f
  * 팔레트는 재적재될 수 있어(27단계) 요청마다 모은다. 80개라 비용이 없다.
  */
 const corpusColors = () => [
-  ...pipeline.palettes.flatMap((p) => p.colors.map((c) => ({ hex: c.hex, name: c.name }))),
+  ...pipeline.palettes.flatMap((p) => p.colors.map((c) => ({ hex: c.hex, name: c.name, origName: c.origName }))),
   ...seedPool.flatMap((s) => s.colors.map((c) => ({ hex: c.hex, name: c.origName }))),
 ];
+
+/** 짝 찾기가 훑는 씨앗 40쌍 — 코퍼스 16(이름 있음) 뒤에 풀 24. 순서가 동률의 우선순위다. */
+const seedsForPartners = () => [
+  ...pipeline.palettes.map((p) => ({ id: p.id, name: p.name, colors: p.colors })),
+  ...seedPool.map((s) => ({ id: s.id, colors: s.colors })),
+];
+
+/**
+ * 색 하나 → 어울리는 색(35단계). **LLM 도 검색도 안 부른다** — 헥스에는 인상이 없다.
+ * 못 읽는 입력은 400 이고, 무엇을 받는지 문구로 말한다.
+ */
+function handleColor(res, params) {
+  pipeline.reloadIfChanged();
+  const query = cleanQuery(params.get("q"));
+  if (!query) return sendJson(res, 400, { error: "q 가 비어 있다" });
+  if (query.length > LIMITS.queryChars) return sendJson(res, 400, { error: `q 는 ${LIMITS.queryChars}자까지` });
+
+  const started = Date.now();
+  const corpus = corpusColors();
+  const input = parseColorInput(query, corpus);
+  if (!input) return sendJson(res, 400, { error: "색을 못 읽었다 — #RRGGBB 헥스나 색 이름(테라코타 · 빨강)을 넣는다" });
+
+  const partners = partnersFor(input.hex, seedsForPartners(), PARTNER_COUNT);
+  // 헥스 입력은 코퍼스 밖일 수 있어 1위 쌍의 가까운 색이 "가장 가까운 코퍼스 색" 이다. 이름·낱말은 이미 코퍼스 색이다.
+  const nearest =
+    input.from === "hex"
+      ? { hex: partners[0]?.near.hex ?? input.hex, name: partners[0]?.near.name ?? null, distance: partners[0]?.distance ?? 0 }
+      : { hex: input.hex, name: input.name ?? input.label, distance: 0 };
+  sendJson(res, 200, {
+    query,
+    input: { hex: input.hex, from: input.from, label: input.label, wordId: input.wordId ?? null, nearest },
+    partners,
+    structures: structuresFor(input.hex, fullCatalog),
+    elapsedMs: Date.now() - started,
+  });
+}
 
 /** 검색이 배색 쌍을 못 고르면 여기로 물러선다. 코퍼스 1번이고, 없으면 첫 항목. */
 const FALLBACK_PAIR_ID = "pair-01";
@@ -713,6 +750,7 @@ function dispatch(req, res, url) {
   if (url.pathname === "/api/export") return handleExport(res, url.searchParams);
   if (url.pathname === "/api/expand") return handleExpand(res, url.searchParams);
   if (url.pathname === "/api/character") return handleCharacter(res, url.searchParams);
+  if (url.pathname === "/api/color") return handleColor(res, url.searchParams);
   return serveStatic(res, url.pathname);
 }
 

@@ -40,6 +40,7 @@
     <div class="tabs" role="tablist" aria-label="무엇을 물을지">
       <button class="tabs__tab" type="button" role="tab" id="tab-palette" data-tab-select="palette" aria-selected="true" aria-controls="results-palette">색감 추천</button>
       <button class="tabs__tab" type="button" role="tab" id="tab-character" data-tab-select="character" aria-selected="false" aria-controls="results-character" tabindex="-1">캐릭터 색감</button>
+      <button class="tabs__tab" type="button" role="tab" id="tab-color" data-tab-select="color" aria-selected="false" aria-controls="results-color" tabindex="-1">코드 및 색상</button>
     </div>
 
     <form class="searchbar" id="search-form" role="search">
@@ -64,6 +65,9 @@
       <button class="chip" type="button" data-tab="character" data-example="붉은 머리에 검은 갑옷, 차가운 성격의 기사" hidden>붉은 머리의 기사</button>
       <button class="chip" type="button" data-tab="character" data-example="금발에 초록 눈, 흰 드레스의 공주" hidden>금발의 공주</button>
       <button class="chip" type="button" data-tab="character" data-example="녹슨 로봇 병사, 은색 갑옷" hidden>녹슨 로봇</button>
+      <button class="chip" type="button" data-tab="color" data-example="#E07A5F" hidden>#E07A5F</button>
+      <button class="chip" type="button" data-tab="color" data-example="테라코타" hidden>테라코타</button>
+      <button class="chip" type="button" data-tab="color" data-example="파랑" hidden>파랑</button>
     </div>
   </section>
 
@@ -98,6 +102,21 @@
     </div>
     <div class="status" id="character-status" hidden aria-live="polite"></div>
     <div class="character__card" id="character-card"></div>
+  </section>
+
+  <section class="colorin" id="results-color" role="tabpanel" aria-labelledby="tab-color" hidden>
+    <div class="status" id="color-status" hidden aria-live="polite"></div>
+    <div class="colorin__input" id="color-input"></div>
+    <div class="results__head" id="color-partners-head" hidden>
+      <h2 class="results__title">배색사전에서 어울리는 짝</h2>
+      <span class="results__note">입력 색과 가장 가까운 색이 든 쌍 셋 — 그 쌍의 다른 색이 짝입니다</span>
+    </div>
+    <div class="colorin__partners" id="color-partners"></div>
+    <div class="results__head" id="color-structures-head" hidden>
+      <h2 class="results__title">배색 구조 여덟</h2>
+      <span class="results__note">입력 색을 씨앗으로 명도·채도·색상각만 움직였습니다</span>
+    </div>
+    <div class="expand__grid colorin__grid" id="color-structures"></div>
   </section>
 
   <div class="page-foot"></div>
