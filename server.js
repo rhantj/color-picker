@@ -5,7 +5,7 @@
 
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { extname, resolve, sep } from "node:path";
+import { extname, resolve, sep, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CorpusError } from "./src/palettes.js";
@@ -14,8 +14,10 @@ import { createPipeline } from "./src/pipeline.js";
 import { ensureRunning, refresh as refreshOllama } from "./src/ollama.js";
 import { warmUp } from "./src/rewrite.js";
 import {
+  DATA_DIR,
   LIMITS,
   deleteSaved,
+  findConversation,
   listConversations,
   listSaved,
   recordTurn,
@@ -25,6 +27,9 @@ import {
   updateSavedNote,
   updateSavedRatio,
 } from "./src/store.js";
+import { createRouter } from "./src/route.js";
+import { createChat } from "./src/chat.js";
+import { createTracer } from "./src/trace.js";
 import { describe } from "./src/describe.js";
 import { CHARACTER_ROLES, composeCharacter } from "./src/character.js";
 import { loadCharacterWords, loadCreatures } from "./src/color-words.js";
@@ -457,6 +462,22 @@ const creatureTable = loadCreatures();
 loadCharacterWords();
 const creatureById = (id) => (typeof id === "string" ? creatureTable.find((c) => c.id === id) ?? null : null);
 
+// 39단계 — 라우터·트레이서·상태 기계. 라우터는 코퍼스 재적재(27단계)와 무관한 어휘표만 쓴다.
+const router = createRouter({ words: loadCharacterWords(), diagnostics: pipeline.diagnostics, corpus: corpusColors(), creatures: loadCreatures() });
+const tracer = createTracer({
+  apiKey: process.env.LANGSMITH_API_KEY ?? "",
+  project: process.env.LANGSMITH_PROJECT || "color-picker",
+  endpoint: process.env.LANGSMITH_ENDPOINT || "https://api.smith.langchain.com",
+  file: join(DATA_DIR, "traces.jsonl"),
+});
+const chat = createChat({
+  router,
+  handlers: { search: (q) => computeSearch(q, 3), character: computeCharacter, color: computeColor },
+  trace: tracer,
+  store: { findConversation, recordTurn },
+  limit: LIMITS,
+});
+
 /**
  * 저장 요청의 부위·종족·배색 쌍 id 로 **색을 다시 계산한다**(`store.js` 규칙 4). 모르는 부위·낱말은 걸러 내고(거부가 아니라
  * 걸러내기 — `pickFinishes` 와 같은 태도) 배색 쌍이 없으면 null 이다.
@@ -565,6 +586,9 @@ async function handleWrite(req, res, pathname) {
   }
 
   try {
+    if (pathname === "/api/chat") {
+      return sendJson(res, 200, await chat.step(body));
+    }
     if (pathname === "/api/conversations/turn") {
       return sendJson(res, 200, await recordTurn(body));
     }
