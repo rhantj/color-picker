@@ -23,4 +23,4 @@
 
 ## 지금 상태
 
-- 커밋 전. 아래 "머지" 줄을 채운다.
+- **커밋 `6428a43` 로 `main` 에 올라갔다**(`stage-38-remove-examples` 브랜치, `--ff-only` 머지, 원격 `rhantj/color-picker`).
