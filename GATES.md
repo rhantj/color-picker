@@ -2189,11 +2189,11 @@ S36-G5 회귀 — S9 6 · S18 13 · S19 6 · S20 7 · S22 6 · S35 6 = 44
 모자라면(부위 낱말만 · 검색 끝까지 저신뢰) **한 번만 되묻는다.** 화면은 대화 기록 하나(사용자 턴 10개). 판정과 입출력은
 LangSmith 로 보내되 키가 없으면 아무 데도 안 보낸다. 설계: `docs/superpowers/specs/2026-09-15-unified-chat-router-design.md`.
 
-S39-G1 라우터 입력표 — 고정 입력 16건(양성·음성·겹침·불명·바로잡기)이 기대 경로와 같다 · 음성 사례가 절반 이상
+S39-G1 라우터 입력표 — 고정 입력 22건(양성·음성·겹침·불명·바로잡기·종족 낱말)이 기대 경로와 같다 · 음성 사례가 절반 이상 · 게이트 라우터가 server.js 와 같은 인자(`creatures` 포함)로 만들어진다
     CHECK: node scripts/check-stage39.mjs S39-G1
     EXPECT: S39_G1_OK
 
-S39-G2 결정성 — 같은 입력 16건을 두 번 넣으면 판정이 같다 · 라우터가 `fetch`·파일을 안 부른다(순수)
+S39-G2 결정성 — 같은 입력 22건을 두 번 넣으면 판정이 같다 · 라우터가 `fetch`·파일을 안 부른다(순수)
     CHECK: node scripts/check-stage39.mjs S39-G2
     EXPECT: S39_G2_OK
 
@@ -2201,7 +2201,7 @@ S39-G3 되묻기 1회 — "도적 상의가 탁해" 가 `ask`(ambiguous · 후�
     CHECK: node scripts/check-stage39.mjs S39-G3
     EXPECT: S39_G3_OK
 
-S39-G4 대화 상한 — 같은 대화에 10턴을 넣은 뒤 11번째는 새 `conversationId` 로 오고 옛 대화는 10턴 그대로 · `LIMITS.turnsPerConversation === 10`
+S39-G4 대화 상한 — 같은 대화에 10턴을 넣은 뒤 11번째는 새 `conversationId` 로 오고 옛 대화는 10턴 그대로 · `LIMITS.turnsPerConversation === 10` · 9턴 뒤 겹치는 문장("도적 상의가 탁해")은 **되묻지 않고** 첫 후보(character)로 답하고 그 대화는 10턴에서 멈춘다
     CHECK: node scripts/check-stage39.mjs S39-G4
     EXPECT: S39_G4_OK
 
@@ -2221,10 +2221,10 @@ S39-G8 탭 소멸 — `index.html` 에 `tablist`·`data-tab-select` 없음 · `<
     CHECK: node scripts/check-stage39.mjs S39-G8
     EXPECT: S39_G8_OK
 
-S39-G9 바로잡기 — "여름 화장품 브랜드" 로 답한 뒤 "캐릭터로" 를 보내면 같은 원문을 character 로 다시 푼 `answer` 가 오고 `original` 이 첫 문장이다 · 직전 답이 없는 대화에서 "색으로 봐줘" 는 보통 문장으로 처리된다
+S39-G9 바로잡기 — "여름 화장품 브랜드" 로 답한 뒤 "캐릭터로" 를 보내면 같은 원문을 character 로 다시 푼 `answer` 가 오고 `original` 이 첫 문장이다 · 직전 답이 없는 대화에서 "색으로 봐줘" 는 보통 문장으로 처리된다 · `ask` 가 남은 대화에 `fresh: true` 로 보낸 질문은 옛 원문에 안 이어 붙고 `original` 이 새 문장이다
     CHECK: node scripts/check-stage39.mjs S39-G9
     EXPECT: S39_G9_OK
 
-S39-G10 회귀 — S4(7)·S22(6)·S34(10)·S35(6)·S36(5) 검사기 전부 통과(실측: 각 파일의 GATES 키 수)
+S39-G10 회귀 — S2(8)·S4(7)·S22(6)·S31(3)·S34(10)·S35(6)·S36(5) 검사기 전부 통과(실측: 각 파일의 GATES 키 수)
     CHECK: node scripts/check-stage39.mjs S39-G10
     EXPECT: S39_G10_OK

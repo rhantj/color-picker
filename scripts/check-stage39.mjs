@@ -47,6 +47,9 @@ const ROUTE_TABLE = [
   // 자세한 근거는 task-3-report.md "Fix round 2" 절.
   { text: "눈 상의", routes: ["character"], unclear: "character" },
   { text: "눈이 요란해", routes: ["character", "diagnosis"] },
+  // 종족 낱말(data/creatures.json)에만 기대는 행. 이 행이 없으면 게이트가 `creatures` 를 안 넘겨도
+  // 표가 통과했다 — 운영과 다른 라우터를 검사하고 있었다(최종 리뷰 P1-4).
+  { text: "검 든 기사 색 짜줘", routes: ["character"] },
 ];
 // 음성 = 그 경로가 아닌 것을 확인하는 행. 캐릭터가 아닌 행 + 진단이 아닌 행이 절반을 넘는다.
 const NEGATIVE_MIN = Math.ceil(ROUTE_TABLE.length / 2);
@@ -114,12 +117,14 @@ function runChecker(script, id) {
 
 async function loadRouter() {
   const { createRouter } = await import("../src/route.js");
-  const { loadCharacterWords } = await import("../src/color-words.js");
+  const { loadCharacterWords, loadCreatures } = await import("../src/color-words.js");
   const { loadDiagnostics } = await import("../src/diagnostics.js");
   const { loadSeeds } = await import("../src/seeds.js");
   const { loadPalettes } = await import("../src/palettes.js");
   const corpus = [...loadPalettes(), ...loadSeeds()].flatMap((p) => p.colors);
-  return createRouter({ words: loadCharacterWords(), diagnostics: loadDiagnostics(), corpus });
+  // server.js:createRouter 와 **같은 인자**여야 한다. `creatures` 를 빼면 route.js 의 기본값 []
+  // 이 차이를 조용히 삼켜 게이트가 운영과 다른 라우터를 본다(최종 리뷰 P1-4).
+  return createRouter({ words: loadCharacterWords(), diagnostics: loadDiagnostics(), corpus, creatures: loadCreatures() });
 }
 
 const sameRoute = (got, row) => (row.redirect ? got.kind === "redirect" && got.route === row.redirect : got.kind === "route" && JSON.stringify(got.routes) === JSON.stringify(row.routes) && (got.unclear || false) === (row.unclear || false));
@@ -207,6 +212,21 @@ const GATES = {
       const { conversations } = await (await fetch(`http://127.0.0.1:${port}/api/conversations`)).json();
       const old = conversations.find((c) => c.id === conv);
       if (!old || old.turns.length !== 10) bad.push(`옛 대화 턴 수 ${old?.turns.length}`);
+
+      // 마지막 한 자리에서는 되묻지 않는다 — 물으면 그 칩을 누를 자리가 없어 400 이 된다(최종 리뷰 P1-1).
+      let conv2 = null;
+      for (let i = 0; i < 9; i++) {
+        const r = await chat(port, { conversationId: conv2, text: `여름 화장품 브랜드 ${i}` });
+        conv2 = r.body.conversationId;
+      }
+      const last = await chat(port, { conversationId: conv2, text: "도적 상의가 탁해" });
+      const tl = last.body.turn ?? {};
+      if (tl.kind !== "answer") bad.push(`10번째 턴에서 되물었다: ${JSON.stringify(tl)}`);
+      if (tl.route !== "character") bad.push(`10번째 턴이 첫 후보(character)가 아니다: ${tl.route}`);
+      if (last.body.conversationId !== conv2) bad.push("10번째 턴이 새 대화로 갔다");
+      const after = await (await fetch(`http://127.0.0.1:${port}/api/conversations`)).json();
+      const filled = after.conversations.find((c) => c.id === conv2);
+      if (filled?.turns.length !== 10) bad.push(`마지막 턴 대화의 턴 수 ${filled?.turns.length}`);
     } finally {
       server.kill();
     }
@@ -332,6 +352,14 @@ const GATES = {
       const c = await chat(port, { text: "색으로 봐줘" });
       const u = c.body.turn ?? {};
       if (u.kind === "answer" && u.original !== "색으로 봐줘") bad.push(`직전 답이 없는데 바로잡기로 갔다: ${JSON.stringify(u)}`);
+
+      // 내역의 '다시 묻기'(fresh) 는 pending 이 남은 대화에서도 질의를 이어 붙이지 않는다(최종 리뷰 P1-3).
+      const d = await chat(port, { text: "도적 상의가 탁해" });
+      if ((d.body.turn ?? {}).kind !== "ask") bad.push(`fresh 준비 턴이 ask 가 아니다: ${JSON.stringify(d.body.turn)}`);
+      const e = await chat(port, { conversationId: d.body.conversationId, text: "여름 화장품 브랜드", fresh: true });
+      const w = e.body.turn ?? {};
+      if (w.kind !== "answer") bad.push(`fresh 가 answer 가 아니다: ${JSON.stringify(w)}`);
+      if (w.original !== "여름 화장품 브랜드") bad.push(`fresh 가 옛 원문에 이어 붙었다: ${JSON.stringify(w.original)}`);
     } finally {
       server.kill();
     }
@@ -340,8 +368,12 @@ const GATES = {
 
   "S39-G10": async () => {
     const targets = [
+      // S2·S31 은 이번 단계가 옛 결과 영역 단정을 채팅 목록으로 갈아 끼운 검사기다 — 회귀 목록에 없으면
+      // 그 두 검사기가 깨져도 39단계 게이트가 전부 _OK 로 나온다(최종 리뷰 P1-6).
+      ["scripts/check-stage2.mjs", 8],
       ["scripts/check-stage4.mjs", 7],
       ["scripts/check-stage22.mjs", 6],
+      ["scripts/check-stage31.mjs", 3],
       ["scripts/check-stage34.mjs", 10],
       ["scripts/check-stage35.mjs", 6],
       ["scripts/check-stage36.mjs", 5],

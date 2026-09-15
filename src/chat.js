@@ -4,6 +4,7 @@
 //   pending 없음 + 바로잡기  → 직전 답의 원문을 지정 경로로 다시 답한다
 //   pending 있음 + 칩        → 원문을 그 경로로 답한다. pending 을 지운다
 //   pending 있음 + 문장      → 원문에 이어 붙여 라우터. 또 애매해도 **다시 안 묻고** 첫 후보(겹침)·추천(불명)으로 답한다
+//   마지막 자리(9턴)         → 되묻지 않는다. 겹침이면 첫 후보, 불명이면 추천으로 바로 답한다
 //   턴 10개                  → 새 대화
 //
 // 색·헥스는 여기서 안 만든다. 처리기(handlers)가 내는 것을 그대로 payload 로 싣는다.
@@ -43,6 +44,10 @@ function summarize(route, payload) {
 /** 검색이 끝까지 저신뢰이고 모델도 "other" 이거나 없으면 정보 부족이다. */
 const searchUnclear = (payload) => payload.confident !== true && (payload.rewrite == null || payload.rewrite.intent === "other");
 
+/**
+ * `router` 는 **함수**다 — 부를 때마다 지금 코퍼스로 만든 라우터를 돌려준다(server.js 가 `pipeline` 버전으로
+ * 캐시한다). 값으로 받으면 기동 때의 코퍼스·진단표가 박혀 27단계 핫리로드가 `/api/chat` 에서만 죽는다(최종 리뷰 P1-5).
+ */
 export function createChat({ router, handlers, trace, store, limit }) {
   /** 경로 하나로 실제 답을 만든다. color 인데 색이 아니면 추천으로 내려간다. */
   async function answer(route, query, span) {
@@ -76,13 +81,21 @@ export function createChat({ router, handlers, trace, store, limit }) {
     // 사용자 턴 10개가 찼으면 새 대화. 옛 대화는 손대지 않는다.
     if (conversation && conversation.turns.length >= limit.turnsPerConversation) conversation = null;
     const conversationId = conversation?.id ?? null;
-    const pending = conversation?.pending ?? null;
+    // fresh 는 "이건 새 질문이다" 는 선언이다. 내역의 '다시 묻기' 가 pending 이 남은 대화로 들어가면
+    // 서버가 그 질문을 되묻기의 답으로 읽어 두 질의를 이어 붙인다 — 사용자는 전혀 다른 답을 받는다(최종 리뷰 P1-3).
+    const fresh = input?.fresh === true;
+    const pending = fresh ? null : conversation?.pending ?? null;
 
     // 칩(choice)은 되물은 질문에 대한 답이다. 되물은 것이 없는데 칩만 오면(10턴 롤오버로 pending 이
     // 사라진 경우 포함) router.route("") 를 부르는 대신 여기서 바로 400 이다(리뷰 1차 · 항목 3).
     if (choice && !pending) {
       throw new ChatInputError("되물은 질문이 없다 — 문장으로 다시 물어 주세요");
     }
+
+    // 대화의 마지막 한 자리에서는 되묻지 않는다. 물어 놓으면 다음 요청이 10턴 롤오버에 먼저 걸려
+    // 새 대화가 되고, 그 대화에는 pending 이 없어 칩이 400 을 받는다 — 서버가 스스로 물어 놓고 그 답을
+    // 거부한다(최종 리뷰 P1-1). 처분은 "pending 있음 + 문장" 행과 같다: 겹침이면 첫 후보, 불명이면 추천.
+    const isLastTurn = conversation != null && conversation.turns.length === limit.turnsPerConversation - 1;
 
     const span = trace.begin("chat.turn", { text, choice, conversationId, pending: pending ? { original: pending.original, reason: pending.reason } : null });
     try {
@@ -107,8 +120,10 @@ export function createChat({ router, handlers, trace, store, limit }) {
           span.child("route", { text, choice, pending: true }).end({ ...routeTrace, resolvedBy: "choice" });
           return answerAndRecord(choice, pending.original, routeTrace);
         }
-        const combined = `${pending.original} ${text}`;
-        const r = router.route(combined);
+        // 양쪽 다 각각 queryChars 를 통과했으므로 합치면 최대 2배다. 기록(recordTurn)은 어차피 자르므로
+        // 여기서 같은 한도로 잘라 **기록과 실제 질의를 같게** 만든다(최종 리뷰 P2-11).
+        const combined = `${pending.original} ${text}`.slice(0, limit.queryChars);
+        const r = router().route(combined);
         const routes = r.kind === "redirect" ? [r.route] : r.routes;
         const routeTrace = { routes, signals: r.kind === "route" ? (r.signals ?? null) : null, redirect: r.kind === "redirect" };
         span.child("route", { text: combined, pending: true }).end({ ...routeTrace, resolvedBy: "text" });
@@ -118,7 +133,7 @@ export function createChat({ router, handlers, trace, store, limit }) {
       }
 
       // ── pending 없음 ──
-      const r = router.route(text);
+      const r = router().route(text);
       const routeSpan = span.child("route", { text });
 
       if (r.kind === "redirect") {
@@ -138,11 +153,13 @@ export function createChat({ router, handlers, trace, store, limit }) {
       routeSpan.end({ ...routeTrace, unclear: r.unclear });
 
       if (r.unclear === "character") {
+        if (isLastTurn) return answerAndRecord("palette", text, routeTrace);
         const turn = { ...askTurn("unclear", [], QUESTION.unclearCharacter), original: text, trace: routeTrace };
         span.child("ask", { reason: "unclear" }).end({ choices: [] });
         return record(turn, { kind: "ask", route: "ask", pending: { original: text, choices: [], reason: "unclear" } }, text);
       }
       if (r.routes.length > 1) {
+        if (isLastTurn) return answerAndRecord(r.routes[0], text, routeTrace);
         const turn = { ...askTurn("ambiguous", r.routes, QUESTION.ambiguous), original: text, trace: routeTrace };
         span.child("ask", { reason: "ambiguous" }).end({ choices: r.routes });
         return record(turn, { kind: "ask", route: "ask", pending: { original: text, choices: r.routes, reason: "ambiguous" } }, text);
@@ -151,7 +168,7 @@ export function createChat({ router, handlers, trace, store, limit }) {
       const route = r.routes[0];
       if (route === "palette" || route === "diagnosis") {
         const { route: finalRoute, payload } = await answer(route, text, span);
-        if (searchUnclear(payload)) {
+        if (searchUnclear(payload) && !isLastTurn) {
           const turn = { ...askTurn("unclear", ["palette", "diagnosis", "character", "color"], QUESTION.unclearPalette), original: text, trace: routeTrace };
           span.child("ask", { reason: "unclear" }).end({ choices: turn.choices.map((c) => c.id) });
           return record(turn, { kind: "ask", route: "ask", pending: { original: text, choices: turn.choices.map((c) => c.id), reason: "unclear" } }, text);

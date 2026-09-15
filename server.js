@@ -462,17 +462,32 @@ const creatureTable = loadCreatures();
 loadCharacterWords();
 const creatureById = (id) => (typeof id === "string" ? creatureTable.find((c) => c.id === id) ?? null : null);
 
-// 39단계 — 라우터·트레이서·상태 기계. 라우터는 코퍼스 재적재(27단계)와 무관한 어휘표만 쓴다.
-const router = createRouter({ words: loadCharacterWords(), diagnostics: pipeline.diagnostics, corpus: corpusColors(), creatures: loadCreatures() });
+// 39단계 — 라우터·트레이서·상태 기계.
+//
+// 라우터는 **코퍼스를 쓴다**(색 이름 표와 진단 별칭). 그래서 기동 때 한 번 만들면 27단계의 코퍼스 재적재가
+// `/api/chat` 에만 안 미친다 — `data/diagnostics.json` 에 별칭을 더해도 `/api/search` 는 2초 뒤 잡는데
+// 채팅은 서버를 다시 띄워야 잡는다(최종 리뷰 P1-5). 그래서 **버전이 바뀔 때만** 다시 만든다.
+// 어휘표 대조라 만드는 비용은 작지만, 요청마다 만들 이유도 없다.
+let routerCache = { version: -1, router: null };
+const currentRouter = () => {
+  pipeline.reloadIfChanged(); // 2초 TTL. 처리기(computeSearch)와 같은 자리에서 같은 조건으로 부른다
+  const version = pipeline.corpusStatus().version;
+  if (routerCache.version !== version) {
+    routerCache = { version, router: createRouter({ words: loadCharacterWords(), diagnostics: pipeline.diagnostics, corpus: corpusColors(), creatures: loadCreatures() }) };
+  }
+  return routerCache.router;
+};
 const tracer = createTracer({
   apiKey: process.env.LANGSMITH_API_KEY ?? "",
   project: process.env.LANGSMITH_PROJECT || "color-picker",
   endpoint: process.env.LANGSMITH_ENDPOINT || "https://api.smith.langchain.com",
   file: join(DATA_DIR, "traces.jsonl"),
 });
+/** 대화 한 항목에 싣는 검색 결과 수. 옛 홈 화면의 `limit=3` 과 같은 값이다 [판단]. GET `/api/search` 기본(5)과는 다르다. */
+const CHAT_RESULT_LIMIT = 3;
 const chat = createChat({
-  router,
-  handlers: { search: (q) => computeSearch(q, 3), character: computeCharacter, color: computeColor },
+  router: currentRouter,
+  handlers: { search: (q) => computeSearch(q, CHAT_RESULT_LIMIT), character: computeCharacter, color: computeColor },
   trace: tracer,
   store: { findConversation, recordTurn },
   limit: LIMITS,

@@ -517,6 +517,10 @@ async function send(body) {
   await ready;
   const ticket = ++latestTicket;
   submit.disabled = true;
+  // 화면에 남은 칩은 전부 **이미 해소된** 되묻기의 것이다(칩으로든 문장으로든). 누르면 서버에 pending 이
+  // 없어 400 오류 말풍선이 뜬다 — 새 턴을 보내는 이 자리에서 잠근다(최종 리뷰 P1-2).
+  // 방금 고른 칩의 표시(ask__chip--picked)는 건드리지 않는다.
+  for (const chip of chatList.querySelectorAll(".ask__chip")) chip.disabled = true;
   if (body.text) chatList.append(userItem(body.text));
   const waitingText = el("p", "chat__waiting", "생각 중…");
   waitingText.setAttribute("aria-live", "polite");
@@ -548,6 +552,9 @@ async function send(body) {
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
+  // 보내는 중에 Enter 를 또 치면 두 번째 턴이 시작되고, 첫 답은 latestTicket 때문에 화면에서 사라지지만
+  // 서버에는 이미 기록된다 — 내역에만 있고 화면에 없는 턴이 생긴다(최종 리뷰 P2-10).
+  if (submit.disabled) return;
   const text = input.value.trim();
   if (!text) {
     input.focus();
@@ -621,6 +628,8 @@ const ready = (async () => {
 // 자동 실행은 확인이 끝난 뒤에. 이 시점에 ready 는 이미 해소돼 있어 send 가 막히지 않는다.
 ready.then((query) => {
   if (!query) return;
-  send({ text: query });
+  // fresh: 이 대화에 되묻기가 남아 있어도 이 질문은 **새 질문**이다. 안 주면 서버가 옛 원문에 이어 붙여
+  // 전혀 다른 질의의 답을 낸다(최종 리뷰 P1-3).
+  send({ text: query, fresh: true });
 });
 refreshRuntime(0, () => {});

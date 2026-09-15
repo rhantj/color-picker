@@ -10,7 +10,6 @@
 import { parseColorInput } from "./from-color.js";
 
 export const ROUTES = Object.freeze(["palette", "diagnosis", "character", "color"]);
-export const ROUTE_LABEL = Object.freeze({ palette: "추천", diagnosis: "진단", character: "캐릭터", color: "색" });
 
 /** 바로잡기 낱말. 문장 앞이나 끝에 오고 어절이 셋 이하일 때만 바로잡기다 — "빨강 어울리는 색으로 가자" 는 아니다. */
 const REDIRECT = Object.freeze({ 색으로: "color", 캐릭터로: "character", 진단으로: "diagnosis", 추천으로: "palette" });
