@@ -184,22 +184,12 @@ const shapeBridgePalette = (p) => ({
   colors: p.colors,
 });
 
-async function handleSearch(res, params) {
+/** 검색 응답 본문. `/api/search` 와 `/api/chat` 이 함께 쓴다(39단계). */
+async function computeSearch(query, limit, { allowRewrite = true } = {}) {
   pipeline.reloadIfChanged(); // 2초 TTL. 바뀌었으면 이 요청부터 새 코퍼스다(27단계)
-  // 서식 문자만 있는 q 는 빈 질의다. 안 거르면 전문 검색이 못 잡고 재작성이 모델을 헛되이 부른다.
-  const query = cleanQuery(params.get("q"));
-  if (!query) return sendJson(res, 400, { error: "q 가 비어 있다" });
-
-  const rawLimit = params.get("limit");
-  const limit = rawLimit === null ? 5 : Number(rawLimit);
-  if (!Number.isInteger(limit) || limit < 1 || limit > 10) {
-    return sendJson(res, 400, { error: "limit 는 1~10 의 정수" });
-  }
-
-  const allowRewrite = params.get("rewrite") !== "0";
   const r = await pipeline.resolve(query, limit, { allowRewrite });
 
-  sendJson(res, 200, {
+  return {
     query,
     // 이 질의가 실제로 몇 단계에서 끝났는지. 능력치가 아니라 결과다.
     stage: r.stage,
@@ -217,7 +207,22 @@ async function handleSearch(res, params) {
     usedLlm: r.usedLlm === true,
     results: r.paletteHits.map(shapePalette),
     diagnostics: r.diagnosticHits.map(shapeDiagnostic),
-  });
+  };
+}
+
+async function handleSearch(res, params) {
+  // 서식 문자만 있는 q 는 빈 질의다. 안 거르면 전문 검색이 못 잡고 재작성이 모델을 헛되이 부른다.
+  const query = cleanQuery(params.get("q"));
+  if (!query) return sendJson(res, 400, { error: "q 가 비어 있다" });
+
+  const rawLimit = params.get("limit");
+  const limit = rawLimit === null ? 5 : Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 10) {
+    return sendJson(res, 400, { error: "limit 는 1~10 의 정수" });
+  }
+
+  const allowRewrite = params.get("rewrite") !== "0";
+  sendJson(res, 200, await computeSearch(query, limit, { allowRewrite }));
 }
 
 /**
@@ -397,18 +402,14 @@ const seedsForPartners = () => [
 
 /**
  * 색 하나 → 어울리는 색(35단계). **LLM 도 검색도 안 부른다** — 헥스에는 인상이 없다.
- * 못 읽는 입력은 400 이고, 무엇을 받는지 문구로 말한다.
+ * 색 응답 본문. 못 읽는 색이면 null — 호출부가 400 을 낼지(GET) 다른 경로로 갈지(chat) 정한다.
  */
-async function handleColor(res, params) {
+async function computeColor(query) {
   pipeline.reloadIfChanged();
-  const query = cleanQuery(params.get("q"));
-  if (!query) return sendJson(res, 400, { error: "q 가 비어 있다" });
-  if (query.length > LIMITS.queryChars) return sendJson(res, 400, { error: `q 는 ${LIMITS.queryChars}자까지` });
-
   const started = Date.now();
   const corpus = corpusColors();
   const input = parseColorInput(query, corpus);
-  if (!input) return sendJson(res, 400, { error: "색을 못 읽었다 — #RRGGBB 헥스나 색 이름(테라코타 · 빨강)을 넣는다" });
+  if (!input) return null;
 
   const partners = partnersFor(input.hex, seedsForPartners(), PARTNER_COUNT);
   const structures = structuresFor(input.hex, fullCatalog);
@@ -420,7 +421,7 @@ async function handleColor(res, params) {
     input.from === "hex"
       ? { hex: partners[0]?.near.hex ?? input.hex, name: partners[0]?.near.name ?? null, distance: partners[0]?.distance ?? 0 }
       : { hex: input.hex, name: input.name ?? input.label, distance: 0 };
-  sendJson(res, 200, {
+  return {
     query,
     input: { hex: input.hex, from: input.from, label: input.label, wordId: input.wordId ?? null, nearest },
     partners,
@@ -428,7 +429,16 @@ async function handleColor(res, params) {
     // 이름표만 싣고 model·error 키는 안 싣는다 — 이 응답에는 Ollama 가 닿지 않는다(S35-G4 가 그 흔적을 잰다).
     finishes: { assignments: finishes.assignments, names: FINISH_NAMES(), from: finishes.from },
     elapsedMs: Date.now() - started,
-  });
+  };
+}
+
+async function handleColor(res, params) {
+  const query = cleanQuery(params.get("q"));
+  if (!query) return sendJson(res, 400, { error: "q 가 비어 있다" });
+  if (query.length > LIMITS.queryChars) return sendJson(res, 400, { error: `q 는 ${LIMITS.queryChars}자까지` });
+  const body = await computeColor(query);
+  if (!body) return sendJson(res, 400, { error: "색을 못 읽었다 — #RRGGBB 헥스나 색 이름(테라코타 · 빨강)을 넣는다" });
+  sendJson(res, 200, body);
 }
 
 /** 검색이 배색 쌍을 못 고르면 여기로 물러선다. 코퍼스 1번이고, 없으면 첫 항목. */
@@ -483,12 +493,8 @@ function resolveCharacter(input) {
  *
  * 파서와 재질 배정은 서로의 결과를 안 쓰므로 나란히 부른다(`/api/expand` 와 같은 이유). 검색은 인상이 있어야 하므로 그 뒤다.
  */
-async function handleCharacter(res, params) {
+async function computeCharacter(query) {
   pipeline.reloadIfChanged();
-  const query = cleanQuery(params.get("q"));
-  if (!query) return sendJson(res, 400, { error: "q 가 비어 있다" });
-  if (query.length > LIMITS.queryChars) return sendJson(res, 400, { error: `q 는 ${LIMITS.queryChars}자까지` });
-
   const started = Date.now();
   const [parsed, finishes] = await Promise.all([
     describe(query),
@@ -510,7 +516,7 @@ async function handleCharacter(res, params) {
       ? { ...finishes.assignments, 피부: parsed.creature.finish }
       : finishes.assignments;
 
-  sendJson(res, 200, {
+  return {
     query,
     parse: {
       parts: parsed.parts,
@@ -536,7 +542,14 @@ async function handleCharacter(res, params) {
       error: finishes.error ? (LOOPBACK_ONLY ? finishes.error : "재질 배정을 쓸 수 없습니다") : null,
     },
     elapsedMs: Date.now() - started,
-  });
+  };
+}
+
+async function handleCharacter(res, params) {
+  const query = cleanQuery(params.get("q"));
+  if (!query) return sendJson(res, 400, { error: "q 가 비어 있다" });
+  if (query.length > LIMITS.queryChars) return sendJson(res, 400, { error: `q 는 ${LIMITS.queryChars}자까지` });
+  sendJson(res, 200, await computeCharacter(query));
 }
 
 async function handleWrite(req, res, pathname) {
