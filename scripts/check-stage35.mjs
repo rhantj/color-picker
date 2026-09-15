@@ -303,7 +303,7 @@ const GATES = {
     if (!/data-tab-select="color"/.test(html)) bad.push("색 탭 버튼에 data-tab-select 가 없다");
     if (!/id="tab-color"[^>]*aria-controls="results-color"/.test(html) && !/aria-controls="results-color"[^>]*id="tab-color"/.test(html)) bad.push("색 탭이 결과 영역을 가리키지 않는다");
     if (!/id="results-color"[^>]*role="tabpanel"[^>]*aria-labelledby="tab-color"/.test(html)) bad.push("색 탭 결과 영역이 tabpanel 이 아니다");
-    if (!/data-tab="color"/.test(html)) bad.push("색 예시 칩이 없다");
+    // 38단계: 예시 칩을 뺐다(대표 지시). 칩 검사는 없다.
     if (/LLM/.test(html)) bad.push("index.html 에 'LLM'");
 
     const app = stripJs(read("public/app.js"));

@@ -533,7 +533,7 @@ const GATES = {
     if (tabs.join("|") !== TAB_LABELS.join("|")) bad.push(`탭이 ${tabs.join("|")} (기대 ${TAB_LABELS.join("|")})`);
     if (!/data-tab-select="palette"/.test(html) || !/data-tab-select="character"/.test(html)) bad.push("탭 버튼에 data-tab-select 가 없다");
     if (!/id="results-character"/.test(html) || !/id="results-palette"/.test(html)) bad.push("탭별 결과 영역이 없다");
-    if (!/data-tab="character"/.test(html)) bad.push("캐릭터 예시 칩이 없다");
+    // 38단계: 예시 칩을 뺐다(대표 지시). 칩 검사는 없다.
     if (/LLM/.test(html)) bad.push("index.html 에 'LLM'");
 
     const app = stripJs(read("public/app.js"));

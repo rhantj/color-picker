@@ -35,7 +35,7 @@ const TAB_UI = {
 };
 let tab = "palette";
 
-/** 탭을 바꾼다. 입력은 그대로 두고 안내문·버튼·보이는 결과 영역·예시 칩만 바뀐다 — 결과는 탭마다 따로 남는다. */
+/** 탭을 바꾼다. 안내문·버튼·보이는 결과 영역이 바뀌고 검색창은 비운다 — 결과는 탭마다 따로 남는다. */
 function applyTab(next) {
   // 탭이 실제로 바뀔 때만 검색창을 비운다(36단계 · 대표 지시). 같은 탭을 다시 눌러 쓰던 글이 사라지면 안 된다.
   if (next !== tab) input.value = "";
@@ -52,7 +52,6 @@ function applyTab(next) {
   colorSection.hidden = next !== "color";
   input.placeholder = TAB_UI[next].placeholder;
   submit.textContent = TAB_UI[next].submit;
-  for (const chip of document.querySelectorAll("[data-example]")) chip.hidden = chip.dataset.tab !== next;
 }
 for (const btn of tabButtons) {
   btn.addEventListener("click", () => applyTab(btn.dataset.tabSelect));
@@ -645,7 +644,7 @@ async function runColor(query) {
 
 /* ── 동작 ────────────────────────────────────────────────── */
 
-// 예시 칩은 제출 버튼 잠금을 거치지 않으므로 빠르게 연달아 누르면 요청이 겹친다.
+// 내역의 ?q= 자동 실행과 제출이 겹치면 요청이 겹친다.
 // 번호표를 끊어 최신 요청의 응답만 그린다.
 let latestTicket = 0;
 
@@ -695,17 +694,14 @@ const go = (query) => (RUN_BY_TAB[tab] ?? run)(query);
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  const query = input.value.trim() || input.placeholder;
-  input.value = query;
+  // 비어 있으면 아무것도 안 한다 — 전에는 자리표시 문장을 대신 검색했다(38단계 · 대표 지시로 뺐다).
+  const query = input.value.trim();
+  if (!query) {
+    input.focus();
+    return;
+  }
   go(query);
 });
-
-for (const chip of document.querySelectorAll("[data-example]")) {
-  chip.addEventListener("click", () => {
-    input.value = chip.dataset.example;
-    go(input.value);
-  });
-}
 
 /* ── 대화 이어하기 ───────────────────────────────────────────
    내역에서 넘어온 ?conv= 를 받아 그 대화에 이어 붙인다. ?q= 가 있으면 바로 한 번 돌린다.

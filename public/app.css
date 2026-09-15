@@ -338,33 +338,6 @@ a:hover {
   font-weight: 600;
 }
 
-.examples {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 14px;
-  flex-wrap: wrap;
-}
-.examples__label {
-  font-size: 12px;
-  color: var(--ink-muted);
-  margin-right: 4px;
-}
-.chip {
-  min-height: 32px;
-  padding: 6px 13px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink-muted);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-.chip:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
 
 /* ── 검색 상태 ───────────────────────────────────────────── */
 
@@ -561,10 +534,6 @@ a:hover {
 /* 터치 기기에서는 히트 영역을 44px 로 올린다. 마우스에서는 초안대로 32px 를 유지한다 —
    화면 폭이 아니라 포인터 종류로 가르는 게 맞다(태블릿 가로, 터치 노트북). */
 @media (pointer: coarse) {
-  .chip {
-    min-height: 44px;
-    padding-inline: 16px;
-  }
   .nav__item {
     display: inline-flex;
     align-items: center;
