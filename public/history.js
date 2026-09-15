@@ -4,7 +4,7 @@ import { api, el, formatWhen, refreshRuntime } from "./ui.js";
 
 const list = document.getElementById("list");
 
-const ROUTE_LABEL = { palette: "팔레트", diagnosis: "진단", character: "캐릭터", color: "코드·색상", none: "못 잡음" };
+const ROUTE_LABEL = { palette: "추천", diagnosis: "진단", character: "캐릭터", color: "색", ask: "되물음", none: "못 잡음" };
 
 function turnRow(turn, conversationId) {
   const row = el("li", "turn");
@@ -21,8 +21,8 @@ function turnRow(turn, conversationId) {
 
   // 지난 질문을 그대로 다시 돌려 볼 수 있게 한다. 코퍼스가 바뀌면 답도 바뀐다.
   const again = el("a", "turn__again", "다시 묻기");
-  again.href = `/?conv=${encodeURIComponent(conversationId)}&q=${encodeURIComponent(turn.query)}${turn.route === "character" ? "&tab=character" : turn.route === "color" ? "&tab=color" : ""}`;
-  meta.append(again);
+  again.href = `/?conv=${encodeURIComponent(conversationId)}&q=${encodeURIComponent(turn.query)}`;
+  if (turn.kind !== "ask") meta.append(again);
 
   row.append(stage, query, meta);
   return row;
