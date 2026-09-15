@@ -28,7 +28,7 @@ import {
   updateSavedRatio,
 } from "./src/store.js";
 import { createRouter } from "./src/route.js";
-import { createChat } from "./src/chat.js";
+import { ChatInputError, createChat } from "./src/chat.js";
 import { createTracer } from "./src/trace.js";
 import { describe } from "./src/describe.js";
 import { CHARACTER_ROLES, composeCharacter } from "./src/character.js";
@@ -587,7 +587,15 @@ async function handleWrite(req, res, pathname) {
 
   try {
     if (pathname === "/api/chat") {
-      return sendJson(res, 200, await chat.step(body));
+      // 입력 잘못(ChatInputError)만 사유를 그대로 알린다. 그 밖의 실패(검색·LLM·파일 쓰기)는
+      // 이 아래 catch(err) 로 흘려보내면 err.message 에 내부 경로가 실릴 수 있어(리뷰 1차 · 항목 1)
+      // failSafely 로 따로 받아 사유는 로그에만 남기고 응답은 정형화한다.
+      try {
+        return sendJson(res, 200, await chat.step(body));
+      } catch (err) {
+        if (err instanceof ChatInputError) return sendJson(res, 400, { error: err.message });
+        return failSafely(res, err);
+      }
     }
     if (pathname === "/api/conversations/turn") {
       return sendJson(res, 200, await recordTurn(body));

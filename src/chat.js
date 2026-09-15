@@ -9,7 +9,18 @@
 // 색·헥스는 여기서 안 만든다. 처리기(handlers)가 내는 것을 그대로 payload 로 싣는다.
 
 import { cleanQuery } from "./query.js";
-import { ROUTE_LABEL, ROUTES } from "./route.js";
+import { ROUTES } from "./route.js";
+
+/**
+ * 사용자 입력 자체가 잘못된 경우. server.js 가 이것만 400 으로 내려보내고(원문 메시지 그대로),
+ * 그 밖의 예외(검색·LLM·파일 쓰기 실패 등 내부 사정)는 failSafely 로 넘겨 응답에 내부 경로를 안 싣는다(리뷰 1차).
+ */
+export class ChatInputError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ChatInputError";
+  }
+}
 
 const CHOICE_LABEL = Object.freeze({ palette: "분위기로 색 찾기", diagnosis: "고칠 원인 보기", character: "캐릭터 색 짜기", color: "색 코드로 찾기" });
 
@@ -58,8 +69,8 @@ export function createChat({ router, handlers, trace, store, limit }) {
   async function step(input) {
     const text = cleanQuery(input?.text);
     const choice = ROUTES.includes(input?.choice) ? input.choice : null;
-    if (!text && !choice) throw new Error("text 나 choice 가 있어야 한다");
-    if (text.length > limit.queryChars) throw new Error(`text 는 ${limit.queryChars}자까지`);
+    if (!text && !choice) throw new ChatInputError("text 나 choice 가 있어야 한다");
+    if (text.length > limit.queryChars) throw new ChatInputError(`text 는 ${limit.queryChars}자까지`);
 
     let conversation = store.findConversation(input?.conversationId);
     // 사용자 턴 10개가 찼으면 새 대화. 옛 대화는 손대지 않는다.
@@ -67,73 +78,93 @@ export function createChat({ router, handlers, trace, store, limit }) {
     const conversationId = conversation?.id ?? null;
     const pending = conversation?.pending ?? null;
 
+    // 칩(choice)은 되물은 질문에 대한 답이다. 되물은 것이 없는데 칩만 오면(10턴 롤오버로 pending 이
+    // 사라진 경우 포함) router.route("") 를 부르는 대신 여기서 바로 400 이다(리뷰 1차 · 항목 3).
+    if (choice && !pending) {
+      throw new ChatInputError("되물은 질문이 없다 — 문장으로 다시 물어 주세요");
+    }
+
     const span = trace.begin("chat.turn", { text, choice, conversationId, pending: pending ? { original: pending.original, reason: pending.reason } : null });
-    const record = async (turn, fields) => {
-      const saved = await store.recordTurn({ conversationId, query: text || `[${ROUTE_LABEL[choice]}]`, ...fields });
-      span.end({ kind: turn.kind, route: turn.route ?? null, reason: turn.reason ?? null, conversationId: saved.conversationId });
-      return { conversationId: saved.conversationId, turn };
-    };
-    const answerAndRecord = async (route, query) => {
-      const { route: finalRoute, payload } = await answer(route, query, span);
-      const turn = { kind: "answer", route: finalRoute, original: query, payload, trace: { routes: [finalRoute] } };
-      return record(turn, { kind: "answer", route: finalRoute, pending: null, ...summarize(finalRoute, payload) });
-    };
+    try {
+      // record 의 세 번째 인자가 실제로 store 에 남길 query 다 — 늘 text 인 것은 아니다.
+      // 답한 턴은 실제로 답한 원문(pending.original·이어붙인 문장·직전 턴의 query)을 남긴다.
+      // 안 남기면 되돌리기 경로가 그 자리에서 "[캐릭터]" 같은 라벨 문자열을 다시 검색하게 된다(리뷰 1차 · 항목 2).
+      const record = async (turn, fields, recordedQuery) => {
+        const saved = await store.recordTurn({ conversationId, query: recordedQuery ?? text, ...fields });
+        span.end({ kind: turn.kind, route: turn.route ?? null, reason: turn.reason ?? null, conversationId: saved.conversationId });
+        return { conversationId: saved.conversationId, turn };
+      };
+      const answerAndRecord = async (route, query, routeTrace) => {
+        const { route: finalRoute, payload } = await answer(route, query, span);
+        const turn = { kind: "answer", route: finalRoute, original: query, payload, trace: routeTrace };
+        return record(turn, { kind: "answer", route: finalRoute, pending: null, ...summarize(finalRoute, payload) }, query);
+      };
 
-    // ── pending 있음 ──
-    if (pending) {
-      if (choice) {
-        span.child("route", { text, choice, pending: true }).end({ routes: [choice], resolvedBy: "choice" });
-        return answerAndRecord(choice, pending.original);
+      // ── pending 있음 ──
+      if (pending) {
+        if (choice) {
+          const routeTrace = { routes: [choice], signals: null, redirect: false };
+          span.child("route", { text, choice, pending: true }).end({ ...routeTrace, resolvedBy: "choice" });
+          return answerAndRecord(choice, pending.original, routeTrace);
+        }
+        const combined = `${pending.original} ${text}`;
+        const r = router.route(combined);
+        const routes = r.kind === "redirect" ? [r.route] : r.routes;
+        const routeTrace = { routes, signals: r.kind === "route" ? (r.signals ?? null) : null, redirect: r.kind === "redirect" };
+        span.child("route", { text: combined, pending: true }).end({ ...routeTrace, resolvedBy: "text" });
+        // 두 번째는 안 묻는다. 겹침이면 첫 후보, 불명이면 추천.
+        const route = r.kind === "route" && r.unclear ? "palette" : routes[0];
+        return answerAndRecord(route, combined, routeTrace);
       }
-      const combined = `${pending.original} ${text}`;
-      const r = router.route(combined);
-      const routes = r.kind === "redirect" ? [r.route] : r.routes;
-      span.child("route", { text: combined, pending: true }).end({ routes, resolvedBy: "text" });
-      // 두 번째는 안 묻는다. 겹침이면 첫 후보, 불명이면 추천.
-      const route = r.kind === "route" && r.unclear ? "palette" : routes[0];
-      return answerAndRecord(route, combined);
-    }
 
-    // ── pending 없음 ──
-    const r = router.route(text);
-    const routeSpan = span.child("route", { text });
+      // ── pending 없음 ──
+      const r = router.route(text);
+      const routeSpan = span.child("route", { text });
 
-    if (r.kind === "redirect") {
-      const last = [...(conversation?.turns ?? [])].reverse().find((t) => t.kind !== "ask");
-      if (last) {
-        routeSpan.end({ routes: [r.route], redirect: true, original: last.query });
-        return answerAndRecord(r.route, last.query);
+      if (r.kind === "redirect") {
+        const last = [...(conversation?.turns ?? [])].reverse().find((t) => t.kind !== "ask");
+        if (last) {
+          const routeTrace = { routes: [r.route], signals: null, redirect: true };
+          routeSpan.end({ ...routeTrace, original: last.query });
+          return answerAndRecord(r.route, last.query, routeTrace);
+        }
+        // 되돌릴 답이 없으면 보통 문장이다
+        const routeTrace = { routes: ["palette"], signals: null, redirect: false };
+        routeSpan.end(routeTrace);
+        return answerAndRecord("palette", text, routeTrace);
       }
-      // 되돌릴 답이 없으면 보통 문장이다
-      routeSpan.end({ routes: ["palette"], redirect: false });
-      return answerAndRecord("palette", text);
-    }
 
-    routeSpan.end({ routes: r.routes, unclear: r.unclear, signals: r.signals });
+      const routeTrace = { routes: r.routes, signals: r.signals ?? null, redirect: false };
+      routeSpan.end({ ...routeTrace, unclear: r.unclear });
 
-    if (r.unclear === "character") {
-      const turn = { ...askTurn("unclear", [], QUESTION.unclearCharacter), original: text };
-      span.child("ask", { reason: "unclear" }).end({ choices: [] });
-      return record(turn, { kind: "ask", route: "ask", pending: { original: text, choices: [], reason: "unclear" } });
-    }
-    if (r.routes.length > 1) {
-      const turn = { ...askTurn("ambiguous", r.routes, QUESTION.ambiguous), original: text };
-      span.child("ask", { reason: "ambiguous" }).end({ choices: r.routes });
-      return record(turn, { kind: "ask", route: "ask", pending: { original: text, choices: r.routes, reason: "ambiguous" } });
-    }
-
-    const route = r.routes[0];
-    if (route === "palette" || route === "diagnosis") {
-      const { route: finalRoute, payload } = await answer(route, text, span);
-      if (searchUnclear(payload)) {
-        const turn = { ...askTurn("unclear", ["palette", "diagnosis", "character", "color"], QUESTION.unclearPalette), original: text };
-        span.child("ask", { reason: "unclear" }).end({ choices: turn.choices.map((c) => c.id) });
-        return record(turn, { kind: "ask", route: "ask", pending: { original: text, choices: turn.choices.map((c) => c.id), reason: "unclear" } });
+      if (r.unclear === "character") {
+        const turn = { ...askTurn("unclear", [], QUESTION.unclearCharacter), original: text, trace: routeTrace };
+        span.child("ask", { reason: "unclear" }).end({ choices: [] });
+        return record(turn, { kind: "ask", route: "ask", pending: { original: text, choices: [], reason: "unclear" } }, text);
       }
-      const turn = { kind: "answer", route: finalRoute, original: text, payload, trace: { routes: [finalRoute] } };
-      return record(turn, { kind: "answer", route: finalRoute, pending: null, ...summarize(finalRoute, payload) });
+      if (r.routes.length > 1) {
+        const turn = { ...askTurn("ambiguous", r.routes, QUESTION.ambiguous), original: text, trace: routeTrace };
+        span.child("ask", { reason: "ambiguous" }).end({ choices: r.routes });
+        return record(turn, { kind: "ask", route: "ask", pending: { original: text, choices: r.routes, reason: "ambiguous" } }, text);
+      }
+
+      const route = r.routes[0];
+      if (route === "palette" || route === "diagnosis") {
+        const { route: finalRoute, payload } = await answer(route, text, span);
+        if (searchUnclear(payload)) {
+          const turn = { ...askTurn("unclear", ["palette", "diagnosis", "character", "color"], QUESTION.unclearPalette), original: text, trace: routeTrace };
+          span.child("ask", { reason: "unclear" }).end({ choices: turn.choices.map((c) => c.id) });
+          return record(turn, { kind: "ask", route: "ask", pending: { original: text, choices: turn.choices.map((c) => c.id), reason: "unclear" } }, text);
+        }
+        const turn = { kind: "answer", route: finalRoute, original: text, payload, trace: routeTrace };
+        return record(turn, { kind: "answer", route: finalRoute, pending: null, ...summarize(finalRoute, payload) }, text);
+      }
+      return answerAndRecord(route, text, routeTrace);
+    } catch (err) {
+      // 처리기·저장이 실패해도 트레이스는 남긴다 — 안 남기면 이 턴은 traces.jsonl 에서 통째로 사라진다(리뷰 1차 · 항목 4).
+      span.end({ error: err.message, kind: "error" });
+      throw err;
     }
-    return answerAndRecord(route, text);
   }
 
   return { step };
