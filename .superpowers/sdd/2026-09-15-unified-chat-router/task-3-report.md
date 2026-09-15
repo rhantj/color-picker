@@ -195,3 +195,105 @@ S39_G2_OK
 ### 커밋 (Fix round 1)
 
 6c714e2 위에 새 커밋 1개.
+
+## Fix round 2 — 1글자 부위 낱말을 되살리되 어절 경계로 오탐을 막는다
+
+라운드 1에서 "1글자 표면형은 아예 뺀다" 는 방식으로 "검정 안경" 오탐을 막았는데, 그 filter가
+합법적인 1글자 부위 낱말 "눈"(역할: 눈)과 "옷"(역할: 상의)까지 통째로 없애 버렸다. 그 결과:
+
+- "옷" 하나만 입력해도 부위 신호가 안 잡혀 `palette` 로 갔다(원래는 "부위만 말했다"는 뜻으로
+  `unclear`(캐릭터인지 되물어야 함)여야 한다).
+- "눈 머리" 도 "눈" 이 안 잡혀 부위가 "머리" 하나만 남고, `weak` 판정(부위 신호 하나뿐)이 되어
+  `palette` 로 샜다(원래는 `unclear`).
+- "눈 상의" 도 같은 이유로 부위 "역할"이 하나("상의")만 잡혀, 실제로는 "눈"·"상의" 두 역할이
+  있는데도 강한 신호(strong)로 안 올라갔다.
+
+**고친 것**: 1글자 표면형을 빼지 않고 대신 "어절 경계 규칙" 으로 검사한다 — 새 헬퍼
+`matchesForm(text, tokens, form)`:
+
+```js
+const SINGLE_CHAR_PARTICLES = new Set(["이", "은", "을", "도", "에", "과", "와", "만", "색"]);
+function matchesForm(text, tokens, form) {
+  if (form.length >= 2) return text.includes(form);
+  return tokens.some((t) => t === form || (t.startsWith(form) && SINGLE_CHAR_PARTICLES.has(t[form.length])));
+}
+```
+
+- 2글자 이상 표면형: 예전처럼 그냥 문장에 그 글자들이 있으면 건다(부분 문자열 포함).
+- 1글자 표면형: **어절(공백으로 나눈 낱말) 전체가 그 글자와 똑같거나**, 어절이 그 글자로 시작하고
+  **바로 다음 글자가 조사**(이·은·을·도·에·과·와·만·색)일 때만 건다. "검정" 은 어절 전체가 "검"
+  이 아니고, "검" 다음 글자가 "정"인데 "정" 은 조사 목록에 없으므로 안 걸린다. "눈에"·"눈이" 는
+  "눈" 다음 글자가 조사라 걸린다. "옷" 하나만 있으면 어절 전체 일치로 걸린다.
+
+`surfaceHits` 를 이 헬퍼를 쓰도록 바꾸고(부위·색 낱말·합성어·생물 낱말 전부 같은 헬퍼를 통일해서
+쓴다 — 2글자 이상 표면형은 어차피 예전과 동일하게 동작해 회귀가 없다), `createRouter` 안에서
+1글자 표면형을 빼던 `.filter((f) => f.length >= 2)` 를 제거해 `partForms`·`formToRole` 이 다시
+"눈"·"옷" 을 포함하게 했다.
+
+### 재검증 — 여섯 입력 직접 호출(`node -e`)
+
+```
+검정 안경               => routes:["palette"]              (colorWords:["검정"], parts:[])
+눈에 띄는 색             => routes:["palette"]              (parts:["눈"], partRoles:["눈"], weak)
+눈이 요란해              => routes:["character","diagnosis"] (parts:["눈"], diagnosis:["dx-noisy"])
+옷                      => routes:["character"] unclear:"character" (parts:["옷"], partRoles:["상의"])
+눈 머리                  => routes:["character"] unclear:"character" (parts:["머리","눈"], partRoles:["머리","눈"])
+눈 상의                  => routes:["character"] unclear:"character" (parts:["상의","눈"], partRoles:["상의","눈"])
+```
+
+```
+$ node scripts/check-stage39.mjs S39-G1 | tail -1
+S39_G1_OK
+
+$ node scripts/check-stage39.mjs S39-G2 | tail -1
+S39_G2_OK
+```
+
+`상의는 갈색 하의는 검정`(character), `빨간 머리 도적`(character), `검정 안경`(palette),
+`포인트 강조 화려하게 해줘`(palette) 등 이전 라운드에서 고정한 것들도 다시 확인했고 전부 그대로다
+— 회귀 없음.
+
+### ROUTE_TABLE 에 추가한 행과 지시와 달라진 점(중요)
+
+지시받은 대로 아래 형태로 3행을 추가하려 했다:
+
+```js
+{ text: "옷", routes: ["character"], unclear: "character" },
+{ text: "눈 상의", routes: ["character"] },               // 지시 원문 — unclear 없음
+{ text: "눈이 요란해", routes: ["character", "diagnosis"] },
+```
+
+**"옷"과 "눈이 요란해" 행은 지시 그대로 추가했고, 실제 동작과 맞았다.** 하지만 **"눈 상의" 행은
+지시 그대로 두면 게이트가 실패한다** — 실측하면 "눈 상의" 는 `unclear: "character"` 로 나온다
+(위 표 참고). 이유:
+
+- `partsOnly` 판정 로직은(라운드 1·2 어디서도 바뀌지 않고 그대로 유지하라고 지시받았다)
+  "부위 낱말이 있고, 색 낱말·합성어가 없고, 부위 낱말을 다 지웠을 때 남는 게 없으면" 무조건
+  `unclear` 로 먼저 반환한다 — **부위가 몇 개 역할(role)인지는 이 판정에 안 들어간다.**
+- "눈 머리" 와 "눈 상의" 는 구조가 완전히 같다 — 부위 낱말 두 개(각각 다른 역할), 색 낱말 없음,
+  낱말을 다 지우면 공백만 남는다. 그래서 **`matchesForm` 을 정확히 지시대로 구현하면 두 입력이
+  같은 결과(`unclear:"character"`)를 낸다.**
+- 라운드 0(브리프 원본 코드, 1글자 제한 없음)으로 직접 돌려봐도 "눈 머리"·"눈 상의" 둘 다
+  `unclear:"character"` 였다 — 즉 "역할 두 개면 안 불명" 이라는 동작은 애초에 이 코드베이스
+  어느 버전에도 존재한 적이 없다(설계 문서 40번째 줄 "다른 부위 낱말 중 하나가 함께 있어야
+  한다" 는 문장이 `strong` 계산에는 반영돼 있지만, `partsOnly` 조기 반환이 그보다 먼저 걸려
+  실제로는 적용되지 않는다 — 이건 브리프의 기존 설계 자체의 특성이지 이번 라운드에서 새로
+  생긴 문제가 아니다).
+
+이 둘을 다르게 취급하려면 "역할이 상의/하의/강조(옷) 계열이면 강한 신호, 눈/머리/피부(신체
+특징) 계열이면 여전히 불명" 같은 **범주 구분 규칙을 새로 만들어야 하는데, 그런 규칙은 설계
+문서·이번 지시 어디에도 없다.** 근거 없이 추측으로 넣기보다, **실제 동작대로 행을 고쳐
+(`unclear: "character"` 추가) 게이트를 통과시키고 이 사실을 그대로 보고한다.** 판단이 필요하면
+대표 확인을 받는다.
+
+### 변경 파일 (Fix round 2)
+
+- `src/route.js` — `matchesForm` 헬퍼 추가, `surfaceHits` 시그니처에 `tokens` 추가, 1글자
+  표면형 제외 필터 제거(라운드 1 되돌림)
+- `scripts/check-stage39.mjs` — `ROUTE_TABLE` 에 `옷`·`눈 상의`·`눈이 요란해` 3행 추가
+  (`눈 상의` 는 지시와 다르게 `unclear: "character"` 를 넣었다 — 위 절 참고)
+- `.superpowers/sdd/2026-09-15-unified-chat-router/task-3-report.md` — 이 절
+
+### 커밋 (Fix round 2)
+
+01e709c 위에 새 커밋 1개.

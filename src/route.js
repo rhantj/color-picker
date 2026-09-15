@@ -33,17 +33,25 @@ function diagnosisHits(text, tokens, diagnostics) {
   return hits;
 }
 
+// 1글자 표면형("눈"·"옷" 같은)의 어절 경계 규칙. "검정"("black") 안의 "검" 처럼 다른 낱말 속에 우연히
+// 든 글자는 걸지 않되, "눈"·"옷" 처럼 실제로 그 낱말 하나만 말했거나 조사가 바로 붙은 경우는 건다.
+const SINGLE_CHAR_PARTICLES = new Set(["이", "은", "을", "도", "에", "과", "와", "만", "색"]);
+
+/** 표면형 하나가 문장에 걸리는가. 2글자 이상은 그냥 부분 문자열 포함, 1글자는 어절 경계 규칙을 쓴다. */
+function matchesForm(text, tokens, form) {
+  if (form.length >= 2) return text.includes(form);
+  return tokens.some((t) => t === form || (t.startsWith(form) && SINGLE_CHAR_PARTICLES.has(t[form.length])));
+}
+
 /** 표면형 목록 중 문장에 든 것. 긴 형태부터 본다 — "머리카락" 이 "머리" 에 먼저 먹히지 않게. */
-function surfaceHits(text, forms) {
-  return [...forms].sort((a, b) => b.length - a.length).filter((f) => text.includes(f));
+function surfaceHits(text, tokens, forms) {
+  return [...forms].sort((a, b) => b.length - a.length).filter((f) => matchesForm(text, tokens, f));
 }
 
 export function createRouter({ words: table, diagnostics, corpus, creatures = [] }) {
-  // 부위 표면형 중 1글자짜리는 뺀다 — data/character-words.json 자체가 "검"(강조) 같은 1글자 형태가
-  // "검정"("black") 안에서 오탐을 낸다고 적어뒀다.
   const partsTable = table.parts ?? {};
-  const partForms = Object.values(partsTable).flat().filter((f) => f.length >= 2);
-  const formToRole = new Map(Object.entries(partsTable).flatMap(([role, forms]) => forms.filter((f) => f.length >= 2).map((f) => [f, role])));
+  const partForms = Object.values(partsTable).flat();
+  const formToRole = new Map(Object.entries(partsTable).flatMap(([role, forms]) => forms.map((f) => [f, role])));
   const colorForms = Object.values(table.colorWords ?? {}).flat();
   const compoundForms = Object.keys(table.compounds ?? {});
   const creatureForms = creatures.flatMap((c) => c.words ?? []);
@@ -64,10 +72,10 @@ export function createRouter({ words: table, diagnostics, corpus, creatures = []
     if (color) return { kind: "route", routes: ["color"], unclear: false, signals: { color: color.hex, parts: [], colorWords: [], compounds: [], creatures: [], diagnosis: [], partsOnly: false, partRoles: [] } };
 
     // 3. 캐릭터 신호
-    const parts = surfaceHits(text, partForms);
-    const colorWords = surfaceHits(text, colorForms);
-    const compounds = surfaceHits(text, compoundForms);
-    const creatureHits = surfaceHits(text, creatureForms);
+    const parts = surfaceHits(text, tokens, partForms);
+    const colorWords = surfaceHits(text, tokens, colorForms);
+    const compounds = surfaceHits(text, tokens, compoundForms);
+    const creatureHits = surfaceHits(text, tokens, creatureForms);
     // 부위 낱말을 걷어내면 아무것도 안 남는가 — "머리" 처럼 부위만 말한 것
     const stripped = parts.reduce((acc, f) => acc.replaceAll(f, ""), text).replace(/\s+/g, "");
     const partsOnly = parts.length > 0 && colorWords.length === 0 && compounds.length === 0 && stripped.length === 0;

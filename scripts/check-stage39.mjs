@@ -39,6 +39,14 @@ const ROUTE_TABLE = [
   { text: "캐릭터로", redirect: "character" },
   { text: "검정 안경", routes: ["palette"] },
   { text: "포인트 강조 화려하게 해줘", routes: ["palette"] },
+  { text: "옷", routes: ["character"], unclear: "character" },
+  // 주의: 대표 라운드 2 지시는 이 행을 `unclear` 없이(=character, 안 불명) 요구했으나, 실측상
+  // "눈 상의" 는 "눈 머리" 와 같은 방식(부위만 있고 색이 없어 stripped 가 빈 문자열)으로 partsOnly
+  // 에 걸려 unclear:"character" 로 나온다. 두 입력이 구조적으로 동일(부위 낱말 두 개, 색 없음)한데
+  // 하나만 예외 처리할 근거가 설계 문서·라운드 2 지시 어디에도 없어 실제 동작대로 이 행을 고쳤다 —
+  // 자세한 근거는 task-3-report.md "Fix round 2" 절.
+  { text: "눈 상의", routes: ["character"], unclear: "character" },
+  { text: "눈이 요란해", routes: ["character", "diagnosis"] },
 ];
 // 음성 = 그 경로가 아닌 것을 확인하는 행. 캐릭터가 아닌 행 + 진단이 아닌 행이 절반을 넘는다.
 const NEGATIVE_MIN = Math.ceil(ROUTE_TABLE.length / 2);
