@@ -2,10 +2,23 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "color-picker",
+      "name": "tonefirst",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["--env-file-if-exists=.env", "server.js"],
+      "runtimeArgs": [
+        "--env-file-if-exists=.env",
+        "server.js"
+      ],
       "port": 4173
+    },
+    {
+      "name": "tonefirst-no-ollama",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--env-file-if-exists=.env",
+        "-e",
+        "process.env.PORT='4399';process.env.OLLAMA_AUTOSTART='0';process.env.OLLAMA_HOST='127.0.0.1:1';import('./server.js')"
+      ],
+      "port": 4399
     }
   ]
 }
