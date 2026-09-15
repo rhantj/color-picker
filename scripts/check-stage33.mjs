@@ -73,7 +73,8 @@ const GATES = {
     }
     const ui = stripJs(read("public/ui.js"));
     if (!ui.includes(NEW_PHRASE)) bad.push(`ui.js 에 "${NEW_PHRASE}" 이 없다`);
-    if (!stripHtml(read("public/index.html")).includes("의심할 원인")) bad.push("index.html 소개 문장에 '원인' 이 없다");
+    // 37단계: 홈 소개 문장을 뺐다(대표 지시). "원인" 이라는 말은 진단 결과의 안내줄(app.js)이 든다.
+    if (!stripJs(read("public/app.js")).includes("원인을 의심할지")) bad.push("app.js 진단 안내줄에 '원인을 의심할지' 가 없다");
 
     const { diagnostics } = JSON.parse(read("data/diagnostics.json"));
     if (!Array.isArray(diagnostics) || diagnostics.length < 18) bad.push("진단표가 비었다");

@@ -175,14 +175,6 @@ a:hover {
   text-wrap: pretty;
 }
 
-.hero__lead {
-  font-size: 16px;
-  line-height: 1.75;
-  color: var(--ink-muted);
-  margin: 16px 0 0;
-  max-width: 620px;
-  font-weight: 300;
-}
 
 .searchbar {
   display: flex;
