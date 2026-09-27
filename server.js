@@ -38,7 +38,7 @@ import { expandAll, expandSeed, loadStructures } from "./src/expand.js";
 import { PICK_COUNT, selectStructures } from "./src/structure.js";
 import { selectFinishes } from "./src/finish.js";
 import { cleanQuery } from "./src/query.js";
-import { prepare as prepareEmbeddings, refresh as refreshEmbeddings } from "./src/embed.js";
+import { prepare as prepareEmbeddings, refresh as refreshEmbeddings, warmUp as warmUpEmbeddings } from "./src/embed.js";
 import { CHARACTER_FINISH_BY_ROLE, DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, loadFinishes } from "./src/material.js";
 import { loadSeeds, seedLabel } from "./src/seeds.js";
 import { PARTNER_COUNT, hexFromSeedId, parseColorInput, partnersFor, structuresFor } from "./src/from-color.js";
@@ -151,12 +151,18 @@ const shapePalette = ({ doc, score, matched, wholeMatches }) => ({
   matched: shapeMatched(matched),
 });
 
-// 코퍼스 34건을 벡터로 만든다. 기다리지 않고 결과만 적는다. EMBED_PREPARE=0 이면 건너뛴다(게이트용).
+// 코퍼스 34건을 벡터로 만든다. 호출부는 기다리지 않고 결과만 적는다. EMBED_PREPARE=0 이면 건너뛴다(게이트용).
+// 준비가 끝나면 임베딩 모델을 GPU 에 올린다 — 캐시가 다 차 있으면 준비가 Ollama 를 안 불러 모델이 없는 채
+// 시작하기 때문이다(40단계 · H1). 돌려주는 프라미스는 그 워밍업까지 끝나야 풀린다: LLM 워밍업을 그 뒤에 건다.
 function prepareCorpusEmbeddings() {
-  if (process.env.EMBED_PREPARE === "0") return;
-  prepareEmbeddings(pipeline.embedDocs).then((e) => {
+  if (process.env.EMBED_PREPARE === "0") return Promise.resolve();
+  return prepareEmbeddings(pipeline.embedDocs).then(async (e) => {
     const line = e.state === "ready" ? `임베딩 준비됨 — ${e.model} ${e.count}건` : `임베딩 쓸 수 없음 — ${e.detail}`;
     process.stdout.write(Buffer.from(line + "\n", "utf8"));
+    if (e.state !== "ready" || process.env.OLLAMA_WARMUP === "0") return;
+    const w = await warmUpEmbeddings();
+    const warm = w.skipped ? `임베딩 워밍업 건너뜀 — ${w.skipped}` : `임베딩 워밍업 완료 — ${e.model} ${w.elapsedMs}ms`;
+    process.stdout.write(Buffer.from(warm + "\n", "utf8"));
   });
 }
 
@@ -209,6 +215,8 @@ async function computeSearch(query, limit, { allowRewrite = true } = {}) {
     hybrid: r.hybrid ?? null,
     // rewriteError 와 같은 경계 — 사유에 OLLAMA_HOST 가 들어간다.
     hybridError: r.hybridError ? (LOOPBACK_ONLY ? r.hybridError : "임베딩을 쓸 수 없습니다") : null,
+    // 임베딩을 얼마나 기다렸고 몇 ms 걸렸나. budgetMs 가 null 이면 부르지 않았다(준비 안 됨). 40단계 · H2
+    embed: r.embed ? { elapsedMs: r.embed.elapsedMs, budgetMs: r.embed.budgetMs } : null,
     usedLlm: r.usedLlm === true,
     results: r.paletteHits.map(shapePalette),
     diagnostics: r.diagnosticHits.map(shapeDiagnostic),
@@ -542,7 +550,8 @@ async function computeCharacter(query) {
     })),
   ]);
 
-  const r = await pipeline.resolve(parsed.impression, 3);
+  // 인상은 모델이 만든 말이라 잡담 거르기(튀어나옴)를 안 쓴다 — 40단계 전 판정 그대로(리뷰 P2-2).
+  const r = await pipeline.resolve(parsed.impression, 3, { judgeProminence: false });
   const hit = r.route === "palette" ? (r.paletteHits[0]?.doc ?? null) : null;
   const pair = hit ?? fallbackPair();
   const { colors, warnings } = composeCharacter({ parts: parsed.parts, creature: parsed.creature, pair, corpus: corpusColors() });
@@ -888,13 +897,15 @@ server.listen(PORT, HOST, () => {
       // 코퍼스 벡터를 미리 만든다. 기다리지 않는다 — 준비 전 질의는 3단계를 건너뛴다.
       // **Ollama 기동에 실패해도 부른다.** 그래야 임베딩 상태가 "unknown" 에 갇히지 않고 "unavailable" 로
       // 정직하게 남는다(리뷰 지적 · S26-G3). prepare 는 스스로 실패를 잡는다.
-      prepareCorpusEmbeddings();
+      const embedsReady = prepareCorpusEmbeddings();
 
       // 첫 재작성이 모델 적재를 기다리지 않게 미리 올려 둔다.
       // 실측: 워밍업 없으면 첫 저신뢰 질의 3944ms, 있으면 556ms.
       // 기다리지 않는다 — 워밍업이 끝나기 전에 들어온 질의는 그냥 조금 느릴 뿐이다.
+      // **임베딩 워밍업 뒤에 건다.** 둘이 같이 가면 LLM 적재(42초 [실측 2026-09-27])가 GPU 를 쥔 동안 임베딩 모델이
+      // 못 올라와, 검색 — 가장 흔한 질의 — 이 1분 가까이 임베딩 없이 돌았다(40단계 · H1).
       if (s.state === "ready" && process.env.OLLAMA_WARMUP !== "0") {
-        warmUp().then((w) => {
+        embedsReady.then(() => warmUp()).then((w) => {
           const line = w.skipped
             ? `모델 워밍업 건너뜀 — ${w.skipped}`
             : `모델 워밍업 완료 — ${w.model} ${w.elapsedMs}ms`;

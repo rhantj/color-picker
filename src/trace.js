@@ -83,7 +83,7 @@ export function createTracer({ apiKey = "", project = "color-picker", endpoint =
           parent_run_id: id,
           dotted_order: `${dotted}.${orderStamp(c.startedAt)}${c.id}`,
           name: c.name,
-          run_type: c.name.startsWith("llm") ? "llm" : "tool",
+          run_type: c.name.startsWith("llm") ? "llm" : c.name === "embed" ? "embedding" : "tool",
           inputs: c.inputs,
           outputs: c.outputs ?? {},
           start_time: c.startedAt,

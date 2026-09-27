@@ -42,6 +42,26 @@ function matchesForm(text, tokens, form) {
   return tokens.some((t) => t === form || (t.startsWith(form) && SINGLE_CHAR_PARTICLES.has(t[form.length])));
 }
 
+// 종족 낱말 **혼자**를 캐릭터 신호로 볼 때의 규칙(40단계 · H5). "금속 로봇 경비병"·"트롤 전사" 는 부위·색 낱말이 없어
+// 추천으로 갔다. 그런데 종족 낱말은 비유로도 흔하다("천사 같은 파스텔") — 그래서 하나로 정하지 않고 캐릭터·추천을 되묻는다.
+// 어절 하나가 낱말 그대로이거나 조사·호칭만 붙었을 때만 건다 — "기계적인" 의 "기계" 는 안 건다.
+// 끝 구두점은 떼고 본다("소년," → "소년").
+const CREATURE_PARTICLES = Object.freeze([
+  "", "이", "가", "은", "는", "을", "를", "의", "와", "과", "도", "로", "으로", "에", "에게", "한테", "만", "처럼",
+  "들", "들이", "들은", "들의", "님", "이야", "야",
+]);
+/**
+ * 혼자서는 캐릭터 신호로 안 치는 종족 낱말 [판단]. 일상어("사람 많은 카페")이거나 다른 뜻이 더 흔하다
+ * ("뉴스 기사" · "설치 마법사"). 부위·색 낱말과 같이 오면 여전히 캐릭터다("금발 기사 파란 갑옷").
+ */
+const CREATURE_TOO_COMMON = new Set(["사람", "인간", "기사", "마법사"]);
+
+/** 종족 낱말이 어절로 서 있는가(흔한 낱말 제외). */
+function creatureStandsAlone(tokens, forms) {
+  const bare = tokens.map((t) => t.replace(/[,.!?~…·]+$/u, ""));
+  return forms.some((f) => !CREATURE_TOO_COMMON.has(f) && bare.some((t) => CREATURE_PARTICLES.some((p) => t === f + p)));
+}
+
 /** 표면형 목록 중 문장에 든 것. 긴 형태부터 본다 — "머리카락" 이 "머리" 에 먼저 먹히지 않게. */
 function surfaceHits(text, tokens, forms) {
   return [...forms].sort((a, b) => b.length - a.length).filter((f) => matchesForm(text, tokens, f));
@@ -90,11 +110,16 @@ export function createRouter({ words: table, diagnostics, corpus, creatures = []
     const signals = { color: null, parts, colorWords, compounds, creatures: creatureHits, diagnosis, partsOnly, partRoles };
 
     if (partsOnly) return { kind: "route", routes: ["character"], unclear: "character", signals };
+    // 부위·색 신호 없이 종족 낱말만 — 캐릭터일 수도, 비유일 수도 있다
+    const creatureOnly = !strong && !weak && creatureStandsAlone(tokens, creatureForms);
     const routes = [];
-    if (strong || weak) routes.push("character");
+    if (strong || weak || creatureOnly) routes.push("character");
     if (diagnosis.length > 0) routes.push("diagnosis");
     // 약한 캐릭터 신호 하나만 있으면("눈에 띄는 색") 캐릭터가 아니라 추천이다
     if (routes.length === 1 && routes[0] === "character" && weak) return { kind: "route", routes: ["palette"], unclear: false, signals };
+    // 종족 낱말만 있으면 캐릭터·추천이 겹친다 — 되묻는다. 추천이 첫 후보: 마지막 턴처럼 안 묻고 고를 때
+    // 40단계 전 동작(추천)을 지킨다 — 비유("천사 같은 파스텔")로도 흔하다.
+    if (routes.length === 1 && routes[0] === "character" && creatureOnly) routes.unshift("palette");
     if (routes.length === 0) routes.push("palette");
     return { kind: "route", routes, unclear: false, signals };
   }

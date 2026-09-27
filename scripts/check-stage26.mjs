@@ -401,6 +401,8 @@ say({ first: first.state, early: early.state, late: late.state, stage: r.stage, 
   /*
    * 느린 임베딩이 확신 검색을 느리게 하면 안 된다. 스텁이 3초 뒤에 답하게 하고, 확신 질의가 1초 안에
    * 1단계로 답하는지 잰다. 양성 대조 — 저신뢰 질의는 기다린다(2.5초 넘게 걸린다).
+   * 40단계(H2)에서 질의를 "병원 앱인데 차갑지 않게"(어절 하나 확신)에서 "느와르 …"(어절 셋)로 옮겼다 — 어절 하나짜리
+   * 확신은 이제 저신뢰처럼 임베딩을 기다린다. 짧은 예산은 어절 둘 이상 확신에만 남는다(S40-G2·G3 이 둘을 가른다).
    */
   "S26-G4": async () => {
     const bad = [];
@@ -410,9 +412,9 @@ say({ first: first.state, early: early.state, late: late.state, stage: r.stage, 
         await waitEmbedReady(get);
         stub.set({ embedDelayMs: 3000 });
         const started = Date.now();
-        const r = await search(get, "병원 앱인데 차갑지 않게");
+        const r = await search(get, "느와르 포스터 만들건데 고급스러운 빨강");
         const wall = Date.now() - started;
-        if (r.stage !== 1 || topOf(r) !== "pair-10") bad.push(`확신 질의가 ${r.stage}단계 ${topOf(r)}`);
+        if (r.stage !== 1 || topOf(r) !== "pair-15") bad.push(`확신 질의가 ${r.stage}단계 ${topOf(r)}`);
         if (wall > 1000) bad.push(`확신 질의 왕복 ${wall}ms — 느린 임베딩에 끌렸다`);
         if (r.hybridError === null || r.hybridError === undefined) bad.push("예산을 넘겼는데 hybridError 가 없다 — 조용히 넘어간다");
 
@@ -487,7 +489,8 @@ say({ first: first.state, early: early.state, late: late.state, stage: r.stage, 
       await withServer(4344, { OLLAMA_HOST: stub.host }, async (get) => {
         await waitEmbedReady(get);
         stub.set({ embedDelayMs: 3000 });
-        const r = await search(get, "병원 앱인데 차갑지 않게");
+        // 짧은 예산에 걸려야 사유가 남는다 — 어절 둘 이상 확신 질의(40단계 H2 뒤 짧은 예산은 여기에만 남는다)
+        const r = await search(get, "느와르 포스터 만들건데 고급스러운 빨강");
         if (typeof r.hybridError !== "string" || !r.hybridError.includes(stub.host)) bad.push(`루프백인데 원문이 아니다: ${r.hybridError}`);
         const st = await (await get("/api/status")).json();
         if (typeof st.embed?.detail !== "string") bad.push("루프백인데 /api/status 의 embed.detail 이 없다");

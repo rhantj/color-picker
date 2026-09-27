@@ -8,6 +8,18 @@
 export const AGREE_TOP = 1;
 /** 확신 문턱 — 결합 1위의 코사인이 이 값 이상이면 3단계가 확신한다. [실측] 23건에서 정답 1위 최솟값 0.44 */
 export const COS_MIN = 0.44;
+/**
+ * 튀어나옴 문턱 — BM25 에 걸린 어절이 **하나도 없을 때만** 본다. 1위 코사인이 코퍼스 전체 평균보다 이만큼은 높아야
+ * 확신한다. 문턱(COS_MIN)만 보면 "안녕"·"hello" 도 0.442 로 넘었다(40단계 · H4). 인사·잡담은 코퍼스 전체와 고르게
+ * 비슷하고, 뜻이 있는 질의는 한 문서가 튀어나온다.
+ * 값은 `[판단]` 이다 — 잰 것은 두 묶음 사이의 빈틈이고, 0.12 는 그 사이에서 고른 값이다.
+ *   맞춘 묶음 [실측 2026-09-27] 인사·잡담 6건 0.048~0.084 · 어휘 없는 정상 질의 4건 0.151~0.219 (n=10, S40-G6 의 시험 세트와 같다)
+ *   따로 뗀 묶음 [실측 2026-09-28] 새 잡담 10건 최대 0.103 — 전부 아래 · 새 정상 질의 10건 중 이 규칙 때문에 확신을 잃은 것 0
+ * 평균이 코퍼스 전체(팔레트+진단)에 대한 값이라 코퍼스가 크게 바뀌면 다시 재야 한다.
+ * BM25 증거가 있으면 안 본다: "색이 탁해요"(0.077)처럼 증거가 있는 정답이 이 값 아래에 있다. 그래서 흔한 어절 하나가
+ * 걸린 잡담("안녕 좋은 아침" — "좋은")은 빠져나간다 [실측] — open-work H4.
+ */
+export const PROMINENCE_MIN = 0.12;
 /** RRF 상수. [문헌] Cormack et al. 2009 */
 export const RRF_K = 60;
 /**
@@ -62,9 +74,20 @@ export function fuse(bm25, sims, { bm25Weight = 1 } = {}) {
     .sort((a, b) => b.rrf - a.rrf);
 }
 
-/** 결합 1위의 코퍼스가 route, 그 코사인이 문턱 이상이면 확신. */
-export function decide(fused) {
+/** 코사인 하나가 코퍼스 전체 코사인의 평균보다 얼마나 높은가. sims 가 비면 0. */
+export function prominence(cos, sims) {
+  if (sims.length === 0) return 0;
+  return cos - sims.reduce((sum, s) => sum + s.cosine, 0) / sims.length;
+}
+
+/**
+ * 결합 1위의 코퍼스가 route, 그 코사인이 문턱 이상이면 확신.
+ * `lexical: false`(BM25 에 어절 매치가 하나도 없음)이면 1위가 코퍼스 평균에서 PROMINENCE_MIN 이상 튀어나와야 한다.
+ * @param {{sims?: {cosine:number}[], lexical?: boolean}} [options] 옵션이 없으면 옛 동작(문턱만)
+ */
+export function decide(fused, { sims = [], lexical = true } = {}) {
   const top = fused[0] ?? null;
   if (!top) return { route: "none", confident: false, top: null };
-  return { route: top.kind, confident: top.cosine >= COS_MIN, top };
+  const standsOut = lexical || prominence(top.cosine, sims) >= PROMINENCE_MIN;
+  return { route: top.kind, confident: top.cosine >= COS_MIN && standsOut, top };
 }

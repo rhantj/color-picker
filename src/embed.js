@@ -26,6 +26,11 @@ export const EMBED_TIMEOUT_MS = Number(process.env.EMBED_TIMEOUT_MS ?? 8000);
  * 확신 경로 예산(700ms)에 걸린다 — 26단계부터 보인 "2.2초 튐" 의 원인이다(30단계 · E3). rewrite.js 의 채팅 워밍업과 같은 값.
  */
 export const EMBED_KEEP_ALIVE = "30m";
+/**
+ * 기동 워밍업에 보내는 문장. 코퍼스 벡터가 캐시에 다 있으면 기동 때 Ollama 를 한 번도 안 불러 모델이 GPU 에 없는 채
+ * 시작한다 — 그러면 첫 질의들이 모델 적재(1.8~2.7초 [실측])를 치르다 확신 경로 예산에 걸렸다(40단계 · H1).
+ */
+export const EMBED_WARMUP_TEXT = "색";
 /** 코퍼스 34건을 한 번에 벡터화하는 예산. 질의 예산에 묶여 있다 — 질의 예산을 줄이면 이것도 줄어든다(리뷰 지적). 처음 적재 7초보다 넉넉해야 한다. */
 const PREPARE_TIMEOUT_MS = EMBED_TIMEOUT_MS * 4;
 /** unavailable 뒤 다시 확인해 보는 간격. ollama.js 의 STATUS_TTL_MS 와 같은 뜻이다. */
@@ -86,6 +91,12 @@ let corpus = [];
 let lastDocs = null;
 let lastTriedAt = 0;
 let preparing = null;
+/**
+ * 준비가 성공할 때마다 하나 는다. 질의 요청은 이제 예산을 넘겨도 8초까지 살아 있어서, 그사이 상태가 회복된 뒤에
+ * 늦게 온 연결 실패가 ready 를 unavailable 로 되돌릴 수 있었다(40단계 리뷰 P3). 요청을 시작한 세대가 지금 세대와
+ * 같을 때만 상태를 내린다.
+ */
+let generation = 0;
 /** 지금 벡터화 중인 문서 목록. 끝났을 때 lastDocs 와 다르면 한 번 더 돈다 — 진행 중에 코퍼스가 또 바뀐 경우다(리뷰 지적). */
 let runningDocs = null;
 
@@ -107,6 +118,10 @@ async function callEmbed(input, timeoutMs) {
   }
   if (!res.ok) throw new Error(json?.error ? `${EMBED_MODEL}: ${json.error}` : `Ollama 가 ${res.status}`);
   if (!Array.isArray(json?.embeddings)) throw new Error("임베딩 응답에 embeddings 배열이 없다");
+  // 빈 배열을 받고 성공으로 치면 벡터 없이 1단계로 나가면서 기록엔 성공이 남는다(40단계 리뷰 P3).
+  if (json.embeddings.length !== input.length || json.embeddings.some((v) => !Array.isArray(v) || v.length === 0)) {
+    throw new Error(`임베딩 응답의 벡터가 ${json.embeddings.length}개 — 입력 ${input.length}개`);
+  }
   return json.embeddings;
 }
 
@@ -145,6 +160,7 @@ export async function prepare(docs) {
       cache = new Map([...cache].filter(([hash]) => keep.has(hash)));
       // 새로 만든 것이 있거나 가지치기로 줄었을 때 쓴다. 삭제만 하면 missing 이 0 이라 안 쓰던 결함이 있었다(리뷰 지적).
       if (missing.length > 0 || cache.size !== before) saveCache();
+      generation += 1;
       current = {
         ...current,
         state: "ready",
@@ -175,25 +191,56 @@ export async function refresh() {
   return prepare(lastDocs);
 }
 
-/** 질의 하나를 벡터로. 실패해도 던지지 않는다 — { vector: null, error } 로 돌아온다. */
+/**
+ * 모델을 GPU 에 올려 둔다. 코퍼스가 준비된 뒤 기동 때 한 번 부른다(server.js). 던지지 않는다.
+ * @returns {Promise<{elapsedMs:number} | {skipped:string}>}
+ */
+export async function warmUp() {
+  if (current.state !== "ready") return { skipped: `임베딩을 쓸 수 없다 (${current.detail})` };
+  const started = Date.now();
+  try {
+    await callEmbed([EMBED_WARMUP_TEXT], EMBED_TIMEOUT_MS);
+    return { elapsedMs: Date.now() - started };
+  } catch (err) {
+    return { skipped: reason(err) };
+  }
+}
+
+/**
+ * 질의 하나를 벡터로. 실패해도 던지지 않는다 — { vector: null, error } 로 돌아온다.
+ *
+ * `timeoutMs` 는 **기다리는 시간**이다. 요청 자체는 늘 `EMBED_TIMEOUT_MS` 까지 산다. 짧은 예산으로 요청을 끊으면
+ * Ollama 가 진행 중이던 모델 적재까지 버리고, 다음 질의가 적재를 처음부터 다시 시작해 또 끊긴다 — 기동 직후
+ * 1분 가까이 임베딩 41/50 이 실패했다(40단계 · H1 · Ollama 로그 "aborting load" 30회 [실측]). 예산을 넘기면 답은
+ * 기다리지 않고 돌려주되 요청은 뒤에서 끝나게 둬, 그 적재가 다음 질의를 위해 끝난다.
+ */
 export async function embedQuery(text, { timeoutMs = EMBED_TIMEOUT_MS } = {}) {
   const started = Date.now();
   if (current.state !== "ready") {
     return { vector: null, error: `임베딩을 쓸 수 없다 (${current.detail})`, elapsedMs: 0 };
   }
-  try {
-    const [vector] = await callEmbed([text], timeoutMs);
-    return { vector, error: null, elapsedMs: Date.now() - started };
-  } catch (err) {
-    const error = reason(err);
-    // 연결 거부는 "죽었다" 다. 타임아웃은 느린 것일 수 있어 상태를 안 내린다 — 확신 경로의 짧은 예산이 죽음으로 읽히면 안 된다.
-    if (/응답하지 않는다$/.test(error)) {
-      corpus = [];
-      current = { ...current, state: "unavailable", detail: error, count: 0 };
-      lastTriedAt = Date.now();
-    }
-    return { vector: null, error, elapsedMs: Date.now() - started };
-  }
+  const startedIn = generation;
+  const request = callEmbed([text], EMBED_TIMEOUT_MS).then(
+    ([vector]) => ({ vector, error: null }),
+    (err) => {
+      const error = reason(err);
+      // 연결 거부는 "죽었다" 다. 타임아웃은 느린 것일 수 있어 상태를 안 내린다 — 확신 경로의 짧은 예산이 죽음으로 읽히면 안 된다.
+      // 요청이 시작된 뒤 준비가 다시 성공했으면(세대가 바뀜) 옛 요청의 실패로 새 상태를 덮지 않는다.
+      if (/응답하지 않는다$/.test(error) && startedIn === generation) {
+        corpus = [];
+        current = { ...current, state: "unavailable", detail: error, count: 0 };
+        lastTriedAt = Date.now();
+      }
+      return { vector: null, error };
+    },
+  );
+  let timer;
+  const gaveUp = new Promise((resolve) => {
+    timer = setTimeout(() => resolve({ vector: null, error: `${HOST} 가 제때 답하지 않았다` }), timeoutMs);
+  });
+  const result = await Promise.race([request, gaveUp]);
+  clearTimeout(timer);
+  return { ...result, elapsedMs: Date.now() - started };
 }
 
 /** 코퍼스 전체와의 코사인. 내림차순. 준비 안 됐으면 빈 배열. */

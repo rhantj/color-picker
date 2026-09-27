@@ -67,6 +67,12 @@ export function createChat({ router, handlers, trace, store, limit }) {
     }
     const body = await handlers.search(query);
     span.child("search", { query }).end({ stage: body.stage, route: body.route, confident: body.confident, topId: body.route === "diagnosis" ? body.diagnostics[0]?.id : body.results[0]?.id });
+    // 임베딩 결과를 따로 남긴다. 실패해도 답은 1단계로 나가서, 이게 없으면 기록만 봐서는 실패를 모른다(40단계 · H2).
+    // 못 부른 턴(Ollama 가 죽어 준비 안 됨)도 남긴다 — 가장 흔한 실패다(리뷰 P2-1). skipped 로 "느렸다" 와 가른다.
+    if (body.embed) {
+      const skipped = body.embed.budgetMs == null;
+      span.child("embed", { query, budgetMs: body.embed.budgetMs }).end({ ok: !skipped && !body.hybridError, skipped, elapsedMs: body.embed.elapsedMs, error: body.hybridError ?? null });
+    }
     if (body.rewrite) span.child("llm.rewrite", { query, model: body.rewrite.model }).end({ intent: body.rewrite.intent, terms: body.rewrite.terms });
     return { route: ROUTES.includes(body.route) ? body.route : "palette", payload: body };
   }
@@ -119,6 +125,15 @@ export function createChat({ router, handlers, trace, store, limit }) {
           const routeTrace = { routes: [choice], signals: null, redirect: false };
           span.child("route", { text, choice, pending: true }).end({ ...routeTrace, resolvedBy: "choice" });
           return answerAndRecord(choice, pending.original, routeTrace);
+        }
+        // 칩 대신 바로잡기 낱말("추천으로")이나 칩 이름("캐릭터 색 짜기")을 글로 쳐도 칩과 같다. 원문에 이어 붙이면
+        // 어절이 늘어 바로잡기 규칙(3어절 이하)을 못 타고 첫 후보로 가 버렸다 — 사용자가 고른 것과 반대로(40단계 리뷰).
+        const own = router().route(text);
+        const typed = own.kind === "redirect" ? own.route : (ROUTES.find((id) => CHOICE_LABEL[id] === text) ?? null);
+        if (typed) {
+          const routeTrace = { routes: [typed], signals: null, redirect: true };
+          span.child("route", { text, pending: true }).end({ ...routeTrace, resolvedBy: "typed" });
+          return answerAndRecord(typed, pending.original, routeTrace);
         }
         // 양쪽 다 각각 queryChars 를 통과했으므로 합치면 최대 2배다. 기록(recordTurn)은 어차피 자르므로
         // 여기서 같은 한도로 잘라 **기록과 실제 질의를 같게** 만든다(최종 리뷰 P2-11).

@@ -22,7 +22,7 @@ import { rewrite } from "./rewrite.js";
 import { buildVocabulary, expandTerms } from "./vocabulary.js";
 import { indexText as paletteText, embedText as paletteEmbedText } from "./palettes.js";
 import { indexText as diagnosticText, embedText as diagnosticEmbedText } from "./diagnostics.js";
-import { embedQuery, similarities, status as embedStatus, prepare as prepareEmbeddings, EMBED_MODEL } from "./embed.js";
+import { embedQuery, similarities, status as embedStatus, prepare as prepareEmbeddings, EMBED_MODEL, EMBED_TIMEOUT_MS } from "./embed.js";
 import { agrees, decide, fuse, DISAGREE_BM25_WEIGHT, DISTRUST_MAX_WHOLE } from "./hybrid.js";
 import { relationVocabulary } from "./bridge.js";
 import { corpusPath } from "./corpus-paths.js";
@@ -30,7 +30,15 @@ import { corpusPath } from "./corpus-paths.js";
 const isConfident = (hits) => hits.length > 0 && hits[0].wholeMatches > 0;
 const ms = (start) => Number((Number(process.hrtime.bigint() - start) / 1e6).toFixed(2));
 
-/** 확신 경로의 임베딩 예산. 넘기면 BM25 답을 그대로 쓴다 — S3-G8 의 "1초 미만" 안에 들어야 하므로 1초보다 짧다. [실측] 따뜻할 때 45ms, 튐 2.2초 */
+/**
+ * 확신 경로의 임베딩 예산. 넘기면 BM25 답을 그대로 쓴다 — S3-G8 의 "1초 미만" 안에 들어야 하므로 1초보다 짧다. [실측] 따뜻할 때 45ms, 튐 2.2초
+ * **어절 둘 이상이 통째로 맞은 확신에만 쓴다**(40단계 · H2). 어절 하나짜리 확신은 28단계가 "증거가 아니다" 로 본
+ * 확신(DISTRUST_MAX_WHOLE)이라 임베딩이 판정해야 하는데, 700ms 에 걸리면 그대로 나갔다(측정 2차: "색이 탁해요" → pair-15,
+ * 정상일 땐 dx-muddy). 그래서 어절 하나짜리는 저신뢰와 같은 긴 예산으로 기다린다. 평소 임베딩은 13~30ms [실측]라
+ * 기다림은 GPU 가 멈출 때만 생긴다. **어절 둘로 틀리게 확신하는 질의는 못 막는다** — "아침에 빵 굽는 냄새가 나는 카페"
+ * 는 "냄새가"·"나는" 둘로 pair-10 을 확신한다. 임베딩이 700ms 안에 오면 3단계가 pair-09 로 고치지만, GPU 가 멈추면
+ * 오답이 나간다(리뷰 P1 · open-work H2).
+ */
 const FAST_BUDGET_MS = 700;
 
 /** 코퍼스 파일 시각 확인 간격(27단계). 안에서는 statSync 도 안 한다. */
@@ -141,9 +149,11 @@ export function createPipeline() {
      *   stage: 1 (전문 검색만) | 3 (임베딩 결합까지) | 2 (LLM 재작성까지, 임베딩 없이) — 가장 높이 쓴 칸
      *   hybrid: {model, cosine, elapsedMs} | null — 3단계가 답을 정했을 때만
      *   hybridError: string | null — 임베딩을 못 썼을 때의 사유 (경계는 서버가 적용)
+     *   embed: {model, budgetMs, elapsedMs} — 임베딩을 얼마나 기다렸나. budgetMs null 이면 부르지 않았다(준비 안 됨)
      *   usedLlm: boolean
+     * 옵션 judgeProminence(기본 true): BM25 증거가 없을 때 튀어나옴을 볼지. 캐릭터 인상 검색만 false 로 부른다
      */
-    async resolve(query, limit = 3, { allowRewrite = true } = {}) {
+    async resolve(query, limit = 3, { allowRewrite = true, judgeProminence = true } = {}) {
       const started = process.hrtime.bigint();
       const { palettes, diagnostics, vocabulary, byId } = state; // 이 요청 동안은 한 코퍼스만 본다
 
@@ -165,11 +175,14 @@ export function createPipeline() {
           : { route: "palette", top: paletteHits[0].doc.id, whole: paletteWhole, paletteHits, diagnosticHits: [] };
       }
 
-      // 임베딩 — 확신 후보가 있으면 짧은 예산, 없으면 긴 예산. 준비 안 됐으면 바로 사유만 남는다.
-      const q =
-        embedStatus().state === "ready"
-          ? await embedQuery(query, stage1 ? { timeoutMs: FAST_BUDGET_MS } : {})
-          : { vector: null, error: `임베딩을 쓸 수 없다 (${embedStatus().detail})`, elapsedMs: 0 };
+      // 임베딩 — 어절 둘 이상으로 확신한 후보가 있으면 짧은 예산, 아니면 긴 예산. 준비 안 됐으면 바로 사유만 남는다.
+      const budgetMs = stage1 && stage1.whole > DISTRUST_MAX_WHOLE ? FAST_BUDGET_MS : EMBED_TIMEOUT_MS;
+      const attempted = embedStatus().state === "ready";
+      const q = attempted
+        ? await embedQuery(query, { timeoutMs: budgetMs })
+        : { vector: null, error: `임베딩을 쓸 수 없다 (${embedStatus().detail})`, elapsedMs: 0 };
+      // 임베딩을 부른 결과는 답과 따로 남긴다 — 실패가 조용하면 1단계 비율이 부풀어 보인다(40단계 · H2).
+      const embed = attempted ? { model: EMBED_MODEL, budgetMs, elapsedMs: q.elapsedMs } : { model: EMBED_MODEL, budgetMs: null, elapsedMs: 0 };
       // 재적재 직후 재임베딩이 끝나기 전엔 옛 코퍼스의 벡터가 온다. 지금 코퍼스에 없는 id 는 버린다(S27-G5).
       const sims = similarities(q.vector).filter((s) => byId.has(s.id));
       const hybridError = q.error;
@@ -185,6 +198,7 @@ export function createPipeline() {
           searchMs: ms(started),
           hybrid: null,
           hybridError,
+          embed,
           usedLlm: false,
         };
       }
@@ -192,7 +206,7 @@ export function createPipeline() {
       const searchMs = ms(started);
       // 팔레트의 약한 증거는 응답에 담으면서 진단의 약한 증거만 버리면 비대칭이다.
       // 둘 다 담고, 무엇을 보여줄지는 route 로 화면이 판단한다.
-      const base = { stage: 1, route: "none", confident: false, paletteHits, diagnosticHits, searchMs, hybrid: null, hybridError, usedLlm: false };
+      const base = { stage: 1, route: "none", confident: false, paletteHits, diagnosticHits, searchMs, hybrid: null, hybridError, embed, usedLlm: false };
 
       // 3단계 — 결합 재순위. 임베딩이 없으면 여기를 못 하고 바로 2단계로 간다.
       const rerank = (pHits, dHits, { bm25Weight = 1 } = {}) => {
@@ -201,7 +215,11 @@ export function createPipeline() {
           ...dHits.map((h) => ({ id: h.doc.id, kind: "diagnosis" })),
         ];
         const fused = fuse(bm25, sims, { bm25Weight }).filter((f) => byId.has(f.id));
-        const verdict = decide(fused);
+        // BM25 에 어절 매치가 하나도 없으면 임베딩만이 증거다 — 1위가 튀어나와야 확신한다(40단계 · H4, "안녕" 이 확신되던 것).
+        // judgeProminence: false — 캐릭터 경로의 인상 문구("밝고 명랑한")는 LLM 이 만든 말이라 잡담일 수 없다. 그 경로는
+        // 옛 판정(문턱만)을 쓴다. 안 그러면 인상이 저신뢰로 떨어져 LLM 재작성을 한 번 더 부르고 팔레트가 바뀐다(리뷰 P2-2).
+        const lexical = !judgeProminence || isConfident(pHits) || isConfident(dHits);
+        const verdict = decide(fused, { sims, lexical });
         const pick = (kind, n) =>
           fused
             .filter((f) => f.kind === kind)
