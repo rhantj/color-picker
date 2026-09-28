@@ -68,7 +68,7 @@ export function createChat({ router, handlers, trace, store, limit }) {
     const body = await handlers.search(query);
     span.child("search", { query }).end({ stage: body.stage, route: body.route, confident: body.confident, topId: body.route === "diagnosis" ? body.diagnostics[0]?.id : body.results[0]?.id });
     // 임베딩 결과를 따로 남긴다. 실패해도 답은 1단계로 나가서, 이게 없으면 기록만 봐서는 실패를 모른다(40단계 · H2).
-    // 못 부른 턴(Ollama 가 죽어 준비 안 됨)도 남긴다 — 가장 흔한 실패다(리뷰 P2-1). skipped 로 "느렸다" 와 가른다.
+    // 못 부른 턴(임베딩 키가 없거나 API 가 죽어 준비 안 됨)도 남긴다 — 가장 흔한 실패다(리뷰 P2-1). skipped 로 "느렸다" 와 가른다.
     if (body.embed) {
       const skipped = body.embed.budgetMs == null;
       span.child("embed", { query, budgetMs: body.embed.budgetMs }).end({ ok: !skipped && !body.hybridError, skipped, elapsedMs: body.embed.elapsedMs, error: body.hybridError ?? null });

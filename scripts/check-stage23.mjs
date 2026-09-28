@@ -18,6 +18,8 @@
 // 던지는 환경**에서도 화면이 그대로 돌아야 한다. 시크릿 창·사이트 데이터 차단에서
 // `localStorage` 는 읽기만 해도 던진다.
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

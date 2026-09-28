@@ -34,6 +34,8 @@
 // `value-scale` 은 0건.
 // **둘 다 같은 것을 약속했는데 하나만 지킨다** — 대조군이 있으니 "원래 그런 것" 이 아니다.
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

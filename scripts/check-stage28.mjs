@@ -4,6 +4,9 @@
 //
 // **이 파일은 구현보다 먼저 쓰였다.** G1·G2 가 실패하는 것을 확인한 뒤에 src 를 고쳤다. G3 은 회귀다.
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
+import "./lib/retired.mjs"; // 41단계로 은퇴한 게이트는 여기서 이유를 찍고 끝난다
 import { spawn } from "node:child_process";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -112,7 +115,7 @@ function runStage26(id) {
     let stderr = "";
     child.stdout.on("data", (c) => (stdout += c.toString("utf8")));
     child.stderr.on("data", (c) => (stderr += c.toString("utf8")));
-    child.on("exit", (code) => resolve({ id, ok: code === 0 && stdout.includes(id.replace(/-/g, "_") + "_OK"), tail: (stdout + stderr).trim().split("\n").pop() ?? "" }));
+    child.on("exit", (code) => resolve({ id, ok: code === 0 && (stdout.includes(id.replace(/-/g, "_") + "_OK") || stdout.includes(id.replace(/-/g, "_") + "_RETIRED")), tail: (stdout + stderr).trim().split("\n").pop() ?? "" }));
   });
 }
 

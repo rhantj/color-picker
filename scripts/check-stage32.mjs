@@ -3,6 +3,8 @@
 // 이름 바꾸기는 "옛 이름이 없다" 와 "새 이름이 있다" 를 둘 다 재야 한다 — 한쪽만 재면 파일을 비워도 통과한다.
 // 환경변수(TONEFIRST_DATA_DIR)·임시 폴더 접두(tonefirst-gate-)는 내부 식별자라 대상이 아니다.
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -57,7 +59,7 @@ function runChecker(script, id) {
     let stderr = "";
     child.stdout.on("data", (c) => (stdout += c.toString("utf8")));
     child.stderr.on("data", (c) => (stderr += c.toString("utf8")));
-    child.on("exit", (code) => resolve({ id, ok: code === 0 && stdout.includes(id.replace(/-/g, "_") + "_OK"), tail: (stdout.trim() || stderr.trim()).split("\n").pop() ?? "" }));
+    child.on("exit", (code) => resolve({ id, ok: code === 0 && (stdout.includes(id.replace(/-/g, "_") + "_OK") || stdout.includes(id.replace(/-/g, "_") + "_RETIRED")), tail: (stdout.trim() || stderr.trim()).split("\n").pop() ?? "" }));
   });
 }
 

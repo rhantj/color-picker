@@ -10,6 +10,8 @@
 //   2. 한 카드를 고쳤는데 **나머지 일곱이 같이 바뀌는 것** — 배정 표는 역할별로 하나다
 //   3. 재질을 바꾸려고 **`/api/expand` 를 다시 부르는 것** — 그러면 보이는 다섯이 바뀐다(S15-G11)
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

@@ -1,4 +1,4 @@
-// 의존성 0 HTTP 서버. Node 내장 http 만 쓴다.
+// HTTP 서버. Node 내장 http 만 쓴다(의존성은 Claude SDK 하나 — src/llm.js · 41단계).
 //
 // 검색 색인은 기동 시 한 번만 만든다. 1단계 리뷰에서 "요청마다 createSearcher() 를 부르면
 // 트래픽이 늘 때 병목"이라는 지적이 나왔고, 코퍼스가 정적이라 재색인할 이유가 없다.
@@ -11,8 +11,8 @@ import { fileURLToPath } from "node:url";
 import { CorpusError } from "./src/palettes.js";
 import { palettesForAxis } from "./src/bridge.js";
 import { createPipeline } from "./src/pipeline.js";
-import { ensureRunning, refresh as refreshOllama } from "./src/ollama.js";
-import { warmUp } from "./src/rewrite.js";
+import { refresh as refreshLlm } from "./src/llm.js";
+import { clientOf, runWithClient } from "./src/quota.js";
 import {
   DATA_DIR,
   LIMITS,
@@ -38,7 +38,7 @@ import { expandAll, expandSeed, loadStructures } from "./src/expand.js";
 import { PICK_COUNT, selectStructures } from "./src/structure.js";
 import { selectFinishes } from "./src/finish.js";
 import { cleanQuery } from "./src/query.js";
-import { prepare as prepareEmbeddings, refresh as refreshEmbeddings, warmUp as warmUpEmbeddings } from "./src/embed.js";
+import { prepare as prepareEmbeddings, refresh as refreshEmbeddings } from "./src/embed.js";
 import { CHARACTER_FINISH_BY_ROLE, DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, loadFinishes } from "./src/material.js";
 import { loadSeeds, seedLabel } from "./src/seeds.js";
 import { PARTNER_COUNT, hexFromSeedId, parseColorInput, partnersFor, structuresFor } from "./src/from-color.js";
@@ -49,15 +49,17 @@ const PORT = Number(process.env.PORT ?? 4173);
 const HOST = process.env.HOST ?? "127.0.0.1";
 
 // 화면의 6단계 사다리는 "이 서버가 실제로 할 수 있는 단계"를 그린다.
-// 재작성은 Ollama 가 준비돼 있을 때만 가능하므로 능력치는 고정값이 아니라 상태에서 계산한다 —
+// 재작성은 LLM(Claude API 키)이 준비돼 있을 때만 가능하므로 능력치는 고정값이 아니라 상태에서 계산한다 —
 // 화면이 실제보다 앞서 보이지 않게 하려는 것이다. 개별 질의가 몇 단계에서 끝났는지는 따로 알린다.
 // 4단계(온디맨드 재적재)는 임베딩이 준비됐을 때 — 재적재 자체는 늘 가능하므로 3 은 이제 안 나온다.
-// 2단계는 Ollama 가 준비됐을 때만 가능하다.
-const maxStage = (ollamaState, embedState) => (embedState === "ready" ? 4 : ollamaState === "ready" ? 2 : 1);
+// 2단계는 LLM 이 준비됐을 때만 가능하다.
+const maxStage = (llmState, embedState) => (embedState === "ready" ? 4 : llmState === "ready" ? 2 : 1);
 
-// 루프백 밖에 바인딩했다면 모델 목록·호스트·오류 원문을 내보내지 않는다.
-// 로컬 도구를 네트워크에 열어 두면 이 응답이 "이 기계에 어떤 모델이 있는가" 를 알려주는 창구가 된다.
-const LOOPBACK_ONLY = /^(127\.|::1$|localhost$)/.test(HOST);
+// 루프백 밖이면 모델 상세·오류 원문을 내보내지 않는다. 오류 원문에는 API 상태 코드와 키 문제("키가 거절됐다")가
+// 들어간다 — 방문자에게 보일 것이 아니다.
+// **Vercel 은 루프백이 아니다**(41단계). 거기서 HOST 는 기본값 127.0.0.1 그대로라 이 검사만으로는 루프백으로 보인다 —
+// 실제로 첫 배포에서 `/api/status` 가 방문자에게 내부 상세를 그대로 보였다(2026-09-29 [실측]).
+const LOOPBACK_ONLY = !process.env.VERCEL && /^(127\.|::1$|localhost$)/.test(HOST);
 
 // 확장자 없는 화면 경로. 목록에 없는 경로는 정적 파일로도 안 찾는다.
 const PAGES = {
@@ -152,17 +154,12 @@ const shapePalette = ({ doc, score, matched, wholeMatches }) => ({
 });
 
 // 코퍼스 34건을 벡터로 만든다. 호출부는 기다리지 않고 결과만 적는다. EMBED_PREPARE=0 이면 건너뛴다(게이트용).
-// 준비가 끝나면 임베딩 모델을 GPU 에 올린다 — 캐시가 다 차 있으면 준비가 Ollama 를 안 불러 모델이 없는 채
-// 시작하기 때문이다(40단계 · H1). 돌려주는 프라미스는 그 워밍업까지 끝나야 풀린다: LLM 워밍업을 그 뒤에 건다.
+// 40단계까지 여기 있던 워밍업(모델을 GPU 에 올려 두기)은 41단계에서 뺐다 — API 에는 올려 둘 모델이 없다.
 function prepareCorpusEmbeddings() {
   if (process.env.EMBED_PREPARE === "0") return Promise.resolve();
-  return prepareEmbeddings(pipeline.embedDocs).then(async (e) => {
+  return prepareEmbeddings(pipeline.embedDocs).then((e) => {
     const line = e.state === "ready" ? `임베딩 준비됨 — ${e.model} ${e.count}건` : `임베딩 쓸 수 없음 — ${e.detail}`;
     process.stdout.write(Buffer.from(line + "\n", "utf8"));
-    if (e.state !== "ready" || process.env.OLLAMA_WARMUP === "0") return;
-    const w = await warmUpEmbeddings();
-    const warm = w.skipped ? `임베딩 워밍업 건너뜀 — ${w.skipped}` : `임베딩 워밍업 완료 — ${e.model} ${w.elapsedMs}ms`;
-    process.stdout.write(Buffer.from(warm + "\n", "utf8"));
   });
 }
 
@@ -209,11 +206,11 @@ async function computeSearch(query, limit, { allowRewrite = true } = {}) {
     confident: r.confident,
     elapsedMs: r.searchMs,
     rewrite: r.rewrite ? { intent: r.rewrite.intent, terms: r.rewrite.terms, model: r.rewrite.model, elapsedMs: r.rewrite.elapsedMs } : null,
-    // /api/status 와 같은 경계를 적용한다. 재작성 실패 사유에는 OLLAMA_HOST 나 스폰 실패 상세가
-    // 들어가므로, 루프백 밖에 바인딩했다면 원문을 내보내지 않는다.
+    // /api/status 와 같은 경계를 적용한다. 재작성 실패 사유에는 API 상태 코드·키 문제가
+    // 들어가므로, 루프백 밖이면 원문을 내보내지 않는다.
     rewriteError: r.rewriteError ? (LOOPBACK_ONLY ? r.rewriteError : "질의 재작성을 쓸 수 없습니다") : null,
     hybrid: r.hybrid ?? null,
-    // rewriteError 와 같은 경계 — 사유에 OLLAMA_HOST 가 들어간다.
+    // rewriteError 와 같은 경계.
     hybridError: r.hybridError ? (LOOPBACK_ONLY ? r.hybridError : "임베딩을 쓸 수 없습니다") : null,
     // 임베딩을 얼마나 기다렸고 몇 ms 걸렸나. budgetMs 가 null 이면 부르지 않았다(준비 안 됨). 40단계 · H2
     embed: r.embed ? { elapsedMs: r.embed.elapsedMs, budgetMs: r.embed.budgetMs } : null,
@@ -439,7 +436,7 @@ async function computeColor(query) {
     input: { hex: input.hex, from: input.from, label: input.label, wordId: input.wordId ?? null, nearest },
     partners,
     structures,
-    // 이름표만 싣고 model·error 키는 안 싣는다 — 이 응답에는 Ollama 가 닿지 않는다(S35-G4 가 그 흔적을 잰다).
+    // 이름표만 싣고 model·error 키는 안 싣는다 — 이 응답에는 LLM 이 닿지 않는다(S35-G4 가 그 흔적을 잰다).
     finishes: { assignments: finishes.assignments, names: FINISH_NAMES(), from: finishes.from },
     elapsedMs: Date.now() - started,
   };
@@ -570,7 +567,7 @@ async function computeCharacter(query) {
       from: parsed.from,
       model: parsed.model ?? null,
       elapsedMs: parsed.elapsedMs ?? null,
-      // /api/expand 와 같은 경계 — 사유에 OLLAMA_HOST 가 들어간다.
+      // /api/expand 와 같은 경계 — 사유에 API 상태 코드·키 문제가 들어간다.
       error: parsed.error ? (LOOPBACK_ONLY ? parsed.error : "설명 읽기를 쓸 수 없습니다") : null,
     },
     palette: { id: pair.id, name: pair.name, from: hit ? "search" : "fallback", route: r.route, confident: r.confident === true },
@@ -684,18 +681,16 @@ function handleConversations(res, params) {
 
 async function handleStatus(res) {
   pipeline.reloadIfChanged();
-  // refresh 는 확인만 한다 — 요청이 프로세스 기동을 유발하지 않는다(S3-G5).
-  const ollama = await refreshOllama();
+  // LLM 은 키가 있는지만 본다 — 네트워크를 안 탄다.
+  const llm = await refreshLlm();
   // 임베딩도 확인만 한다 — 쓸 수 없는 상태면 TTL 마다 다시 시도해 살아난 것을 알아챈다(리뷰 지적).
   const embed = await refreshEmbeddings();
   sendJson(res, 200, {
-    stage: maxStage(ollama.state, embed.state),
+    stage: maxStage(llm.state, embed.state),
     corpus: pipeline.palettes.length,
     diagnostics: pipeline.diagnostics.length,
-    ollama: LOOPBACK_ONLY
-      ? ollama
-      : { state: ollama.state, startedByUs: ollama.startedByUs },
-    // 같은 경계. 모델명·호스트가 들어간 사유는 루프백에서만.
+    llm: LOOPBACK_ONLY ? llm : { state: llm.state },
+    // 같은 경계. 모델명·사유는 루프백에서만.
     embed: LOOPBACK_ONLY ? embed : { state: embed.state, count: embed.count },
     // 코퍼스 재적재 상태(27단계). 사유에 파일 경로가 들어가므로 같은 경계.
     corpus: LOOPBACK_ONLY
@@ -754,9 +749,8 @@ async function handleExpand(res, params) {
    * **둘을 나란히 부른다.** 구조 선택과 재질 배정은 서로의 결과를 안 쓴다 — 순서대로 부르면
    * 지연이 **합**이 되어 펼치기가 두 배로 느려진다. S17-G10 이 직렬화를 막는다.
    *
-   * 진짜 Ollama 는 모델 하나를 두 요청이 나눠 쓰므로 내부적으로 줄을 설 수 있다. 그러면 이
-   * 병렬이 벽시계 이득을 못 낸다 — 우리가 통제하는 것은 **우리 코드가 불필요하게 기다리지
-   * 않는다**는 것까지다.
+   * Ollama 때는 모델 하나를 두 요청이 나눠 써 내부적으로 줄을 설 수 있었다. API 로 바뀐 뒤(41단계)에는
+   * 그런 줄이 없다 — 우리가 통제하는 것은 **우리 코드가 불필요하게 기다리지 않는다**는 것까지다.
    *
    * **한쪽 실패가 다른 쪽을 넘어뜨리지 않게 재질 쪽에 그물을 친다.**
    *
@@ -795,8 +789,8 @@ async function handleExpand(res, params) {
       matched: picked.matched ?? 0,
       model: picked.model ?? null,
       elapsedMs: picked.elapsedMs ?? null,
-      // /api/status·재작성과 같은 경계. 실패 사유에 OLLAMA_HOST 나 스폰 상세가 들어가므로
-      // 루프백 밖에 바인딩했다면 원문을 내보내지 않는다.
+      // /api/status·재작성과 같은 경계. 실패 사유에 API 상태 코드·키 문제가 들어가므로
+      // 루프백 밖이면 원문을 내보내지 않는다.
       error: picked.error ? (LOOPBACK_ONLY ? picked.error : "구조 선택을 쓸 수 없습니다") : null,
     },
     /*
@@ -866,13 +860,16 @@ const server = createServer((req, res) => {
     return sendJson(res, 400, { error: "잘못된 요청 경로" });
   }
 
-  try {
-    const result = dispatch(req, res, url);
-    // 비동기 핸들러의 거부도 같은 자리에서 받는다.
-    if (result && typeof result.catch === "function") result.catch((err) => failSafely(res, err));
-  } catch (err) {
-    failSafely(res, err);
-  }
+  // 요청마다 방문자 IP 를 흘린다 — 모델을 부르는 곳(llm.js · embed.js)이 그걸 보고 호출 한도를 센다(quota.js · 41단계).
+  runWithClient(clientOf(req), () => {
+    try {
+      const result = dispatch(req, res, url);
+      // 비동기 핸들러의 거부도 같은 자리에서 받는다.
+      if (result && typeof result.catch === "function") result.catch((err) => failSafely(res, err));
+    } catch (err) {
+      failSafely(res, err);
+    }
+  });
 });
 
 server.listen(PORT, HOST, () => {
@@ -882,36 +879,12 @@ server.listen(PORT, HOST, () => {
       "utf8",
     ),
   );
+  refreshLlm().then((s) =>
+    process.stdout.write(Buffer.from(`LLM ${s.state === "ready" ? "준비됨" : "쓸 수 없음"} — ${s.detail}\n`, "utf8")),
+  );
 
-  // 자동 기동을 껐어도 떠 있는 Ollama 가 있으면 임베딩은 쓴다. 없으면 unavailable 로 남는다.
-  if (process.env.OLLAMA_AUTOSTART === "0") prepareCorpusEmbeddings();
-
-  // 기동을 기다리지 않는다. Ollama 가 없거나 느려도 전문 검색은 이미 서비스 가능한 상태다.
-  if (process.env.OLLAMA_AUTOSTART !== "0") {
-    ensureRunning().then((s) => {
-      const mark = { ready: "준비됨", starting: "기동 중", unavailable: "쓸 수 없음" }[s.state] ?? s.state;
-      process.stdout.write(
-        Buffer.from(`Ollama ${mark} — ${s.detail}${s.startedByUs ? " (우리가 띄웠다)" : ""}\n`, "utf8"),
-      );
-
-      // 코퍼스 벡터를 미리 만든다. 기다리지 않는다 — 준비 전 질의는 3단계를 건너뛴다.
-      // **Ollama 기동에 실패해도 부른다.** 그래야 임베딩 상태가 "unknown" 에 갇히지 않고 "unavailable" 로
-      // 정직하게 남는다(리뷰 지적 · S26-G3). prepare 는 스스로 실패를 잡는다.
-      const embedsReady = prepareCorpusEmbeddings();
-
-      // 첫 재작성이 모델 적재를 기다리지 않게 미리 올려 둔다.
-      // 실측: 워밍업 없으면 첫 저신뢰 질의 3944ms, 있으면 556ms.
-      // 기다리지 않는다 — 워밍업이 끝나기 전에 들어온 질의는 그냥 조금 느릴 뿐이다.
-      // **임베딩 워밍업 뒤에 건다.** 둘이 같이 가면 LLM 적재(42초 [실측 2026-09-27])가 GPU 를 쥔 동안 임베딩 모델이
-      // 못 올라와, 검색 — 가장 흔한 질의 — 이 1분 가까이 임베딩 없이 돌았다(40단계 · H1).
-      if (s.state === "ready" && process.env.OLLAMA_WARMUP !== "0") {
-        embedsReady.then(() => warmUp()).then((w) => {
-          const line = w.skipped
-            ? `모델 워밍업 건너뜀 — ${w.skipped}`
-            : `모델 워밍업 완료 — ${w.model} ${w.elapsedMs}ms`;
-          process.stdout.write(Buffer.from(line + "\n", "utf8"));
-        });
-      }
-    });
-  }
+  // 코퍼스 벡터를 미리 만든다. 기다리지 않는다 — 준비 전 질의는 3단계를 건너뛰고, 임베딩이 없거나 느려도
+  // 전문 검색은 이미 서비스 가능한 상태다. prepare 는 스스로 실패를 잡는다.
+  // 40단계까지 여기 있던 Ollama 기동(ensureRunning)과 모델 워밍업은 41단계에서 뺐다 — 띄울 프로세스도, GPU 에 올릴 모델도 없다.
+  prepareCorpusEmbeddings();
 });

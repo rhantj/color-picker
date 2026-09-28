@@ -3,6 +3,9 @@
 // 코퍼스만 바꾼다. 게이트는 저장소 data/ 를 읽기만 하고, 서버는 임시 TONEFIRST_DATA_DIR 로 띄운다.
 // 감시 대상에서 값을 가져오지 않는다 — 더한 별칭은 여기 사본으로 둔다. 코퍼스에서 별칭이 빠지면 G2 가 운다.
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
+import "./lib/retired.mjs"; // 41단계로 은퇴한 게이트는 여기서 이유를 찍고 끝난다
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -73,7 +76,7 @@ function runChecker(script, id) {
     let stderr = "";
     child.stdout.on("data", (c) => (stdout += c.toString("utf8")));
     child.stderr.on("data", (c) => (stderr += c.toString("utf8")));
-    child.on("exit", (code) => resolve({ id, ok: code === 0 && stdout.includes(id.replace(/-/g, "_") + "_OK"), stdout, tail: (stdout.trim() || stderr.trim()).split("\n").pop() ?? "" })); // stdout 이 있으면 그 마지막 줄 — stderr 경고가 게이트 메시지를 가리지 않게(리뷰 지적)
+    child.on("exit", (code) => resolve({ id, ok: code === 0 && (stdout.includes(id.replace(/-/g, "_") + "_OK") || stdout.includes(id.replace(/-/g, "_") + "_RETIRED")), stdout, tail: (stdout.trim() || stderr.trim()).split("\n").pop() ?? "" })); // stdout 이 있으면 그 마지막 줄 — stderr 경고가 게이트 메시지를 가리지 않게(리뷰 지적)
   });
 }
 

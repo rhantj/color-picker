@@ -2,7 +2,9 @@
 // 1단계 완료 조건 검사기. GATES.md 의 CHECK 가 이 스크립트를 게이트 id 로 부른다.
 //   node scripts/check-stage1.mjs S1-G2
 
-import { existsSync } from "node:fs";
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
+import { readFileSync } from "node:fs";
 import { createSearcher, loadPalettes } from "../src/palettes.js";
 
 const out = (line = "") => process.stdout.write(Buffer.from(line + "\n", "utf8"));
@@ -73,8 +75,19 @@ const gates = {
     return leaked.length ? leaked.join(" / ") : null;
   },
 
+  // 41단계 — 의존성 0 에서 "Claude SDK 하나" 로 바뀌었다(대표 결정 2026-09-29 · 스펙 Q1). 그 하나 말고는 늘지 않는다.
   "S1-G4"() {
-    return existsSync(new URL("../node_modules", import.meta.url)) ? "node_modules 가 생겼다" : null;
+    let pkg;
+    try {
+      pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    } catch (err) {
+      return `package.json 을 못 읽는다: ${err.message}`;
+    }
+    const deps = Object.keys(pkg.dependencies ?? {});
+    const dev = Object.keys(pkg.devDependencies ?? {});
+    if (deps.length !== 1 || deps[0] !== "@anthropic-ai/sdk") return `dependencies 가 @anthropic-ai/sdk 하나가 아니다: ${deps.join(", ") || "(없음)"}`;
+    if (dev.length) return `devDependencies 가 생겼다: ${dev.join(", ")}`;
+    return null;
   },
 };
 

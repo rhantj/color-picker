@@ -8,6 +8,9 @@
 // 적재 시점에 읽고 상태를 모듈 변수에 든다. 상황마다 자식 프로세스를 띄워 환경변수를 먼저 세운다
 // (check-stage25 와 같은 모양, 같은 이유).
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
+import "./lib/retired.mjs"; // 41단계로 은퇴한 게이트는 여기서 이유를 찍고 끝난다
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdtempSync, readFileSync } from "node:fs";
@@ -333,7 +336,8 @@ say({ state: st.state, detail: st.detail, qv: q.vector, qerr: q.error, sims: sim
     // 1. 죽은 호스트
     const gone = await runChild(code, { OLLAMA_HOST: dead });
     if (gone.state !== "unavailable") bad.push(`죽은 호스트인데 상태가 ${gone.state}`);
-    if (!String(gone.detail).includes(dead)) bad.push(`사유에 호스트가 없다: "${gone.detail}"`);
+    // 41단계 — 닿지 않는 가짜는 "키 없음" 이다(ollama-shim.mjs). 사유가 그것을 구체적으로 말해야 한다.
+    if (!/VOYAGE_API_KEY/.test(String(gone.detail))) bad.push(`사유가 무엇이 없는지 말하지 않는다: "${gone.detail}"`);
     if (gone.qv !== null || typeof gone.qerr !== "string") bad.push("죽은 호스트에서 질의 벡터가 null/사유가 아니다");
     if (gone.sims !== 0) bad.push("준비 안 됐는데 유사도가 나온다");
     if (gone.stage !== 1 || gone.top !== "pair-10") bad.push(`임베딩 없이 1단계가 깨졌다: stage=${gone.stage} top=${gone.top}`);
@@ -491,7 +495,8 @@ say({ first: first.state, early: early.state, late: late.state, stage: r.stage, 
         stub.set({ embedDelayMs: 3000 });
         // 짧은 예산에 걸려야 사유가 남는다 — 어절 둘 이상 확신 질의(40단계 H2 뒤 짧은 예산은 여기에만 남는다)
         const r = await search(get, "느와르 포스터 만들건데 고급스러운 빨강");
-        if (typeof r.hybridError !== "string" || !r.hybridError.includes(stub.host)) bad.push(`루프백인데 원문이 아니다: ${r.hybridError}`);
+        // 41단계 — 원문은 이제 호스트가 아니라 "Voyage API ..." 로 시작한다.
+        if (typeof r.hybridError !== "string" || !/Voyage API/.test(r.hybridError)) bad.push(`루프백인데 원문이 아니다: ${r.hybridError}`);
         const st = await (await get("/api/status")).json();
         if (typeof st.embed?.detail !== "string") bad.push("루프백인데 /api/status 의 embed.detail 이 없다");
       });
@@ -504,7 +509,7 @@ say({ first: first.state, early: early.state, late: late.state, stage: r.stage, 
       const get = (p) => fetch(`http://127.0.0.1:4345${p}`);
       const r = await (await get(`/api/search?q=${encodeURIComponent("zzqq 없는말")}`)).json();
       if (typeof r.hybridError !== "string") bad.push(`루프백 밖에서 hybridError 가 문자열이 아니다 (${JSON.stringify(r.hybridError)})`);
-      else if (r.hybridError.includes(dead)) bad.push(`루프백 밖인데 원문이 샌다: ${r.hybridError}`);
+      else if (r.hybridError.includes(dead) || /Voyage|VOYAGE/.test(r.hybridError)) bad.push(`루프백 밖인데 원문이 샌다: ${r.hybridError}`);
       const st = await (await get("/api/status")).json();
       if (st.embed?.detail !== undefined || st.embed?.model !== undefined) bad.push("루프백 밖인데 embed.detail/model 이 나간다");
       if (st.embed?.state !== "unavailable") bad.push(`상태는 나가야 한다: ${st.embed?.state}`);

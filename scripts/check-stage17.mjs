@@ -14,6 +14,8 @@
 
 // 서버마다 빈 임시 데이터 폴더를 준다(27단계). 임베딩 캐시가 var/ 에 남게 되면서 게이트가 저장소 var/ 를
 // 더럽히게 됐다(리뷰 지적). 명시적으로 넘긴 TONEFIRST_DATA_DIR 이 있으면 그것이 이긴다(뒤의 ...env).
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import { attachOllamaStub } from "./lib/ollama-shim.mjs";
 import { mkdtempSync as gateMkdtemp } from "node:fs";
 import { tmpdir as gateTmpdir } from "node:os";
 import { join as gateJoin } from "node:path";
@@ -144,7 +146,8 @@ function stubOllama(initial = {}) {
  */
 async function withStub(initial, fn) {
   const stub = await stubOllama(initial);
-  process.env.OLLAMA_HOST = `127.0.0.1:${stub.port}`;
+  // 41단계 — 이 프로세스 안의 번역기를 이 가짜에 붙인다(키·주소를 넣는다). 모듈은 이제 Claude API 를 부른다.
+  await attachOllamaStub(`127.0.0.1:${stub.port}`);
   try {
     const mod = await import("../src/finish.js");
     return await fn(mod, stub);
@@ -160,7 +163,8 @@ async function withoutOllama(fn) {
   const dead = probe.port;
   probe.close();
   await new Promise((r) => setTimeout(r, 30));
-  process.env.OLLAMA_HOST = `127.0.0.1:${dead}`;
+  // 41단계 — 닿지 않는 가짜는 "키 없음" 이다(ollama-shim.mjs 3번).
+  await attachOllamaStub(`127.0.0.1:${dead}`);
   const mod = await import("../src/finish.js");
   return fn(mod);
 }
@@ -298,8 +302,9 @@ const GATES = {
      * "쓸 수 있는 로컬 모델이 없다" 로 바뀐다. **결과는 같고 진단만 틀린다** — 사용자는 모델을
      * 받으러 가지만 실제 문제는 Ollama 가 안 떠 있는 것이다. 틀린 진단은 침묵보다 나쁘다.
      */
-    if (!/Ollama 를 쓸 수 없다/.test(got.error ?? "")) {
-      bad.push(`사유가 Ollama 를 가리키지 않는다 — ${got.error}`);
+    // 41단계 — 모델이 없다는 것은 이제 "Claude 키가 없다" 다.
+    if (!/Claude 를 쓸 수 없다/.test(got.error ?? "")) {
+      bad.push(`사유가 LLM 없음을 가리키지 않는다 — ${got.error}`);
     }
     if (got.matched !== 0) bad.push(`matched 가 ${got.matched}`);
     if (!sameTable(got.assignments, EXPECTED_FALLBACK)) {

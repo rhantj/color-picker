@@ -1,6 +1,7 @@
 # Color Picker
 
-로컬 LLM 과 전문 검색(BM25)으로 **색 조합을 추천하고 배색을 진단하는** 실험 사이트.
+LLM(Claude API)·임베딩(Voyage API)과 전문 검색(BM25)으로 **색 조합을 추천하고 배색을 진단하는** 실험 사이트.
+40단계까지는 로컬 Ollama 였고, 41단계에서 Vercel 배포를 위해 API 로 옮겼다(`docs/superpowers/specs/2026-09-29-claude-voyage-api-design.md`).
 
 `docs/com/rag-is-simpler-than-you-think.md` 의 주장 — *BM25 + 질의 재작성이면 대부분 충분하고
 벡터DB는 과잉이다* — 를 실제로 시험해 보려고 만들었다.
@@ -8,11 +9,13 @@
 ## 돌리기
 
 ```bash
+npm install
 node --env-file-if-exists=.env server.js
 ```
 
-`http://127.0.0.1:4173`. **의존성 0개다** — `npm install` 이 필요 없다. Node 24, ESM.
-`.env` 는 없어도 된다. LangSmith 로 판정과 입출력을 보려면 `.env.example` 을 `.env` 로 복사해 키를 넣는다.
+`http://127.0.0.1:4173`. 의존성은 **`@anthropic-ai/sdk` 하나**다(41단계 — 그 전에는 0개였다). Node 24, ESM.
+`.env` 는 없어도 된다 — 키가 없으면 LLM·임베딩 없이 전문 검색(1단계)으로 돈다. `.env.example` 을 `.env` 로 복사해
+`ANTHROPIC_API_KEY`·`VOYAGE_API_KEY`(와 LangSmith 키)를 넣는다. **질의가 Anthropic·Voyage 로 나간다.**
 
 ## 화면
 
@@ -62,9 +65,9 @@ node --env-file-if-exists=.env server.js
 |---|---|
 | 검색 | `src/tokenize.js`(어절+2-gram) · `src/bm25.js` · `src/stopwords.js` · `src/vocabulary.js` |
 | 코퍼스 | `src/palettes.js` · `src/diagnostics.js` · `data/*.json` |
-| LLM | `src/ollama.js`(수명주기) · `src/rewrite.js`(의도+재작성) · `src/structure.js`(구조 선택) · `src/finish.js`(재질 배정) · `src/query.js`(빈 질의 판정 — 서식 문자를 지운다) |
+| LLM | `src/llm.js`(Claude API 호출 한 곳 · 구조화 출력) · `src/quota.js`(IP 당 호출 한도) · `src/rewrite.js`(의도+재작성) · `src/structure.js`(구조 선택) · `src/finish.js`(재질 배정) · `src/query.js`(빈 질의 판정 — 서식 문자를 지운다) |
 | 대화 | `src/route.js`(어휘표 라우터 · 순수) · `src/chat.js`(되묻기 상태 기계) · `src/trace.js`(`var/traces.jsonl` + LangSmith REST) |
-| 임베딩 | `src/embed.js`(bge-m3 벡터 · 준비 · 유사도 · **내용 해시 캐시** → `var/embeddings.json`) · `src/hybrid.js`(RRF 결합 · 동의 · 문턱, 순수 함수) |
+| 임베딩 | `src/embed.js`(Voyage 벡터 · 문서/질의 구분 · 준비 · 유사도 · **내용 해시 캐시** → `var/embeddings.json`) · `src/hybrid.js`(RRF 결합 · 동의 · 문턱, 순수 함수) |
 | 코퍼스 자리 | `src/corpus-paths.js`(`TONEFIRST_CORPUS_DIR` 오버라이드 한 곳). 파이프라인이 요청 때 2초 TTL 로 파일 시각을 보고 바뀌었으면 다시 읽는다(27단계) |
 | 색 파생 | `src/expand.js`(씨앗 2색 → 배색 구조 8가지. HSL 연산만, LLM 안 닿음) · `src/seeds.js`(씨앗 풀 적재) · `src/from-color.js`(색 하나 → 배색사전 짝 · 구조 8가지. 입력 해석과 거리 함수) |
 | 재질 | `src/material.js`(역할색 → PBR 머티리얼. 수치는 여기 한 곳) · `data/finishes.json`(재질 4개, 문자열만) |
@@ -74,22 +77,22 @@ node --env-file-if-exists=.env server.js
 | 서버 | `server.js` |
 | 면적 | `public/ratio.js`(2색 규칙 · 3색 이상 균등 · 슬라이더 재배분) |
 | 화면 | `public/` |
-| 게이트 | `GATES.md` + `scripts/check-stage{1..40}.mjs` |
+| 게이트 | `GATES.md` + `scripts/check-stage{1..41}.mjs` |
 
-## 게이트 267개
+## 게이트 276개 (은퇴 19)
 
 ```bash
 node scripts/check-stage1.mjs S1-G1
 ```
 
-`GATES.md` 에 267개가 전부 있고 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
+`GATES.md` 에 276개가 전부 있고(41단계로 은퇴한 19개는 `_RETIRED` 를 찍는다) 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
 **게이트는 만들 때마다 일부러 망가뜨려 확인했다** — 통과하는 게이트보다 고장을 잡는 게이트가 목적이다.
 
 | 단계 | 수 | 무엇을 지키나 |
 |---|---|---|
-| S1 | 4 | 코퍼스 무결성 · 검색 정확도 · 저신뢰 판정 · 의존성 0 |
+| S1 | 4 | 코퍼스 무결성 · 검색 정확도 · 저신뢰 판정 · 의존성은 Claude SDK 하나 |
 | S2 | 8 | 서버·화면·경로 이탈·대비·면적 규칙·외부 폰트 없음 |
-| S3 | 10 | Ollama 수명주기 · 의도 분기 · LLM 미호출 · 붙여쓰기 복원 · 워밍업 |
+| S3 | 10 | ~~Ollama 수명주기 · 워밍업~~(41단계 은퇴 7개) · 의도 분기 · LLM 미호출 · 붙여쓰기 복원 |
 | S4 | 7 | 상태 저장 · 클라이언트 색 불신 · 입력 검증 · CSRF |
 | S5 | 6 | 면적 조정 · 범위 검증 · 재저장 시 조정 보존 |
 | S6 | 8 | 내보내기 형식 · 주석 주입 방어 · 양방향 문자 제거 · 프로토타입 체인 크래시 방어 |
@@ -125,18 +128,21 @@ node scripts/check-stage1.mjs S1-G1
 | S36 | 5 | **헥스 씨앗 저장 왕복 — 가짜 색 무시·재계산·덮어쓰기·엔진 id** · 씨앗 풀 쌍 저장 · `/api/color` 재질 기본 배정(LLM 아님) · 화면(저장 버튼·토글·고르개·탭 전환 초기화) · 회귀 44 |
 | S39 | 10 | **탭 셋을 지우고 채팅창 하나 — `/api/chat` 라우터 · 되묻기 1회 · 대화 10턴 상한 · LangSmith 트레이스(키 없음/있음)** · 로컬 트레이스 기록 · 탭 소멸(`tabStore`·`asTab`·`applyTab`·`tab=` 없음) · 바로잡기 · 회귀(S2·S4·S22·S31·S34·S35·S36) |
 | S40 | 9 | **임베딩이 조용히 죽어도 틀린 확신을 안 낸다** — 기동 때 임베딩 모델을 먼저 올림 · 700ms 예산은 기다림만 멈추고 요청은 안 끊음 · 어절 하나짜리 BM25 확신은 임베딩을 기다림 · 트레이스·LangSmith 에 `embed` 런 · BM25 증거가 없으면 1위가 튀어나와야 확신("안녕" 확신 안 함) · 종족 낱말만 있으면 캐릭터·추천을 되묻기 · 회귀(S3·S22·S26~30·S34·S39) |
+| S41 | 9 | **모델을 Claude API · Voyage API 로** — Ollama 흔적 0 · 요청 모양(모델·스키마·input_type·키) · 키 없으면 1단계 · 안 잰 기준값으로 확신 안 함 · Vercel 감지 · IP 당 호출 한도 · 은퇴 기록 |
 
 ## 환경변수
 
-`PORT` `HOST` `OLLAMA_HOST` `OLLAMA_BIN` `OLLAMA_AUTOSTART=0` `OLLAMA_WARMUP=0`
-`OLLAMA_MODEL` `REWRITE_TIMEOUT_MS` `STRUCTURE_TIMEOUT_MS` `FINISH_TIMEOUT_MS` `TONEFIRST_DATA_DIR`
-`OLLAMA_EMBED_MODEL`(기본 `bge-m3`) `EMBED_TIMEOUT_MS` `EMBED_PREPARE=0`(코퍼스 벡터화 건너뜀)
+`PORT` `HOST` `ANTHROPIC_API_KEY` `CLAUDE_MODEL`(기본 `claude-haiku-4-5`) `LLM_MAX_RETRIES`(기본 1)
+`VOYAGE_API_KEY` `VOYAGE_MODEL`(기본 `voyage-4`) `LLM_RATE_PER_MIN`(IP 당 1분 호출 한도, 기본 30) `LLM_RATE_GLOBAL_PER_MIN`(기본 200)
+`REWRITE_TIMEOUT_MS` `STRUCTURE_TIMEOUT_MS` `FINISH_TIMEOUT_MS` `DESCRIBE_TIMEOUT_MS`(기본 10초) `TONEFIRST_DATA_DIR`(Vercel 에서는 기본 `/tmp/tonefirst`)
+`EMBED_TIMEOUT_MS` `EMBED_PREPARE=0`(코퍼스 벡터화 건너뜀) — `VERCEL` 은 Vercel 이 넣는다(루프백으로 안 친다 · 저장 폴더 /tmp)
 `TONEFIRST_CORPUS_DIR`(검색 코퍼스 둘의 자리, 기본 `data/`) — 임베딩 캐시 `embeddings.json` 은 `TONEFIRST_DATA_DIR`(기본 `var/`) 에 남는다
 
 ## 알려진 한계 (의도적)
 
 - **인증이 없다.** 대화·저장·내보내기가 무인증 GET 이고 루프백 바인딩이 유일한 방어다.
-  **로컬 단일 사용자 전제이므로 공개된 곳에 올리지 않는다.**
+  로컬 단일 사용자 전제로 만들었다. **Vercel 배포는 이 전제와 부딪힌다** — 방문자끼리 저장 목록·대화 기록이 서로
+  보이고 지워질 수 있다(Vercel 에서는 /tmp 라 서버가 바뀌면 사라지기도 한다). 공개 전에 정할 일이다(`docs/com/open-work.md` I 절).
 - 저신뢰 질의가 동시에 오면 LLM 을 각각 부른다(단일 비행 없음).
 - 대화 경계가 세션이라 같은 대화를 두 탭에서 열면 마지막 쓰기가 이긴다.
 

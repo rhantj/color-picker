@@ -4,6 +4,9 @@
 // 다시 올리는 값(1855·2198ms)을 치르고, 확신 경로 예산 700ms 에 걸려 3단계를 건너뛴다. 웜은 39~83ms.
 // 감시 대상에서 값을 가져오지 않는다 — keep_alive 는 여기 사본이다. rewrite.js 의 채팅 워밍업과 같은 값이어야 한다.
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
+import "./lib/retired.mjs"; // 41단계로 은퇴한 게이트는 여기서 이유를 찍고 끝난다
 import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { createServer } from "node:http";
@@ -161,7 +164,7 @@ function runStage26(id) {
     let stderr = "";
     child.stdout.on("data", (c) => (stdout += c.toString("utf8")));
     child.stderr.on("data", (c) => (stderr += c.toString("utf8")));
-    child.on("exit", (code) => resolve({ id, ok: code === 0 && stdout.includes(id.replace(/-/g, "_") + "_OK"), tail: (stdout.trim() || stderr.trim()).split("\n").pop() ?? "" })); // stdout 이 있으면 그 마지막 줄 — stderr 경고가 게이트 메시지를 가리지 않게(리뷰 지적)
+    child.on("exit", (code) => resolve({ id, ok: code === 0 && (stdout.includes(id.replace(/-/g, "_") + "_OK") || stdout.includes(id.replace(/-/g, "_") + "_RETIRED")), tail: (stdout.trim() || stderr.trim()).split("\n").pop() ?? "" })); // stdout 이 있으면 그 마지막 줄 — stderr 경고가 게이트 메시지를 가리지 않게(리뷰 지적)
   });
 }
 

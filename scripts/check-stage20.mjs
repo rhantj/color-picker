@@ -12,6 +12,8 @@
 // 그래서 **엔진마다 파일을 나누고 · 파일이 자기 엔진을 밝히고 · 필드 이름이 안 겹치게** 한다.
 // (`docs/com/open-work.md` 의 C4 가 이 게이트로 닫힌다.)
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

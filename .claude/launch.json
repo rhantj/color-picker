@@ -11,12 +11,12 @@
       "port": 4173
     },
     {
-      "name": "tonefirst-no-ollama",
+      "name": "tonefirst-no-keys",
       "runtimeExecutable": "node",
       "runtimeArgs": [
         "--env-file-if-exists=.env",
         "-e",
-        "process.env.PORT='4399';process.env.OLLAMA_AUTOSTART='0';process.env.OLLAMA_HOST='127.0.0.1:1';import('./server.js')"
+        "process.env.PORT='4399';process.env.ANTHROPIC_API_KEY='';process.env.VOYAGE_API_KEY='';import('./server.js')"
       ],
       "port": 4399
     }

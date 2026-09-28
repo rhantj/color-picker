@@ -3,19 +3,16 @@
 // **LLM 은 색에 닿지 않는다.** 모델이 고르는 것은 색 낱말 id(red·black …)뿐이고, 헥스는 src/color-words.js 가
 // 코퍼스에서 찾는다. 모델이 응답에 헥스를 실어 보내도 `parseDescription` 이 버린다 — 재질 배정(finish.js)과 같은 경계.
 //
-// **없어도 돈다.** Ollama 가 없거나 응답을 못 알아들으면 정규식 폴백 — 색 낱말 바로 뒤에 부위가 오는 것("빨간 머리")만
+// **없어도 돈다.** API 키가 없거나 호출이 실패하거나 응답을 못 알아들으면 정규식 폴백 — 색 낱말 바로 뒤에 부위가 오는 것("빨간 머리")만
 // 잡고 인상은 문장 전체다. 종족 낱말은 어느 길이든 표를 직접 대조한다(결정적).
 
-import { refresh } from "./ollama.js";
-import { pickModel } from "./rewrite.js";
+import { LlmError, chatJson, refresh } from "./llm.js";
 import { cleanQuery } from "./query.js";
 import { CHARACTER_ROLES } from "./character.js";
 import { findCreature, loadCharacterWords, loadCreatures } from "./color-words.js";
 
-const HOST = process.env.OLLAMA_HOST ?? "127.0.0.1:11434";
-const BASE = `http://${HOST}`;
 // 구조 선택·재질 배정과 같은 값을 독립적으로 적는다. 물러설 자리(정규식)가 분명하다.
-const TIMEOUT_MS = Number(process.env.DESCRIBE_TIMEOUT_MS ?? 20000);
+const TIMEOUT_MS = Number(process.env.DESCRIBE_TIMEOUT_MS ?? 10000);
 
 /** 인상 한 줄의 상한. 검색 질의로 들어가므로 길면 BM25 가 흐려진다. */
 export const IMPRESSION_MAX = 120;
@@ -95,7 +92,7 @@ const wordsTable = () => (cachedWords ??= loadCharacterWords());
 
 let matchers = null;
 
-/** Ollama 없이 쓰는 파서. 색 낱말 바로 뒤에 부위가 온 것만 잡는다. 먼저 나온 것이 이긴다. */
+/** LLM 없이 쓰는 파서. 색 낱말 바로 뒤에 부위가 온 것만 잡는다. 먼저 나온 것이 이긴다. */
 export function fallbackParse(query, words) {
   if (!matchers || matchers.words !== words) matchers = { words, ...buildMatchers(words) };
   const parts = emptyParts();
@@ -114,25 +111,26 @@ export function fallbackParse(query, words) {
   return { parts, impression: text };
 }
 
-async function callModel(model, words, query, signal) {
-  const res = await fetch(`${BASE}/api/chat`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    signal,
-    body: JSON.stringify({
-      model,
-      stream: false,
-      format: "json",
-      options: { temperature: 0.2, num_predict: 200 },
-      messages: [
-        { role: "system", content: systemPrompt(words) },
-        { role: "user", content: query },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error(`Ollama 가 ${res.status}`);
-  return (await res.json()).message?.content ?? "";
-}
+/** 구조화 출력 스키마. 부위마다 색 낱말 id 또는 null — 그래도 parseDescription 이 다시 거른다. */
+export const descriptionSchema = (words) => {
+  const colorIds = Object.keys(words.colorWords);
+  return {
+    type: "object",
+    properties: {
+      parts: {
+        type: "object",
+        properties: Object.fromEntries(
+          CHARACTER_ROLES.map((role) => [role, { anyOf: [{ type: "string", enum: colorIds }, { type: "null" }] }]),
+        ),
+        required: [...CHARACTER_ROLES],
+        additionalProperties: false,
+      },
+      impression: { type: "string" },
+    },
+    required: ["parts", "impression"],
+    additionalProperties: false,
+  };
+};
 
 /**
  * @param {string} query 캐릭터 외형 문장
@@ -147,15 +145,20 @@ export async function describe(query) {
   if (!text) return fallback(null);
 
   const state = await refresh();
-  if (state.state !== "ready") return fallback(`Ollama 를 쓸 수 없다 (${state.detail})`);
-  const model = pickModel(state.models);
-  if (!model) return fallback("쓸 수 있는 로컬 모델이 없다");
+  if (state.state !== "ready") return fallback(`Claude 를 쓸 수 없다 (${state.detail})`);
+  const { model } = state;
 
   const started = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const raw = await callModel(model, words, text, controller.signal);
+    const raw = await chatJson({
+      system: systemPrompt(words),
+      user: text,
+      schema: descriptionSchema(words),
+      timeoutMs: TIMEOUT_MS,
+      signal: controller.signal,
+    });
     const { parts, impression, matched } = parseDescription(raw, words, text);
     const elapsedMs = Date.now() - started;
     // 모델이 부위를 하나도 안 줬어도 인상은 썼을 수 있다 — 인상이 문장과 다르면 모델이 일한 것이다.
@@ -165,7 +168,7 @@ export async function describe(query) {
     for (const role of CHARACTER_ROLES) if (parts[role] === null && regex[role] !== null) parts[role] = regex[role];
     return { parts, creature, impression, from: "llm", model, elapsedMs };
   } catch (err) {
-    const reason = err.name === "AbortError" ? `${TIMEOUT_MS / 1000}초 안에 응답하지 않았다` : err.message;
+    const reason = err instanceof LlmError && err.kind === "abort" ? `${TIMEOUT_MS / 1000}초 안에 응답하지 않았다` : err.message;
     return fallback(reason, { model });
   } finally {
     clearTimeout(timer);

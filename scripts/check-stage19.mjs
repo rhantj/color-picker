@@ -11,6 +11,8 @@
 // `src/store.js` 규칙 4 가 그 경계를 이미 그어 뒀다 — "색은 코퍼스가 아는 사실이지만
 // 비율은 사용자의 판단이다". 재질 배정도 판단 쪽이다.
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

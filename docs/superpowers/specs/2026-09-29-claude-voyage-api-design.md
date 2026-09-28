@@ -1,0 +1,142 @@
+# 41단계 설계 — 모델을 Ollama 에서 Claude API · Voyage API 로 옮긴다
+
+> 상태: **확정 — Q1~Q3 추천대로(대표 2026-09-29).** 구현은 `stage-41-claude-voyage` 브랜치. 기준값 측정(§3)은 실제 키가 있어야 해서 남았다.
+> 결정 근거: 2026-09-29 대화. Vercel 배포를 하려다 "Vercel 에는 GPU 가 없어 Ollama 를 못 올린다" 에서 출발했고,
+> 집 PC 터널(A안)·GPU 클라우드(B안)를 거쳐 **외부 API(C안)** 로 확정했다.
+
+## 한 줄 요약
+
+검색어 다듬기 · 설명 읽기 · 구조 고르기 · 재질 고르기(대화 모델 4곳)는 **Claude Haiku 4.5** 가,
+문장을 벡터로 바꾸는 일(임베딩)은 **Voyage AI** 가 맡는다. 로컬과 Vercel 이 **같은 코드 · 같은 API** 를 쓴다.
+Ollama 는 코드에서 빠진다.
+
+## 무엇이 바뀌나 — 쉽게 말하면
+
+| 지금 | 바뀐 뒤 | 쉽게 말하면 |
+|---|---|---|
+| 내 PC 의 Ollama(`exaone`) 가 JSON 을 만든다 | Anthropic 서버의 Claude Haiku 4.5 가 만든다 | 모델이 남의 서버에서 돈을 받고 돈다 |
+| 내 PC 의 Ollama(`bge-m3`) 가 벡터를 만든다 | Voyage 서버의 `voyage-4` 계열이 만든다 | 같은 1024차원이지만 **점수 분포가 다르다** — 기준값을 다시 재야 한다 |
+| 서버가 뜰 때 `ollama serve` 를 띄우고 모델을 GPU 에 올린다 | 띄울 것도 올릴 것도 없다 | `ensureRunning`·워밍업·`keep_alive` 가 통째로 사라진다 |
+| 질의가 이 기계를 안 떠난다 | **질의가 Anthropic 과 Voyage 로 간다** | "로컬" 이라는 전제가 깨진다 — 화면 문구와 README 를 고친다 |
+| 모델 호출 비용 0 | 호출마다 돈이 든다 | 공개 사이트라 **남이 대표님 돈을 쓸 수 있다** — 막는 장치가 필요하다 |
+
+## 결정한 것 (대표 확정 · 2026-09-29)
+
+- 대화 모델: **Claude Haiku 4.5** (`claude-haiku-4-5`). 짧은 JSON 을 뱉는 일이라 가장 빠르고 싼 모델로 충분하다는 판단.
+- 임베딩: **Voyage AI**.
+- 로컬도 같은 API 를 쓴다. Ollama 와 둘 다 두는 안은 버렸다.
+
+## 대표 결정이 필요한 것
+
+| # | 질문 | 추천 | 이유 · 버린 대안 |
+|---|---|---|---|
+| Q1 | Claude 를 공식 SDK(`@anthropic-ai/sdk`)로 부를까, `fetch` 로 부를까 | **SDK** | 재시도(429·5xx)·타임아웃·오류 종류 구분을 SDK 가 해 준다. 대가는 **의존성 0개가 깨진다** — `package.json` 이 처음 생기고 `npm install` 이 필요해진다. Vercel 은 알아서 설치한다. `fetch` 는 의존성 0개를 지키지만 재시도를 직접 짜야 한다 |
+| Q2 | Voyage 모델: `voyage-4` 냐 `voyage-4-lite` 냐 | **둘 다 재 보고 고른다** | 코퍼스가 34건이라 비용 차이는 무시할 만하다. 결정은 한국어 23건 질의에서 **정답 1위 비율**로 한다 |
+| Q3 | 남이 API 비용을 태우는 것을 어떻게 막나 | **콘솔 지출 상한 + 코드의 IP별 제한** | ① Anthropic · Voyage 콘솔에서 월 지출 상한을 건다(대표님이 직접). 이게 진짜 안전장치다. ② 코드에서 IP 당 분당 N회 제한을 건다 — 다만 Vercel 은 서버가 여러 대로 나뉘어 **서버마다 따로 센다**, 그래서 보조 장치일 뿐이다 `[판단]` |
+
+## 설계
+
+### 1. 대화 모델 — `src/llm.js` (새 파일, `ollama.js` 자리)
+
+- 네 호출부(`rewrite` · `describe` · `finish` · `structure`)가 각자 `fetch(\`${BASE}/api/chat\`)` 하던 것을
+  **`llm.js` 의 함수 하나**(`chatJson({ system, user, schema, maxTokens, timeoutMs })`)로 모은다.
+- JSON 강제: Ollama 의 `format: "json"` 대신 **구조화 출력**(`output_config.format` 에 JSON 스키마)을 쓴다.
+  Haiku 4.5 가 지원한다 `[문헌: claude-api 스킬 shared/tool-use-concepts.md]`.
+  스키마를 걸어도 **기존 파서(`parseRewrite` 등)는 그대로 둔다** — 스키마는 모양을, 파서는 뜻(허용 id 인지 등)을 본다.
+- `temperature: 0.2` 는 그대로(Haiku 4.5 는 받는다). `max_tokens` 는 지금 120~200 → **512** 로 올린다.
+  한국어 JSON 이 잘리면 파싱 실패가 곧 기능 실패다. 짧게 끝나면 돈은 쓴 만큼만 낸다.
+- 타임아웃: `REWRITE_TIMEOUT_MS` 70초는 **로컬 모델을 GPU 에 올리는 시간(42초 `[실측]`)** 때문이었다. 이제 그런 일이 없다.
+  네 곳 모두 기본 **10초** `[판단]`. 환경변수 이름은 그대로 둔다.
+- 상태: Ollama 의 `{state, detail, models, startedByUs, host}` 대신
+  `{state: "ready" | "unavailable", detail, model}`. **키가 없으면 unavailable**, 있으면 ready.
+  실제 호출이 실패하면 그 호출만 실패하고 상태는 안 바꾼다(한 번 튄 429 로 사이트 전체를 1단계로 내리지 않는다).
+- `pickModel` · `:cloud` 거르기 · `exaone` 우선 · 워밍업(`warmUp`, `/api/generate`) 은 **지운다**.
+  모델은 `CLAUDE_MODEL` 환경변수(기본 `claude-haiku-4-5`) 하나로 정한다.
+- 프롬프트 캐싱은 안 쓴다. 시스템 프롬프트가 450~1,270자라 캐시 최소 길이에 한참 못 미친다 `[판단]`.
+
+### 2. 임베딩 — `src/embed.js` 를 Voyage 로
+
+- `POST https://api.voyageai.com/v1/embeddings`, 본문 `{ input, model, input_type }` `[문헌: docs.voyageai.com]`.
+  **공식 SDK 없이 `fetch`** 로 부른다 — 요청이 이것 하나뿐이다.
+- **`input_type` 을 나눈다.** 코퍼스는 `"document"`, 질의는 `"query"`. bge-m3 때는 둘을 같게 만들었다.
+  Voyage 는 둘을 다르게 만들어야 검색이 잘 된다고 안내한다. 이게 **점수 분포를 바꾸는 두 번째 이유**다.
+- 캐시(`var/embeddings.json`)는 그대로 쓴다. 키가 `sha1(모델 + 문장)` 이라 모델 이름이 바뀌면 알아서 다 새로 만든다.
+  캐시 키에 `input_type` 도 넣는다(문서용과 질의용 벡터가 다르므로).
+- `keep_alive` · 워밍업(`EMBED_WARMUP_TEXT`) 은 **지운다.** GPU 에 올릴 모델이 없다.
+- 실패 사유 판정 `reason()` 이 `"응답하지 않는다$"` 로 끝나는 문장에 기대던 숨은 결합(embed.js:229)은
+  **오류 종류 필드**로 바꾼다. 문장 끝 글자로 상태를 정하면 문구를 고치는 순간 조용히 깨진다.
+
+### 3. 기준값 — 다시 잰다 (이 단계에서 가장 중요한 것)
+
+bge-m3 에 맞춰 잰 숫자들이다. **Voyage 에서 그대로 쓰면 틀린 확신을 낸다** — 40단계가 막으려던 바로 그것이다.
+
+| 상수 | 지금 값 | 뜻 · 쉽게 말하면 | 다시 재는 법 |
+|---|---|---|---|
+| `COS_MIN` (hybrid.js:10) | 0.44 `[실측]` | 1위 문서의 유사도가 이 밑이면 "확신 못 함" | 23건 질의의 정답 1위 최솟값 |
+| `PROMINENCE_MIN` (hybrid.js:22) | 0.12 `[실측]` | 1위가 2위보다 이만큼 앞서야 확신 — 인사말("안녕") 을 거르는 값 | 잡담 · 일반 질의의 격차 분포 |
+| `AGREE_TOP` (hybrid.js:8) | 1 `[실측]` | 두 검색이 1위에서 합의해야 확신 | 거짓 확신 건수 |
+| `FAST_BUDGET_MS` (pipeline.js:42) | 700 `[실측]` | 확신 경로가 임베딩을 기다리는 한도 | **GPU 지연이 아니라 네트워크 지연**이 된다. 서울 ↔ Voyage 왕복을 잰다 |
+
+- **재기 전에는 임베딩 확신 경로를 닫는다.** 기준값에 `measured: false` 표시를 두고, false 면 임베딩으로는 확신하지 않는다
+  (검색은 하되 "확신 없음" 으로 다룬다). 틀린 확신보다 확신 없음이 낫다 — 40단계와 같은 원칙이다.
+- 재는 데는 **실제 API 호출과 대표님 키**가 필요하다. 23건 + 잡담 표본이라 비용은 몇 센트 수준 `[판단]`.
+
+### 4. 서버 · 화면
+
+- `server.js`: `ensureRunning` · 워밍업 사슬을 지운다. `/api/status` 의 `ollama` 필드는 `llm` 으로 바꾼다
+  (`{state, model}` — 루프백 밖에서는 `detail` 을 숨기는 규칙 그대로).
+  `maxStage` 는 뜻을 유지한다: 임베딩 ready → 4, LLM ready → 2, 아니면 1.
+- **Vercel 을 스스로 알아챈다.** `process.env.VERCEL` 이 있으면
+  - 루프백으로 치지 않는다(`LOOPBACK_ONLY = false`) — 내부 오류 문구를 방문자에게 안 보인다.
+  - 저장 폴더 기본값을 `/tmp/tonefirst` 로 한다. **여전히 서버가 바뀌면 사라진다** — 영구 저장은 이 단계 밖(아래 "하지 않는 것").
+- 화면: `ui.js` 의 `"로컬 · Ollama 준비됨"` 류 문구, 세 HTML 의 `runtime-where">로컬`, history.html 의 "로컬 LLM" 을
+  **"Claude · Voyage"** 기준으로 고친다. `rewrite.model` 표시는 그대로(값이 `claude-haiku-4-5` 가 된다).
+- IP 별 제한(Q3 ②): 모델을 부르는 요청(`/api/search` 저신뢰 경로 · `/api/character` · `/api/expand`)에만 건다.
+  넘으면 **모델 없이** 1단계 결과를 준다 — 오류로 막지 않는다.
+
+### 5. 게이트
+
+- **가짜 서버는 번역기로 살린다(구현 때 바꿈).** 게이트 9개가 저마다 가진 `stubOllama()` 를 다시 짜는 대신
+  `scripts/lib/ollama-shim.mjs` 가 서버의 Claude·Voyage 요청을 가짜 Ollama 형식으로 번역한다 — 게이트가 재던 서버 동작을
+  그대로 잰다. 41단계 게이트는 요청 본문을 봐야 해서 `scripts/lib/stub-apis.mjs`(가짜 Anthropic·Voyage)를 따로 쓴다.
+  번역기는 게이트 프로세스에서 **키를 비운다** — 셸에 진짜 키가 있어도 게이트가 유료 API 를 안 부른다.
+- **진짜 Ollama 가 있어야 돌던 게이트는 은퇴시킨다.** S3-G2·G3·G6·G7·G10, S25 의 기동 검사, S26-G1/G2, S28-G1,
+  S29-G3, S30-G2/G3, S40-G6. `GATES.md` 에서 지우지 않고 **"41단계로 대체 — 이유"** 를 적는다.
+  Ollama 문자열·`startedByUs`·`keep_alive`·`bge-m3` 를 확인하던 단언도 같은 방식으로 바꾼다.
+- 41단계 게이트(초안 — 검사기를 구현보다 먼저 쓴다):
+
+| id | 확인하는 것 | 쉽게 말하면 |
+|---|---|---|
+| S41-G1 | `src/`·`server.js` 에 `/api/chat`·`/api/embed`·`ollama.js` 참조가 없다 | Ollama 가 정말 빠졌다 |
+| S41-G2 | 네 호출부가 가짜 Anthropic 에 `model: claude-haiku-4-5` · JSON 스키마를 담아 보내고, 답을 기존 파서가 그대로 읽는다 | 모델만 바뀌고 결과 모양은 같다 |
+| S41-G3 | 코퍼스는 `input_type: document`, 질의는 `query` 로 가짜 Voyage 에 간다. 캐시 키가 모델 · 종류별로 갈린다 | 벡터를 올바른 종류로 만든다 |
+| S41-G4 | 키가 없으면 1단계로 돌고 죽지 않는다. 루프백 밖에서는 사유 문구가 숨는다 | 키를 빼먹어도 사이트는 뜬다 |
+| S41-G5 | 기준값이 `measured: false` 면 임베딩만으로는 확신하지 않는다 | 안 잰 숫자로 확신하지 않는다 |
+| S41-G6 | 화면 · `/api/status` 에 "Ollama" 가 안 나온다 | 거짓 문구가 없다 |
+| S41-G7 | `VERCEL=1` 이면 루프백 아님 · 저장 폴더 `/tmp` | Vercel 에서 설정 없이 맞게 돈다 |
+| S41-G8 | IP 제한을 넘으면 모델을 안 부르고 1단계 결과를 준다 | 남이 돈을 태우지 못한다(한 서버 안에서는) |
+| S41-G9 | 은퇴한 게이트가 `GATES.md` 에 이유 · `_RETIRED` 와 함께 있다 | 무엇이 왜 빠졌는지 남는다. 회귀 자체는 전체 실행으로 본다(게이트 하나로 276개를 돌리면 15분이 넘는다) |
+
+- 실제 API 를 부르는 확인(기준값 측정 · 배포 사이트 스모크)은 **게이트가 아니라 측정 스크립트**로 둔다.
+  게이트가 돌 때마다 돈이 나가면 안 된다.
+
+## 하지 않는 것
+
+- **영구 저장.** 저장 목록 · 대화 기록 · 추적 로그는 Vercel 에서 여전히 `/tmp` 라 사라진다. 따로 정한다(Vercel 저장소 · 외부 DB).
+- 모델 고르기 화면, 스트리밍 답변.
+- 로컬 Ollama 로 되돌리는 스위치. 필요해지면 `llm.js` 뒤에 다시 붙인다.
+
+## 대표님이 직접 하실 것
+
+1. Anthropic 콘솔에서 API 키 발급 · **월 지출 상한** 설정.
+2. Voyage AI 에서 API 키 발급 · 지출 상한 설정.
+3. 두 키를 로컬 `.env` 와 Vercel 환경변수(`ANTHROPIC_API_KEY`, `VOYAGE_API_KEY`)에 넣기.
+4. (선택) Vercel 함수 위치를 서울(`icn1`)로 — 서울 ↔ 미국 API 왕복이 늘어날지 줄어들지는 재 보고 정한다 `[판단]`.
+
+## 순서
+
+1. Q1~Q3 결정 → 이 문서 확정
+2. `llm.js` · 네 호출부 → `embed.js` → `server.js` · 화면 → IP 제한
+3. `GATES.md` 41단계 절 + `scripts/check-stage41.mjs`, 기존 게이트의 가짜 서버 교체 · 은퇴 표시 → 회귀 전부
+4. 실제 키로 기준값 측정 → 상수 교체 · `measured: true`
+5. 세션 재개 문서 · `open-work.md` → 대표 확인 뒤 커밋 · 머지 · 푸시 → Vercel 재배포 스모크

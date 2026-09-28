@@ -1,8 +1,16 @@
 // 3단계의 순수한 부분 — BM25 결과와 임베딩 유사도를 **어떻게 합치고 어떻게 판정하는가**.
-// Ollama 를 모른다. 그래서 스텁 벡터로 결정적으로 검사할 수 있다(S26-G5).
+// 임베딩 API 를 모른다. 그래서 스텁 벡터로 결정적으로 검사할 수 있다(S26-G5).
 //
 // 왜 RRF(Reciprocal Rank Fusion)인가 — 두 점수의 단위가 다르다. BM25 는 0~수십, 코사인은 -1~1.
 // 값을 섞으면 어느 한쪽 단위가 이긴다. 순위만 쓰면 단위가 사라진다. k=60 은 원 논문의 값이다 [문헌].
+
+/**
+ * **아래 기준값들을 잰 임베딩 모델.** 지금 쓰는 모델(embed.js 의 EMBED_MODEL)과 다르면 임베딩으로는 확신하지 않는다(41단계).
+ * 모델이 바뀌면 코사인 점수의 분포가 바뀐다 — bge-m3 의 0.44 가 Voyage 에서 무슨 뜻인지 아무도 모른다. 안 잰 숫자로
+ * 확신을 내면 40단계가 막은 "틀린 확신" 이 다시 난다. 그래서 재기 전에는 임베딩이 **순서만** 돕고 확신은 못 준다.
+ * Voyage 로 다시 재면 COS_MIN · PROMINENCE_MIN · AGREE_TOP 을 고치고 이 이름을 그 모델로 바꾼다.
+ */
+export const THRESHOLDS_MEASURED_ON = "bge-m3";
 
 /** 동의 범위 — BM25 1위가 임베딩 상위 몇 안에 있어야 "같은 답" 으로 보나. [실측] 3 이면 거짓 확신 3건이 남고, 1 이면 정답 1단계 8건이 전부 임베딩 1위라 안 흔들린다 */
 export const AGREE_TOP = 1;
@@ -83,11 +91,12 @@ export function prominence(cos, sims) {
 /**
  * 결합 1위의 코퍼스가 route, 그 코사인이 문턱 이상이면 확신.
  * `lexical: false`(BM25 에 어절 매치가 하나도 없음)이면 1위가 코퍼스 평균에서 PROMINENCE_MIN 이상 튀어나와야 한다.
- * @param {{sims?: {cosine:number}[], lexical?: boolean}} [options] 옵션이 없으면 옛 동작(문턱만)
+ * `trusted: false`(기준값을 이 모델로 안 잼)이면 순서는 정하되 확신하지 않는다.
+ * @param {{sims?: {cosine:number}[], lexical?: boolean, trusted?: boolean}} [options] 옵션이 없으면 옛 동작(문턱만)
  */
-export function decide(fused, { sims = [], lexical = true } = {}) {
+export function decide(fused, { sims = [], lexical = true, trusted = true } = {}) {
   const top = fused[0] ?? null;
   if (!top) return { route: "none", confident: false, top: null };
   const standsOut = lexical || prominence(top.cosine, sims) >= PROMINENCE_MIN;
-  return { route: top.kind, confident: top.cosine >= COS_MIN && standsOut, top };
+  return { route: top.kind, confident: trusted && top.cosine >= COS_MIN && standsOut, top };
 }

@@ -1,4 +1,4 @@
-// 배색 구조 여덟 중 **이 질의에 맞는 다섯**을 로컬 LLM 이 고른다.
+// 배색 구조 여덟 중 **이 질의에 맞는 다섯**을 LLM(Claude API · src/llm.js)이 고른다.
 //
 // 왜 LLM 인가: 8개 중 어느 다섯이 "가을 카페 브랜딩" 에 맞는지는 계산으로 안 나온다. 색상각도
 // 명도도 그 판단을 못 한다 — 질문의 뜻을 읽어야 한다. 이 사이트에서 LLM 이 하는 일은 둘뿐이고
@@ -7,18 +7,15 @@
 // **LLM 은 색에 닿지 않는다.** 고르는 것은 구조 id 뿐이고 헥스는 src/expand.js 가 씨앗의 HSL 로만
 // 만든다. 모델이 무엇을 뱉든 화면에 없는 색이 생기지 않는다 — 사용자가 이 경계를 골랐다.
 //
-// **없어도 돈다.** Ollama 가 죽어 있거나 응답을 못 알아들으면 카탈로그 앞 다섯으로 물러선다.
+// **없어도 돈다.** API 키가 없거나 호출이 실패하거나 응답을 못 알아들으면 카탈로그 앞 다섯으로 물러선다.
 // 그 다섯은 원전 1절 기법표 넷과 4절 첫 항목이라 임의로 고른 것이 아니다.
 
-import { refresh } from "./ollama.js";
-import { pickModel } from "./rewrite.js";
+import { LlmError, chatJson, refresh } from "./llm.js";
 import { cleanQuery } from "./query.js";
 
-const HOST = process.env.OLLAMA_HOST ?? "127.0.0.1:11434";
-const BASE = `http://${HOST}`;
 // 재작성보다 짧게 잡는다. 재작성은 답을 못 얻으면 검색이 통째로 나빠지지만, 여기서는 물러설
 // 자리가 분명하다 — 오래 기다리느니 카탈로그 순서로 그리는 편이 낫다.
-const TIMEOUT_MS = Number(process.env.STRUCTURE_TIMEOUT_MS ?? 20000);
+const TIMEOUT_MS = Number(process.env.STRUCTURE_TIMEOUT_MS ?? 10000);
 
 /** 화면에 보여줄 구조 수. 사용자가 "가장 많이 쓰는 5개" 로 정했다. */
 export const PICK_COUNT = 5;
@@ -42,25 +39,13 @@ ${catalog.map((s) => `- ${s.id}: ${s.name} — ${s.principle}${s.detail ? ` ${s.
 
 JSON 으로만 답한다: {"ids":["...","...","...","...","..."]}`;
 
-async function callModel(model, catalog, query, signal) {
-  const res = await fetch(`${BASE}/api/chat`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    signal,
-    body: JSON.stringify({
-      model,
-      stream: false,
-      format: "json", // 자유 서술을 막는다. 파싱 실패가 곧 선택 실패이므로 형식을 강제한다.
-      options: { temperature: 0.2, num_predict: 120 },
-      messages: [
-        { role: "system", content: systemPrompt(catalog) },
-        { role: "user", content: query },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error(`Ollama 가 ${res.status}`);
-  return (await res.json()).message?.content ?? "";
-}
+/** 구조화 출력 스키마. id 는 카탈로그 enum 으로 묶는다 — 그래도 parseSelection 이 다시 거른다. */
+export const selectionSchema = (catalog) => ({
+  type: "object",
+  properties: { ids: { type: "array", items: { type: "string", enum: catalog.map((s) => s.id) } } },
+  required: ["ids"],
+  additionalProperties: false,
+});
 
 /**
  * 모델이 뭘 뱉든 여기서 걸러 낸다. **카탈로그에 없는 id 는 버린다** — 통과시키면 화면이
@@ -145,16 +130,20 @@ export async function selectStructures(query, catalog, count = PICK_COUNT) {
   if (!text) return fallback(null);
 
   const state = await refresh();
-  if (state.state !== "ready") return fallback(`Ollama 를 쓸 수 없다 (${state.detail})`);
-
-  const model = pickModel(state.models);
-  if (!model) return fallback("쓸 수 있는 로컬 모델이 없다");
+  if (state.state !== "ready") return fallback(`Claude 를 쓸 수 없다 (${state.detail})`);
+  const { model } = state;
 
   const started = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const raw = await callModel(model, catalog, text, controller.signal);
+    const raw = await chatJson({
+      system: systemPrompt(catalog),
+      user: text,
+      schema: selectionSchema(catalog),
+      timeoutMs: TIMEOUT_MS,
+      signal: controller.signal,
+    });
     const { ids, matched } = parseSelection(raw, validIds, count);
     const elapsedMs = Date.now() - started;
     // 모델이 쓸 수 있는 것을 하나도 안 줬으면 결과는 카탈로그 순서와 같다. 그걸 "llm" 이라 부르면
@@ -164,7 +153,7 @@ export async function selectStructures(query, catalog, count = PICK_COUNT) {
     }
     return { ids, from: "llm", matched, model, elapsedMs };
   } catch (err) {
-    const reason = err.name === "AbortError" ? `${TIMEOUT_MS / 1000}초 안에 응답하지 않았다` : err.message;
+    const reason = err instanceof LlmError && err.kind === "abort" ? `${TIMEOUT_MS / 1000}초 안에 응답하지 않았다` : err.message;
     return { ...fallback(reason), model };
   } finally {
     clearTimeout(timer);

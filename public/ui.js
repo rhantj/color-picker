@@ -904,12 +904,14 @@ export function diagnosisCard(dx, rank) {
   return root;
 }
 
-/** 상단 런타임 필. 세 화면이 같은 것을 쓴다. */
+/**
+ * 상단 런타임 필. 세 화면이 같은 것을 쓴다.
+ * 41단계부터 모델은 이 기계가 아니라 Claude API · Voyage API 에서 돈다 — "로컬" 이라고 쓰면 거짓이다.
+ */
 const RUNTIME_LABEL = {
-  ready: "로컬 · Ollama 준비됨",
-  starting: "로컬 · Ollama 기동 중",
-  unavailable: "로컬 · Ollama 없음",
-  unknown: "로컬",
+  ready: "Claude API 준비됨",
+  unavailable: "Claude API 없음 · 기본 검색",
+  unknown: "확인 중",
 };
 
 export async function refreshRuntime(attempt = 0, onStage) {
@@ -927,12 +929,16 @@ export async function refreshRuntime(attempt = 0, onStage) {
 
   if (typeof data.stage === "number" && onStage) onStage(data.stage);
 
-  const { state = "unknown", detail = "", models = [] } = data.ollama ?? {};
+  const { state = "unknown", detail = "" } = data.llm ?? {};
+  const embed = data.embed ?? {};
   dot.dataset.state = state;
   where.textContent = RUNTIME_LABEL[state] ?? RUNTIME_LABEL.unknown;
-  pill.title = [detail, models.length ? `모델 ${models.length}개` : ""].filter(Boolean).join(" · ");
+  // 임베딩은 따로 죽을 수 있다(키가 하나만 있을 때). 제목에 적어 "왜 3단계가 안 되나" 를 알 수 있게 한다.
+  const embedLine = embed.state === "ready" ? "임베딩 준비됨" : embed.state === "unavailable" ? "임베딩 없음" : "";
+  pill.title = [detail, embed.detail ?? "", embedLine].filter(Boolean).join(" · ");
 
-  if (state === "starting" && attempt < 20) setTimeout(() => refreshRuntime(attempt + 1, onStage), 1500);
+  // 임베딩은 기동 직후 코퍼스를 벡터로 만드는 동안 unknown 이다. 끝나면 사다리가 올라가야 하므로 잠시 다시 본다.
+  if (embed.state === "unknown" && attempt < 20) setTimeout(() => refreshRuntime(attempt + 1, onStage), 1500);
 }
 
 /*

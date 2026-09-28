@@ -7,6 +7,9 @@
 // 값이 무엇이든 "그 한 줄만 갔는가" 를 보는 것이라 사본이 지킬 것이 없다.
 // 증거: docs/troubleshootings/2026-09-27-embed-fails-silently-bm25-passes.md
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
+import "./lib/retired.mjs"; // 41단계로 은퇴한 게이트는 여기서 이유를 찍고 끝난다
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
@@ -204,7 +207,7 @@ function runChecker(script, id) {
     let stderr = "";
     child.stdout.on("data", (c) => (stdout += c.toString("utf8")));
     child.stderr.on("data", (c) => (stderr += c.toString("utf8")));
-    child.on("exit", (code) => resolve({ id, ok: code === 0 && stdout.includes(id.replace(/-/g, "_") + "_OK"), tail: (stdout.trim() || stderr.trim()).split("\n").pop() ?? "" }));
+    child.on("exit", (code) => resolve({ id, ok: code === 0 && (stdout.includes(id.replace(/-/g, "_") + "_OK") || stdout.includes(id.replace(/-/g, "_") + "_RETIRED")), tail: (stdout.trim() || stderr.trim()).split("\n").pop() ?? "" }));
   });
 }
 

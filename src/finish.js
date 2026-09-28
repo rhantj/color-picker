@@ -1,4 +1,4 @@
-// 역할마다 어떤 재질을 입힐지 **로컬 LLM 이 정한다.**
+// 역할마다 어떤 재질을 입힐지 **LLM(Claude API · src/llm.js)이 정한다.**
 //
 // 왜 LLM 인가: "네온 사인 빛의 어두운 사이버펑크" 의 강조가 발광이어야 하고 "가을 카페 브랜딩"
 // 의 강조는 그러면 안 된다는 것은 계산으로 안 나온다. 색상각도 명도도 그 판단을 못 한다 —
@@ -9,19 +9,16 @@
 // 씨앗 색을 받아 계산한다. 모델이 응답에 헥스를 실어 보내도 그 값이 화면에 닿는 경로가 없다 —
 // S17-G7 이 실제로 주입을 시도해 확인한다. `structure.js` 와 같은 경계이고, 사용자가 골랐다.
 //
-// **없어도 돈다.** Ollama 가 죽어 있거나 응답을 못 알아들으면 `DEFAULT_FINISH_BY_ROLE` 로
+// **없어도 돈다.** API 키가 없거나 호출이 실패하거나 응답을 못 알아들으면 `DEFAULT_FINISH_BY_ROLE` 로
 // 물러선다. 그 표는 16단계가 이미 만든 것이고 **두 번 만들지 않는다**(스펙 4.5).
 
-import { refresh } from "./ollama.js";
-import { pickModel } from "./rewrite.js";
+import { LlmError, chatJson, refresh } from "./llm.js";
 import { cleanQuery } from "./query.js";
 import { DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, MaterialError, loadFinishes } from "./material.js";
 
-const HOST = process.env.OLLAMA_HOST ?? "127.0.0.1:11434";
-const BASE = `http://${HOST}`;
 // 구조 선택과 같은 값을 독립적으로 적는다. 한쪽에서 읽어 오면 그쪽을 늘렸을 때 이쪽도 함께
 // 늘어나 "재질 때문에 느려졌다" 를 아무도 못 가른다. 물러설 자리가 분명하다는 점도 같다.
-const TIMEOUT_MS = Number(process.env.FINISH_TIMEOUT_MS ?? 20000);
+const TIMEOUT_MS = Number(process.env.FINISH_TIMEOUT_MS ?? 10000);
 
 /**
  * 프롬프트. **재질의 `detail` 까지 넣는다.**
@@ -151,25 +148,20 @@ const result = (fields) => {
   return out;
 };
 
-async function callModel(model, roles, catalog, query, signal) {
-  const res = await fetch(`${BASE}/api/chat`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    signal,
-    body: JSON.stringify({
-      model,
-      stream: false,
-      format: "json", // 자유 서술을 막는다. 파싱 실패가 곧 배정 실패이므로 형식을 강제한다.
-      options: { temperature: 0.2, num_predict: 160 },
-      messages: [
-        { role: "system", content: systemPrompt(roles, catalog) },
-        { role: "user", content: query },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error(`Ollama 가 ${res.status}`);
-  return (await res.json()).message?.content ?? "";
-}
+/** 구조화 출력 스키마. 역할마다 재질 id 하나 — 그래도 parseAssignment 가 다시 거른다. */
+export const assignmentSchema = (roles, finishIds) => ({
+  type: "object",
+  properties: {
+    assignments: {
+      type: "object",
+      properties: Object.fromEntries(roles.map((role) => [role, { type: "string", enum: [...finishIds] }])),
+      required: [...roles],
+      additionalProperties: false,
+    },
+  },
+  required: ["assignments"],
+  additionalProperties: false,
+});
 
 /**
  * @param {string} query 사용자의 질문. **비어 있으면 LLM 을 아예 부르지 않는다** —
@@ -201,16 +193,21 @@ export async function selectFinishes(query, roles, defaults = DEFAULT_FINISH_BY_
   if (!text) return fallback(null);
 
   const state = await refresh();
-  if (state.state !== "ready") return fallback(`Ollama 를 쓸 수 없다 (${state.detail})`);
-
-  const model = pickModel(state.models);
-  if (!model) return fallback("쓸 수 있는 로컬 모델이 없다");
+  if (state.state !== "ready") return fallback(`Claude 를 쓸 수 없다 (${state.detail})`);
+  const { model } = state;
 
   const started = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const raw = await callModel(model, roles, loadFinishes(), text, controller.signal);
+    const catalog = loadFinishes();
+    const raw = await chatJson({
+      system: systemPrompt(roles, catalog),
+      user: text,
+      schema: assignmentSchema(roles, catalog.map((f) => f.id)),
+      timeoutMs: TIMEOUT_MS,
+      signal: controller.signal,
+    });
     const { assignments, matched } = parseAssignment(raw, roles, MATERIAL_FINISHES, defaults);
     const elapsedMs = Date.now() - started;
     // 모델이 쓸 수 있는 것을 하나도 안 줬으면 결과는 기본 배정과 같다. 그걸 "llm" 이라 부르면
@@ -220,7 +217,7 @@ export async function selectFinishes(query, roles, defaults = DEFAULT_FINISH_BY_
     }
     return result({ assignments, from: "llm", matched, model, elapsedMs });
   } catch (err) {
-    const reason = err.name === "AbortError" ? `${TIMEOUT_MS / 1000}초 안에 응답하지 않았다` : err.message;
+    const reason = err instanceof LlmError && err.kind === "abort" ? `${TIMEOUT_MS / 1000}초 안에 응답하지 않았다` : err.message;
     return fallback(reason, { model });
   } finally {
     clearTimeout(timer);

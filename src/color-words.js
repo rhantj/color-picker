@@ -136,7 +136,7 @@ export function loadCreatures(path = CREATURES_PATH) {
   });
 }
 
-/** 문장에서 가장 앞에 나온 종족. LLM 을 거치지 않는다 — Ollama 없이도 같은 답이어야 한다. */
+/** 문장에서 가장 앞에 나온 종족. LLM 을 거치지 않는다 — LLM 없이도 같은 답이어야 한다. */
 export function findCreature(text, creatures) {
   const s = typeof text === "string" ? text : "";
   let best = null;

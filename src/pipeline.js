@@ -23,7 +23,14 @@ import { buildVocabulary, expandTerms } from "./vocabulary.js";
 import { indexText as paletteText, embedText as paletteEmbedText } from "./palettes.js";
 import { indexText as diagnosticText, embedText as diagnosticEmbedText } from "./diagnostics.js";
 import { embedQuery, similarities, status as embedStatus, prepare as prepareEmbeddings, EMBED_MODEL, EMBED_TIMEOUT_MS } from "./embed.js";
-import { agrees, decide, fuse, DISAGREE_BM25_WEIGHT, DISTRUST_MAX_WHOLE } from "./hybrid.js";
+import { agrees, decide, fuse, DISAGREE_BM25_WEIGHT, DISTRUST_MAX_WHOLE, THRESHOLDS_MEASURED_ON } from "./hybrid.js";
+
+/**
+ * 임베딩이 확신을 줄 수 있는가 — hybrid.js 의 기준값을 지금 모델로 쟀을 때만이다(41단계).
+ * `HYBRID_TRUST_UNMEASURED=1` 은 **게이트 전용**이다. 게이트는 가짜 벡터로 결합 판정의 모양을 보는 것이라 기준값의
+ * 출처와 무관하다. 실제 서비스에서 켜면 안 잰 숫자로 확신을 낸다.
+ */
+export const embedTrusted = () => EMBED_MODEL === THRESHOLDS_MEASURED_ON || process.env.HYBRID_TRUST_UNMEASURED === "1";
 import { relationVocabulary } from "./bridge.js";
 import { corpusPath } from "./corpus-paths.js";
 
@@ -188,7 +195,9 @@ export function createPipeline() {
       const hybridError = q.error;
 
       // 1단계 — 확신 후보가 있고, 임베딩이 없거나(사유는 남긴다) 동의하면 지금까지와 같다.
-      if (stage1 && (sims.length === 0 || agrees({ id: stage1.top }, sims))) {
+      // 기준값을 안 잰 임베딩(41단계)은 BM25 의 확신을 뒤집지도 못한다 — AGREE_TOP 도 bge-m3 에서 잰 값이다.
+      const trusted = embedTrusted();
+      if (stage1 && (sims.length === 0 || !trusted || agrees({ id: stage1.top }, sims))) {
         return {
           stage: 1,
           route: stage1.route,
@@ -219,7 +228,7 @@ export function createPipeline() {
         // judgeProminence: false — 캐릭터 경로의 인상 문구("밝고 명랑한")는 LLM 이 만든 말이라 잡담일 수 없다. 그 경로는
         // 옛 판정(문턱만)을 쓴다. 안 그러면 인상이 저신뢰로 떨어져 LLM 재작성을 한 번 더 부르고 팔레트가 바뀐다(리뷰 P2-2).
         const lexical = !judgeProminence || isConfident(pHits) || isConfident(dHits);
-        const verdict = decide(fused, { sims, lexical });
+        const verdict = decide(fused, { sims, lexical, trusted });
         const pick = (kind, n) =>
           fused
             .filter((f) => f.kind === kind)

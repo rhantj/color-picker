@@ -7,6 +7,8 @@
 // 감시 값(역할 목록·재질 목록·규칙 수치·픽스처)은 대상에서 import 하지 않고 여기 사본으로 적는다 —
 // 이 저장소가 "게이트가 감시 대상에서 값을 가져오면 함께 느슨해진다" 로 여러 번 뚫렸다.
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdtempSync, readFileSync } from "node:fs";
@@ -142,7 +144,7 @@ function runChecker(script, id) {
     let stderr = "";
     child.stdout.on("data", (c) => (stdout += c.toString("utf8")));
     child.stderr.on("data", (c) => (stderr += c.toString("utf8")));
-    child.on("exit", (code) => resolve({ id, ok: code === 0 && stdout.includes(id.replace(/-/g, "_") + "_OK"), tail: (stdout.trim() || stderr.trim()).split("\n").pop() ?? "" }));
+    child.on("exit", (code) => resolve({ id, ok: code === 0 && (stdout.includes(id.replace(/-/g, "_") + "_OK") || stdout.includes(id.replace(/-/g, "_") + "_RETIRED")), tail: (stdout.trim() || stderr.trim()).split("\n").pop() ?? "" }));
   });
 }
 

@@ -11,6 +11,8 @@
 // 그것들이 이 단계에서 실제로 지켜야 하는 것의 절반이다. check-stage4·8·10 이 같은 이유로
 // 같은 방식을 쓴다.
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

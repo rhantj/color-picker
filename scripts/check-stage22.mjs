@@ -9,6 +9,8 @@
 // (20단계), 정작 `/saved` 목록에서는 **안 보였다.** 사용자는 자기가 무엇을 저장했는지
 // 확인할 방법이 없었다 — 내보내기를 눌러 JSON 을 읽어야만 알 수 있었다.
 
+// 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+import "./lib/ollama-shim.mjs";
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
