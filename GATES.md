@@ -61,27 +61,27 @@ S3-G1 Ollama 가 없어도 서버가 뜨고 홈 화면·검색이 그대로 동�
     CHECK: node scripts/check-stage3.mjs S3-G1
     EXPECT: S3_G1_OK
 
-S3-G2 **41단계로 은퇴** — Ollama 자체의 동작을 쟀다 — Ollama 가 코드에서 빠졌다. (원래: Ollama 가 죽어 있으면 자동으로 띄우고 준비될 때까지 기다린다)
+S3-G2 Ollama 가 죽어 있으면 자동으로 띄우고 준비될 때까지 기다린다
     CHECK: node scripts/check-stage3.mjs S3-G2
-    EXPECT: S3_G2_RETIRED
+    EXPECT: S3_G2_OK
 
-S3-G3 **41단계로 은퇴** — Ollama 자체의 동작을 쟀다 — Ollama 가 코드에서 빠졌다. (원래: 이미 떠 있으면 새로 띄우지 않는다 (사용자가 띄운 인스턴스를 건드리지 않는다))
+S3-G3 이미 떠 있으면 새로 띄우지 않는다 (사용자가 띄운 인스턴스를 건드리지 않는다)
     CHECK: node scripts/check-stage3.mjs S3-G3
-    EXPECT: S3_G3_RETIRED
+    EXPECT: S3_G3_OK
 
-S3-G4 **41단계로 은퇴** — Ollama 자체의 동작을 쟀다 — Ollama 가 코드에서 빠졌다. (원래: 동시 호출이 기동 시도를 공유한다 (프로세스가 여러 개 뜨지 않는다))
+S3-G4 동시 호출이 기동 시도를 공유한다 (프로세스가 여러 개 뜨지 않는다)
     CHECK: node scripts/check-stage3.mjs S3-G4
-    EXPECT: S3_G4_RETIRED
+    EXPECT: S3_G4_OK
 
-S3-G5 **41단계로 은퇴** — Ollama 자체의 동작을 쟀다 — Ollama 가 코드에서 빠졌다 (src/ 에 spawn 자체가 없어졌다 — S41-G1 이 잰다). (원래: 사용자 입력이 프로세스 실행에 닿지 않는다 — 정적 스모크 + 요청을 퍼부어도 기동되지 않는 행위 검사)
+S3-G5 사용자 입력이 프로세스 실행에 닿지 않는다 — 정적 스모크 + 요청을 퍼부어도 기동되지 않는 행위 검사
     CHECK: node scripts/check-stage3.mjs S3-G5
-    EXPECT: S3_G5_RETIRED
+    EXPECT: S3_G5_OK
 
-S3-G6 **41단계로 은퇴** — Ollama 자체의 동작을 쟀다 — Ollama 가 코드에서 빠졌다. (원래: ready 로 확정된 뒤 Ollama 가 죽으면 상태가 따라간다 (죽은 인스턴스를 준비됨으로 보고하지 않는다))
+S3-G6 ready 로 확정된 뒤 Ollama 가 죽으면 상태가 따라간다 (죽은 인스턴스를 준비됨으로 보고하지 않는다)
     CHECK: node scripts/check-stage3.mjs S3-G6
-    EXPECT: S3_G6_RETIRED
+    EXPECT: S3_G6_OK
 
-S3-G7 **41단계로 은퇴** — 진짜 LLM 호출이 필요했다 — 41단계부터 유료다. (원래: 진단 질의가 팔레트로 라우팅되지 않는다 — 1단계 경로와 LLM 경로 양쪽 + 팔레트 양성 대조)
+S3-G7 **41단계로 은퇴** — 진짜 LLM 이 진단 질의를 진단으로 보내는지 쟀다 — 41단계부터 LLM 은 Claude API 라 게이트가 돌 때마다 돈이 든다. 라우팅의 결정적 부분은 S3-G8·S39 가 본다. (원래: 진단 질의가 팔레트로 라우팅되지 않는다 — 1단계 경로와 LLM 경로 양쪽 + 팔레트 양성 대조)
     CHECK: node scripts/check-stage3.mjs S3-G7
     EXPECT: S3_G7_RETIRED
 
@@ -93,7 +93,7 @@ S3-G9 붙여 쓴 재작성어를 코퍼스 어휘로 되돌린다 — 모델에 
     CHECK: node scripts/check-stage3.mjs S3-G9
     EXPECT: S3_G9_OK
 
-S3-G10 **41단계로 은퇴** — Ollama 자체의 동작을 쟀다 — Ollama 가 코드에서 빠졌다. (원래: 서버 기동 후 모델 워밍업이 실제로 실행된다 (정의·import 만 있고 호출부가 없던 결함의 재발 방지))
+S3-G10 **41단계로 은퇴** — LLM 워밍업을 쟀다 — 41단계부터 LLM 은 Claude API 라 GPU 에 올려 둘 모델이 없다(임베딩 워밍업은 S40-G1 이 본다). (원래: 서버 기동 후 모델 워밍업이 실제로 실행된다 (정의·import 만 있고 호출부가 없던 결함의 재발 방지))
     CHECK: node scripts/check-stage3.mjs S3-G10
     EXPECT: S3_G10_RETIRED
 
@@ -1659,13 +1659,13 @@ S24-G6 기준선 개정 기록이 정직하다 — git 의 옛 기준선과 대�
 서식 문자(`\p{Cf}`)이지 질의를 거부하는 것이 아니다 — 폭 0 문자가 섞인 진짜 질의는 그것만
 빠진 채 그대로 간다.
 
-S25-G1 **41단계로 은퇴** — Ollama 자체의 동작을 쟀다 — Ollama 가 코드에서 빠졌다. (원래: Ollama 가 죽어 있으면 확인한 뒤 "없다" 고 말한다 — 호출부 셋의 사유에 "아직 확인하지 않았다" 가 없고, 떠 있으면 ready 의 사유도 그 문구가 아니다 (양성 대조))
+S25-G1 Ollama 가 죽어 있으면 확인한 뒤 "없다" 고 말한다 — 호출부 셋의 사유에 "아직 확인하지 않았다" 가 없고, 떠 있으면 ready 의 사유도 그 문구가 아니다 (양성 대조)
     CHECK: node scripts/check-stage25.mjs S25-G1
-    EXPECT: S25_G1_RETIRED
+    EXPECT: S25_G1_OK
 
-S25-G2 **41단계로 은퇴** — Ollama 자체의 동작을 쟀다 — Ollama 가 코드에서 빠졌다. (원래: 더 구체적인 사유를 덮어쓰지 않는다 — 기동 실패 사유가 TTL 이 지난 뒤의 재탐지에도 남는다)
+S25-G2 더 구체적인 사유를 덮어쓰지 않는다 — 기동 실패 사유가 TTL 이 지난 뒤의 재탐지에도 남는다
     CHECK: node scripts/check-stage25.mjs S25-G2
-    EXPECT: S25_G2_RETIRED
+    EXPECT: S25_G2_OK
 
 S25-G3 폭 0 문자만 있는 질의는 세 경로(구조 선택 · 재질 배정 · `/api/search`) 어디서도 모델을 안 부른다 · 진짜 질의는 부른다 (양성 대조)
     CHECK: node scripts/check-stage25.mjs S25-G3
@@ -1675,9 +1675,9 @@ S25-G4 3단계 게이트 10개가 그대로 통과한다 — `refresh()` 를 건
     CHECK: node scripts/check-stage25.mjs S25-G4
     EXPECT: S25_G4_OK
 
-S25-G5 **41단계로 은퇴** — Ollama 자체의 동작을 쟀다 — Ollama 가 코드에서 빠졌다. (원래: ready 의 사유도 안 덮어쓴다 — 우리가 띄운 Ollama 의 "자동 기동함" 이 TTL 이 지난 뒤의 재확인에도 남는다 (실제 기동 · S3-G2 와 같은 전제))
+S25-G5 ready 의 사유도 안 덮어쓴다 — 우리가 띄운 Ollama 의 "자동 기동함" 이 TTL 이 지난 뒤의 재확인에도 남는다 (실제 기동 · S3-G2 와 같은 전제)
     CHECK: node scripts/check-stage25.mjs S25-G5
-    EXPECT: S25_G5_RETIRED
+    EXPECT: S25_G5_OK
 
 ### 알려진 한계 (25단계)
 
@@ -1712,13 +1712,13 @@ LLM 까지 안 내려간 것이다. 그래서 3단계를 붙이면서 그 거짓
 
 설계: `docs/superpowers/specs/2026-09-13-hybrid-search-design.md` · 계획: `docs/superpowers/plans/2026-09-13-hybrid-search.md`
 
-S26-G1 **41단계로 은퇴** — 진짜 bge-m3 로 쟀다 — 임베딩이 Voyage 로 바뀌었다. Voyage 기준값 측정이 대체한다. (원래: 실측 질의 23건에서 정답이 7 보다 늘고, 거짓 확신 9건이 1단계에 안 남는다 · 두 방법이 같은 답이면 1단계 그대로 (양성 대조) · 실제 bge-m3 필요)
+S26-G1 실측 질의 23건에서 정답이 7 보다 늘고, 거짓 확신 9건이 1단계에 안 남는다 · 두 방법이 같은 답이면 1단계 그대로 (양성 대조) · 실제 bge-m3 필요
     CHECK: node scripts/check-stage26.mjs S26-G1
-    EXPECT: S26_G1_RETIRED
+    EXPECT: S26_G1_OK
 
-S26-G2 **41단계로 은퇴** — 진짜 bge-m3 로 쟀다 — 임베딩이 Voyage 로 바뀌었다. Voyage 기준값 측정이 대체한다. (원래: 정확 매칭 회귀 — `S1-G2` 다섯 건이 여전히 1단계·같은 답이고 LLM 을 안 부른다)
+S26-G2 정확 매칭 회귀 — `S1-G2` 다섯 건이 여전히 1단계·같은 답이고 LLM 을 안 부른다
     CHECK: node scripts/check-stage26.mjs S26-G2
-    EXPECT: S26_G2_RETIRED
+    EXPECT: S26_G2_OK
 
 S26-G3 임베딩이 없으면(모델 없음 · 죽은 호스트) 1·2단계가 그대로 돌고 상태가 `unavailable` 로 정직하다 (양성 대조: 있으면 `ready`)
     CHECK: node scripts/check-stage26.mjs S26-G3
@@ -1853,9 +1853,9 @@ S27-G7 `/api/status` 에 `corpus` 가 있고 `stage` 가 4 다 · 루프백 밖�
 스파이크 `[실측]`: 어긋난 BM25 순위의 가중치를 1 → 0.5 → 0 으로 바꾸면 정답 12 → 12 → **14**/18.
 0 에서 E1 두 건이 고쳐지고 잃는 것이 없다. 재작성 뒤의 결합은 새 증거라 BM25 순위를 그대로 쓴다.
 
-S28-G1 **41단계로 은퇴** — 진짜 bge-m3 로 쟀다 — 임베딩이 Voyage 로 바뀌었다. Voyage 기준값 측정이 대체한다. (원래: 실측 23건에서 정답이 14 이상이고 E1 두 건이 맞으며, 거짓 확신 0 · 정확 매칭 5건 1단계 유지 (실제 bge-m3))
+S28-G1 실측 23건에서 정답이 14 이상이고 E1 두 건이 맞으며, 거짓 확신 0 · 정확 매칭 5건 1단계 유지 (실제 bge-m3)
     CHECK: node scripts/check-stage28.mjs S28-G1
-    EXPECT: S28_G1_RETIRED
+    EXPECT: S28_G1_OK
 
 S28-G2 `fuse` 의 BM25 가중치 — 0 이면 코사인 순위만 남고, 1 이면 26단계와 같다 · 상수 둘(가중치 · 어절 문턱)이 사본과 같다 (스텁 벡터로 결정적)
     CHECK: node scripts/check-stage28.mjs S28-G2
@@ -1904,9 +1904,9 @@ S29-G2 더한 별칭이 사본과 같고 코퍼스 전체에서 유일하다 —
     CHECK: node scripts/check-stage29.mjs S29-G2
     EXPECT: S29_G2_OK
 
-S29-G3 **41단계로 은퇴** — 진짜 bge-m3 로 쟀다 — 임베딩이 Voyage 로 바뀌었다. Voyage 기준값 측정이 대체한다. (원래: 실측 23건 정답이 16 이상이고 어휘 부재 2건이 맞는다 · 28단계 G1 의 조건(E1 · 거짓 확신 0 · 정확 매칭)도 그대로 (실제 bge-m3))
+S29-G3 실측 23건 정답이 16 이상이고 어휘 부재 2건이 맞는다 · 28단계 G1 의 조건(E1 · 거짓 확신 0 · 정확 매칭)도 그대로 (실제 bge-m3)
     CHECK: node scripts/check-stage29.mjs S29-G3
-    EXPECT: S29_G3_RETIRED
+    EXPECT: S29_G3_OK
 
 ### 알려진 한계 (29단계)
 
@@ -1929,17 +1929,17 @@ S29-G3 **41단계로 은퇴** — 진짜 bge-m3 로 쟀다 — 임베딩이 Voya
 확신 경로의 예산은 700ms 라 그 한 번이 "제때 답하지 않았다" 로 떨어져 3단계를 건너뛴다. 채팅 모델은 `rewrite.js`
 가 `keep_alive: "30m"` 을 보내 같은 문제가 없었다. 처방: 임베딩 요청에도 같은 `keep_alive` 를 보낸다.
 
-S30-G1 **41단계로 은퇴** — Ollama 자체의 동작을 쟀다 — Ollama 가 코드에서 빠졌다. (원래: 모든 `/api/embed` 요청(코퍼스 준비 · 질의)에 `keep_alive` 가 사본과 같은 값으로 실린다 (스텁 Ollama · 결정적))
+S30-G1 모든 `/api/embed` 요청(코퍼스 준비 · 질의)에 `keep_alive` 가 사본과 같은 값으로 실린다 (스텁 Ollama · 결정적)
     CHECK: node scripts/check-stage30.mjs S30-G1
-    EXPECT: S30_G1_RETIRED
+    EXPECT: S30_G1_OK
 
-S30-G2 **41단계로 은퇴** — Ollama 자체의 동작을 쟀다 — Ollama 가 코드에서 빠졌다. (원래: 모델을 내린 상태에서 서버 준비가 다시 올리면 Ollama `/api/ps` 의 `bge-m3` 만료 시각이 25분 이상 남아 있다 (실제 Ollama))
+S30-G2 모델을 내린 상태에서 서버 준비가 다시 올리면 Ollama `/api/ps` 의 `bge-m3` 만료 시각이 25분 이상 남아 있다 (실제 Ollama)
     CHECK: node scripts/check-stage30.mjs S30-G2
-    EXPECT: S30_G2_RETIRED
+    EXPECT: S30_G2_OK
 
-S30-G3 **41단계로 은퇴** — Ollama 자체의 동작을 쟀다 — Ollama 가 코드에서 빠졌다. (원래: 원인의 양성 대조 — 콜드 재적재가 웜의 3배 이상이고, 내린 뒤에도 서버 준비를 거치면 확신 경로 질의 5건이 예산(700ms) 안에 임베딩된다 (실제 bge-m3 · 처방이 아니라 원인을 잰다))
+S30-G3 원인의 양성 대조 — 콜드 재적재가 웜의 3배 이상이고, 내린 뒤에도 서버 준비를 거치면 확신 경로 질의 5건이 예산(700ms) 안에 임베딩된다 (실제 bge-m3 · 처방이 아니라 원인을 잰다)
     CHECK: node scripts/check-stage30.mjs S30-G3
-    EXPECT: S30_G3_RETIRED
+    EXPECT: S30_G3_OK
 
 S30-G4 26단계 게이트 7개가 그대로 통과한다
     CHECK: node scripts/check-stage30.mjs S30-G4
@@ -2253,9 +2253,9 @@ S39-G10 회귀 — S2(8)·S4(7)·S22(6)·S31(3)·S34(10)·S35(6)·S36(5) 검사�
   → 종족 낱말이 어절로(조사·"님" 까지) 서 있으면 추천·캐릭터를 **되묻는다**(LLM 없이, 추천이 첫 후보 — 안 묻는 마지막 턴에 40단계 전과 같게).
   "사람"·"인간"(일상어)·"기사"·"마법사"(뉴스 기사 · 설치 마법사)는 혼자서는 안 친다 `[판단]`. 되물음에 "추천으로"·칩 이름을 글로 쳐도 칩과 같다.
 
-S40-G1 **41단계로 은퇴** — Ollama 자체의 동작을 쟀다 — Ollama 가 코드에서 빠졌다. (원래: 기동 워밍업 — 캐시가 찬 채 재시작하면(워밍업 켬) 가짜 Ollama 에 임베딩 요청이 정확히 1건 · 입력은 `EMBED_WARMUP_TEXT` 한 줄(코퍼스 재임베딩 0) · 자동 기동을 켜면 첫 `/api/embed` 가 `/api/generate`(LLM 워밍업)보다 먼저 온다 · `OLLAMA_WARMUP=0` 이면 0건(S27-G3 그대로))
+S40-G1 기동 워밍업 — 캐시가 찬 채 재시작하면(워밍업 켬) 가짜 Ollama 에 임베딩 요청이 정확히 1건 · 입력은 `EMBED_WARMUP_TEXT` 한 줄(코퍼스 재임베딩 0) · 자동 기동을 켜도 Ollama 에 LLM 요청(`/api/generate`·`/api/chat`)이 안 간다(41단계 — LLM 은 Claude API) · `OLLAMA_WARMUP=0` 이면 0건(S27-G3 그대로)
     CHECK: node scripts/check-stage40.mjs S40-G1
-    EXPECT: S40_G1_RETIRED
+    EXPECT: S40_G1_OK
 
 S40-G2 짧은 예산이 요청을 안 끊는다 — 임베딩 1500ms 지연에서 어절 둘 이상 확신 질의("느와르 포스터 만들건데 고급스러운 빨강")가 1초 안에 1단계 pair-15 · `hybridError` 있음 · 그 임베딩 요청은 가짜 Ollama 에서 **끝까지 응답**된다(끊김 0)
     CHECK: node scripts/check-stage40.mjs S40-G2
@@ -2273,9 +2273,9 @@ S40-G5 튀어나옴 — `hybrid.js` 의 `prominence`·`PROMINENCE_MIN` 이 사�
     CHECK: node scripts/check-stage40.mjs S40-G5
     EXPECT: S40_G5_OK
 
-S40-G6 **41단계로 은퇴** — 진짜 bge-m3 로 쟀다 — 임베딩이 Voyage 로 바뀌었다. Voyage 기준값 측정이 대체한다. (원래: 실제 bge-m3 — 인사·잡담 6건("안녕" "hello" "안녕하세요" "ㅋㅋㅋ" "오늘 날씨 좋다" "뭔가 이상해")이 `rewrite=0` 에서 확신 안 함 · 어휘 없는 정상 4건("과일 과육처럼 신선하고 혈기 넘치는" "파스텔톤 유아용품 브랜드" "올리브색" "코랄")은 확신 유지 · 26단계 23건 정답 21 이상(2026-09-27 실측 21) · 캐릭터 인상 "밝고 명랑한" "창백하고 슬픈" 은 `judgeProminence:false` 로 확신 유지 · `computeCharacter` 가 그 옵션으로 부른다)
+S40-G6 실제 bge-m3 — 인사·잡담 6건("안녕" "hello" "안녕하세요" "ㅋㅋㅋ" "오늘 날씨 좋다" "뭔가 이상해")이 `rewrite=0` 에서 확신 안 함 · 어휘 없는 정상 4건("과일 과육처럼 신선하고 혈기 넘치는" "파스텔톤 유아용품 브랜드" "올리브색" "코랄")은 확신 유지 · 26단계 23건 정답 21 이상(2026-09-27 실측 21) · 캐릭터 인상 "밝고 명랑한" "창백하고 슬픈" 은 `judgeProminence:false` 로 확신 유지 · `computeCharacter` 가 그 옵션으로 부른다
     CHECK: node scripts/check-stage40.mjs S40-G6
-    EXPECT: S40_G6_RETIRED
+    EXPECT: S40_G6_OK
 
 S40-G7 라우터 종족 낱말 — 고정 입력표: "금속 로봇 경비병"·"트롤 전사"·"유령 소년, 창백하고 슬픈"·"로봇에 어울리는 색"·"로봇한테 입힐 색"·"로봇이야"·"공주님 캐릭터" → [palette, character] · "사람 많은 카페 느낌"·"기계적인 느낌의 대시보드"·"뉴스 기사 썸네일 배경"·"설치 마법사 화면" → [palette] · "사람들이 편안하게 느끼는 색" → [diagnosis] · "검 든 기사 색 짜줘"·"빨간 머리 도적" → [character] (39단계 그대로)
     CHECK: node scripts/check-stage40.mjs S40-G7
@@ -2289,24 +2289,19 @@ S40-G9 회귀 — S3(10)·S22(6)·S26(7)·S27(7)·S28(4)·S29(3)·S30(4)·S34(10
     CHECK: node scripts/check-stage40.mjs S40-G9
     EXPECT: S40_G9_OK
 
-## 41단계 — 모델을 Ollama 에서 Claude API · Voyage API 로 (대표 결정 2026-09-29)
+## 41단계 — LLM 을 Claude API 로 · 임베딩은 로컬 Ollama 그대로 (대표 결정 2026-09-29 · 09-30)
 
-Vercel 에 배포하려는데 Vercel 에는 GPU 가 없어 Ollama 를 올릴 수 없다. 그래서 대화 모델 네 곳(검색어 다듬기 ·
-설명 읽기 · 구조 고르기 · 재질 고르기)은 **Claude Haiku 4.5**, 임베딩은 **Voyage `voyage-4`** 로 바꿨다. 로컬도 같다.
-설계: `docs/superpowers/specs/2026-09-29-claude-voyage-api-design.md`
+대화 모델 네 곳(검색어 다듬기 · 설명 읽기 · 구조 고르기 · 재질 고르기)을 로컬 Ollama(exaone)에서 **Claude Haiku 4.5** 로
+옮겼다(`src/llm.js`). 임베딩은 **로컬 Ollama bge-m3 그대로**다 — 한때 Voyage 로 옮겼지만 무료 한도가 분당 3회뿐이라
+대표님이 되돌렸다(2026-09-30). Vercel 배포는 잠시 멈췄다. 설계: `docs/superpowers/specs/2026-09-29-claude-voyage-api-design.md`
 
-**은퇴한 게이트 19개.** 지우지 않고 `_RETIRED` 를 찍게 했다(`scripts/lib/retired.mjs` 에 이유). 사유는 둘뿐이다 —
-① Ollama 자체의 동작(프로세스 띄우기 · GPU 적재 · keep_alive · 워밍업), ② 진짜 bge-m3 로 잰 정답률. ② 는 Voyage 로
-기준값을 다시 잴 때 측정 스크립트로 대체한다(게이트가 돌 때마다 유료 호출을 하면 안 된다).
+**은퇴한 게이트 2개** — S3-G7(진짜 LLM 호출 = 이제 유료) · S3-G10(LLM 워밍업 = 이제 없음). 지우지 않고 `_RETIRED` 를
+찍게 했다(`scripts/lib/retired.mjs`). 회귀 게이트는 `_OK` 또는 `_RETIRED` 를 통과로 센다.
 
-**옛 게이트의 가짜 Ollama 는 그대로 쓴다.** `scripts/lib/ollama-shim.mjs` 가 서버의 Claude·Voyage 요청을 가짜 Ollama
-형식으로 번역한다. 그 파일은 게이트가 띄운 프로세스에서 **키를 비운다** — 셸에 진짜 키가 있어도 게이트는 유료 API 를 안 부른다.
+**옛 게이트의 가짜 Ollama 는 그대로 쓴다.** `scripts/lib/ollama-shim.mjs` 가 서버의 Claude 요청을 가짜 Ollama `/api/chat`
+형식으로 번역한다. 그 파일은 게이트가 띄운 프로세스에서 **Claude 키를 비운다** — 셸에 진짜 키가 있어도 게이트는 유료 API 를 안 부른다.
 
-**안 잰 기준값으로는 확신하지 않는다.** `hybrid.js` 의 `COS_MIN` 등은 bge-m3 에서 쟀다(`THRESHOLDS_MEASURED_ON`).
-지금 임베딩 모델과 다르면 임베딩은 순서만 돕고 확신은 못 준다. 옛 게이트는 `HYBRID_TRUST_UNMEASURED=1` 로 결합 판정의
-모양만 본다(번역기가 켠다).
-
-S41-G1 Ollama 가 정말 빠졌다 — `src/`·`server.js` 에 Ollama 를 부르던 길(`${BASE}/api/`·`/api/embed` 등)도, 띄우던 길(`spawn`)도 없다
+S41-G1 LLM 이 Ollama 를 안 부른다 — 네 호출부에 `${BASE}/api/`·`/api/chat`·`ollama.js`·`pickModel` 이 없고 전부 `llm.js` 를 거친다 · 어디에도 `/api/generate`(LLM 워밍업)가 없다 · 임베딩은 여전히 `/api/embed`
     CHECK: node scripts/check-stage41.mjs S41-G1
     EXPECT: S41_G1_OK
 
@@ -2314,30 +2309,30 @@ S41-G2 네 호출부가 가짜 Claude 에 `model: claude-haiku-4-5` · JSON 스�
     CHECK: node scripts/check-stage41.mjs S41-G2
     EXPECT: S41_G2_OK
 
-S41-G3 코퍼스는 `input_type: document`(1건), 질의는 `query` 로 가짜 Voyage 에 간다 · Bearer 키 · 같은 모델로 재기동하면 코퍼스를 다시 안 보내고 모델을 바꾸면 다시 보낸다
+S41-G3 임베딩은 로컬 Ollama bge-m3 로 간다 — 가짜 Ollama 에 코퍼스·질의 요청이 모델 bge-m3 로 오고, 외부 임베딩 API(`/v1/embeddings`)는 0번 · `src/` 코드에 voyage 가 없다
     CHECK: node scripts/check-stage41.mjs S41-G3
     EXPECT: S41_G3_OK
 
-S41-G4 키가 없으면 1단계로 돌고 죽지 않는다(검색 200 · 캐릭터 폴백) · 사유가 키 없음을 말한다 · 루프백 밖에서는 `llm` 이 state 만 내고 사유 원문이 안 나간다
+S41-G4 Claude 키가 없으면 LLM 없이 돌고 죽지 않는다(검색 200 · 캐릭터 폴백) · 사유가 키 없음을 말한다 · 루프백 밖에서는 `llm` 이 state 만 내고 사유 원문이 안 나간다
     CHECK: node scripts/check-stage41.mjs S41-G4
     EXPECT: S41_G4_OK
 
-S41-G5 기준값을 안 잰 임베딩으로는 확신하지 않는다 · 같은 조건에서 `HYBRID_TRUST_UNMEASURED=1` 이면 확신한다(양성 대조)
+S41-G5 기준값을 잰 모델(`THRESHOLDS_MEASURED_ON` = bge-m3)이 아닌 임베딩으로는 확신하지 않는다 · 같은 벡터로 bge-m3 면 확신한다(양성 대조)
     CHECK: node scripts/check-stage41.mjs S41-G5
     EXPECT: S41_G5_OK
 
-S41-G6 화면 세 개 · `ui.js` · `/api/status` 에 Ollama 가 없다 · 런타임 필 기본 문구가 "로컬" 이 아니다
+S41-G6 화면이 LLM 을 "로컬 · Ollama" 라고 부르지 않는다 — 세 HTML 의 기본 문구 · `ui.js` 상태 문구 · `/api/status` 의 `llm`
     CHECK: node scripts/check-stage41.mjs S41-G6
     EXPECT: S41_G6_OK
 
-S41-G7 `VERCEL=1` 이면 저장 폴더가 `/tmp/tonefirst` · 루프백으로 치지 않는다(llm·embed 상세 숨김) · 로컬은 var/ 그대로
+S41-G7 `VERCEL=1` 이면 저장 폴더가 `/tmp/tonefirst` · 루프백으로 치지 않는다(llm·embed·ollama 상세 숨김) · 로컬은 var/ 그대로
     CHECK: node scripts/check-stage41.mjs S41-G7
     EXPECT: S41_G7_OK
 
-S41-G8 IP 당 한도(`LLM_RATE_PER_MIN`)를 넘으면 모델을 안 부르고 200 으로 폴백한다 · 로컬에서는 `x-forwarded-for` 로 우회하지 못한다 · 한도 안의 첫 요청은 모델을 쓴다(양성 대조)
+S41-G8 IP 당 한도(`LLM_RATE_PER_MIN`)를 넘으면 Claude 를 안 부르고 200 으로 폴백한다 · 로컬에서는 `x-forwarded-for` 로 우회하지 못한다 · 한도 안의 첫 요청은 모델을 쓴다(양성 대조)
     CHECK: node scripts/check-stage41.mjs S41-G8
     EXPECT: S41_G8_OK
 
-S41-G9 은퇴한 게이트 19개가 GATES.md 에 "41단계로 은퇴" · `_RETIRED` · 제 스크립트로 적혀 있다
+S41-G9 은퇴한 게이트(2개)가 GATES.md 에 "41단계로 은퇴" · `_RETIRED` · 제 스크립트로 적혀 있다
     CHECK: node scripts/check-stage41.mjs S41-G9
     EXPECT: S41_G9_OK

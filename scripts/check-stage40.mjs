@@ -9,7 +9,6 @@
 
 // 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
 import "./lib/ollama-shim.mjs";
-import "./lib/retired.mjs"; // 41단계로 은퇴한 게이트는 여기서 이유를 찍고 끝난다
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
@@ -248,7 +247,7 @@ const GATES = {
         await settle(800);
       });
       if (stub.embeds().length !== 0) bad.push(`워밍업을 껐는데 임베딩 요청이 ${stub.embeds().length}건`);
-      // 4) 자동 기동 켬 — 임베딩 워밍업이 LLM 워밍업보다 먼저
+      // 4) 자동 기동 켬 — 임베딩 워밍업은 가고, LLM 요청은 안 간다(41단계)
       stub.reset();
       await withServer(4401, { OLLAMA_HOST: stub.host, TONEFIRST_DATA_DIR: dir, OLLAMA_WARMUP: "1", OLLAMA_AUTOSTART: "1", OLLAMA_BIN: "tonefirst-no-such-binary-40" }, async (api) => {
         await waitEmbedReady(api);
@@ -258,8 +257,9 @@ const GATES = {
       const firstEmbed = paths.indexOf("/api/embed");
       const firstGenerate = paths.indexOf("/api/generate");
       if (firstEmbed < 0) bad.push(`자동 기동에서 임베딩 워밍업이 없다: ${paths.join(",")}`);
-      if (firstGenerate < 0) bad.push(`자동 기동에서 LLM 워밍업이 없다 (게이트 전제 확인): ${paths.join(",")}`);
-      if (firstEmbed >= 0 && firstGenerate >= 0 && firstEmbed > firstGenerate) bad.push(`LLM 워밍업이 임베딩보다 먼저 갔다: ${paths.join(",")}`);
+      // 41단계 — LLM 은 Claude API 라 Ollama 에 LLM 워밍업(`/api/generate`)도 대화(`/api/chat`)도 안 간다.
+      // 40단계의 "임베딩이 LLM 워밍업보다 먼저" 는 LLM 워밍업이 없어져 저절로 참이 됐다. 대신 LLM 요청이 한 건도 없는지 본다.
+      if (firstGenerate >= 0 || paths.includes("/api/chat")) bad.push(`기동 때 Ollama 에 LLM 요청이 갔다: ${paths.join(",")}`);
     } finally {
       stub.close();
     }

@@ -38,7 +38,9 @@ import { expandAll, expandSeed, loadStructures } from "./src/expand.js";
 import { PICK_COUNT, selectStructures } from "./src/structure.js";
 import { selectFinishes } from "./src/finish.js";
 import { cleanQuery } from "./src/query.js";
-import { prepare as prepareEmbeddings, refresh as refreshEmbeddings } from "./src/embed.js";
+import { prepare as prepareEmbeddings, refresh as refreshEmbeddings, warmUp as warmUpEmbeddings } from "./src/embed.js";
+// 임베딩은 로컬 Ollama(bge-m3)다(41단계에서 대표 결정으로 되돌림). 대화 모델만 Claude API.
+import { ensureRunning, refresh as refreshOllama } from "./src/ollama.js";
 import { CHARACTER_FINISH_BY_ROLE, DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, loadFinishes } from "./src/material.js";
 import { loadSeeds, seedLabel } from "./src/seeds.js";
 import { PARTNER_COUNT, hexFromSeedId, parseColorInput, partnersFor, structuresFor } from "./src/from-color.js";
@@ -154,12 +156,17 @@ const shapePalette = ({ doc, score, matched, wholeMatches }) => ({
 });
 
 // 코퍼스 34건을 벡터로 만든다. 호출부는 기다리지 않고 결과만 적는다. EMBED_PREPARE=0 이면 건너뛴다(게이트용).
-// 40단계까지 여기 있던 워밍업(모델을 GPU 에 올려 두기)은 41단계에서 뺐다 — API 에는 올려 둘 모델이 없다.
+// 준비가 끝나면 임베딩 모델을 GPU 에 올린다 — 캐시가 다 차 있으면 준비가 Ollama 를 안 불러 모델이 없는 채
+// 시작하기 때문이다(40단계 · H1). 41단계부터 LLM 은 Claude API 라 그 뒤에 걸던 LLM 워밍업은 없다.
 function prepareCorpusEmbeddings() {
   if (process.env.EMBED_PREPARE === "0") return Promise.resolve();
-  return prepareEmbeddings(pipeline.embedDocs).then((e) => {
+  return prepareEmbeddings(pipeline.embedDocs).then(async (e) => {
     const line = e.state === "ready" ? `임베딩 준비됨 — ${e.model} ${e.count}건` : `임베딩 쓸 수 없음 — ${e.detail}`;
     process.stdout.write(Buffer.from(line + "\n", "utf8"));
+    if (e.state !== "ready" || process.env.OLLAMA_WARMUP === "0") return;
+    const w = await warmUpEmbeddings();
+    const warm = w.skipped ? `임베딩 워밍업 건너뜀 — ${w.skipped}` : `임베딩 워밍업 완료 — ${e.model} ${w.elapsedMs}ms`;
+    process.stdout.write(Buffer.from(warm + "\n", "utf8"));
   });
 }
 
@@ -683,6 +690,8 @@ async function handleStatus(res) {
   pipeline.reloadIfChanged();
   // LLM 은 키가 있는지만 본다 — 네트워크를 안 탄다.
   const llm = await refreshLlm();
+  // Ollama(임베딩용)는 확인만 한다 — 요청이 프로세스 기동을 유발하지 않는다(S3-G5).
+  const ollama = await refreshOllama();
   // 임베딩도 확인만 한다 — 쓸 수 없는 상태면 TTL 마다 다시 시도해 살아난 것을 알아챈다(리뷰 지적).
   const embed = await refreshEmbeddings();
   sendJson(res, 200, {
@@ -690,6 +699,8 @@ async function handleStatus(res) {
     corpus: pipeline.palettes.length,
     diagnostics: pipeline.diagnostics.length,
     llm: LOOPBACK_ONLY ? llm : { state: llm.state },
+    // 임베딩을 돌리는 로컬 Ollama. 루프백 밖에서는 모델 목록·호스트를 안 낸다.
+    ollama: LOOPBACK_ONLY ? ollama : { state: ollama.state, startedByUs: ollama.startedByUs },
     // 같은 경계. 모델명·사유는 루프백에서만.
     embed: LOOPBACK_ONLY ? embed : { state: embed.state, count: embed.count },
     // 코퍼스 재적재 상태(27단계). 사유에 파일 경로가 들어가므로 같은 경계.
@@ -883,8 +894,21 @@ server.listen(PORT, HOST, () => {
     process.stdout.write(Buffer.from(`LLM ${s.state === "ready" ? "준비됨" : "쓸 수 없음"} — ${s.detail}\n`, "utf8")),
   );
 
-  // 코퍼스 벡터를 미리 만든다. 기다리지 않는다 — 준비 전 질의는 3단계를 건너뛰고, 임베딩이 없거나 느려도
-  // 전문 검색은 이미 서비스 가능한 상태다. prepare 는 스스로 실패를 잡는다.
-  // 40단계까지 여기 있던 Ollama 기동(ensureRunning)과 모델 워밍업은 41단계에서 뺐다 — 띄울 프로세스도, GPU 에 올릴 모델도 없다.
-  prepareCorpusEmbeddings();
+  // 자동 기동을 껐어도 떠 있는 Ollama 가 있으면 임베딩은 쓴다. 없으면 unavailable 로 남는다.
+  if (process.env.OLLAMA_AUTOSTART === "0") {
+    prepareCorpusEmbeddings();
+    return;
+  }
+
+  // 기동을 기다리지 않는다. Ollama 가 없거나 느려도 전문 검색은 이미 서비스 가능한 상태다.
+  ensureRunning().then((s) => {
+    const mark = { ready: "준비됨", starting: "기동 중", unavailable: "쓸 수 없음" }[s.state] ?? s.state;
+    process.stdout.write(
+      Buffer.from(`Ollama(임베딩) ${mark} — ${s.detail}${s.startedByUs ? " (우리가 띄웠다)" : ""}\n`, "utf8"),
+    );
+    // 코퍼스 벡터를 미리 만든다. 기다리지 않는다 — 준비 전 질의는 3단계를 건너뛴다.
+    // **Ollama 기동에 실패해도 부른다.** 그래야 임베딩 상태가 "unknown" 에 갇히지 않고 "unavailable" 로
+    // 정직하게 남는다(리뷰 지적 · S26-G3). prepare 는 스스로 실패를 잡는다.
+    prepareCorpusEmbeddings();
+  });
 });

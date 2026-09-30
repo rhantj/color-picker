@@ -17,7 +17,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { take } from "./quota.js";
 
-/** 짧은 JSON 을 뱉는 일이라 가장 빠르고 싼 모델로 충분하다(대표 결정 2026-09-29). */
+/** 짧은 JSON 을 뱉는 일이라 가장 빠르고 싼 모델로 충분하다(대표 결정 2026-09-29 — 크레딧을 다 쓸 때까지 쓴다, 09-30). */
 export const LLM_MODEL = process.env.CLAUDE_MODEL || "claude-haiku-4-5";
 
 /**

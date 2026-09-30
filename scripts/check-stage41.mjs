@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// 41단계(모델을 Ollama 에서 Claude API · Voyage API 로) 완료 조건 검사기.
+// 41단계(LLM 을 Ollama 에서 Claude API 로 · 임베딩은 로컬 Ollama bge-m3 그대로) 완료 조건 검사기.
 //   node scripts/check-stage41.mjs S41-G1
 //
-// 설계: docs/superpowers/specs/2026-09-29-claude-voyage-api-design.md
-// 가짜 Claude·Voyage 는 scripts/lib/stub-apis.mjs — 서버가 **실제로 보낸 요청 본문**을 기록한다.
+// 설계: docs/superpowers/specs/2026-09-29-claude-voyage-api-design.md (2026-09-30 부록 — 임베딩을 되돌린 결정)
+// 가짜 Claude 는 scripts/lib/stub-apis.mjs — 서버가 **실제로 보낸 요청 본문**을 기록한다. 가짜 Ollama(임베딩)는 이 파일 안에 있다.
 // 진짜 API 는 부르지 않는다. 게이트가 돌 때마다 돈이 나가면 안 된다.
 
 // 41단계 — 게이트의 가짜 Ollama 번역 · 키 비우기(유료 호출 차단). 이 파일은 stub-apis 를 직접 쓴다.
@@ -14,6 +14,8 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { createServer } from "node:http";
 
 import { startStubApis } from "./lib/stub-apis.mjs";
 import { RETIRED } from "./lib/retired.mjs";
@@ -35,6 +37,9 @@ function startServer(port, env = {}) {
       LANGSMITH_API_KEY: "",
       VERCEL: "",
       HYBRID_TRUST_UNMEASURED: "",
+      // 진짜 `ollama serve` 를 띄우지 않는다 — 임베딩은 아래 가짜 Ollama 로만.
+      OLLAMA_AUTOSTART: "0",
+      OLLAMA_WARMUP: "0",
       ...env,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -84,6 +89,33 @@ async function waitEmbed(api, want = "ready") {
   throw new Error(`임베딩이 ${want} 가 되지 않았다`);
 }
 
+/** 가짜 Ollama — `/api/tags` 와 `/api/embed` 만. embed(text) 가 벡터를 정한다. 받은 요청을 기록한다. */
+function stubOllamaEmbed(embed) {
+  const log = [];
+  const server = createServer((req, res) => {
+    let buf = "";
+    req.setEncoding("utf8");
+    req.on("data", (c) => (buf += c));
+    req.on("end", () => {
+      let body = {};
+      try {
+        body = JSON.parse(buf || "{}");
+      } catch {
+        body = {};
+      }
+      log.push({ path: req.url, body });
+      res.writeHead(200, { "content-type": "application/json" });
+      if (req.url === "/api/tags") return res.end(JSON.stringify({ models: [{ name: "bge-m3:latest" }] }));
+      if (req.url === "/api/embed") return res.end(JSON.stringify({ embeddings: (body.input ?? []).map((t) => embed(t)) }));
+      res.writeHead(404);
+      return res.end("{}");
+    });
+  });
+  return new Promise((resolve) =>
+    server.listen(0, "127.0.0.1", () => resolve({ host: `127.0.0.1:${server.address().port}`, log, close: () => server.close() })),
+  );
+}
+
 const seedId = () => JSON.parse(read("data/palettes.json")).palettes[0].id;
 const structureIds = () => JSON.parse(read("data/structures.json")).structures.map((s) => s.id);
 const finishIds = () => JSON.parse(read("data/finishes.json")).finishes.map((f) => f.id);
@@ -102,20 +134,22 @@ const kindOf = (body) => {
 const LOW_Q = "zzqq qqzz 흐릿흐릿";
 
 const GATES = {
-  /** Ollama 가 정말 빠졌다 — 부르는 길도, 띄우는 길도 없다. */
+  /** LLM 이 Ollama 를 안 부른다 — 네 호출부는 llm.js(Claude API)만 거친다. 임베딩만 Ollama 에 남는다. */
   "S41-G1": async () => {
     const bad = [];
-    if (existsSync(join(ROOT, "src/ollama.js"))) bad.push("src/ollama.js 가 아직 있다");
-    const files = ["server.js", ...readdirSync(join(ROOT, "src")).filter((f) => f.endsWith(".js")).map((f) => `src/${f}`)];
-    for (const file of files) {
+    for (const file of ["src/rewrite.js", "src/describe.js", "src/structure.js", "src/finish.js", "src/llm.js"]) {
       const code = stripComments(read(file));
-      // `/api/chat` 은 이 서버 자신의 대화창 경로(39단계)라 못 찾는다 — Ollama 를 부르던 모양 `${BASE}/api/` 로 찾는다.
-      for (const needle of ["BASE}/api/", "/api/embed", "/api/generate", "/api/tags", "ollama.js", "OLLAMA_", "keep_alive", "node:child_process", "spawn("]) {
+      for (const needle of ["BASE}/api/", "/api/chat", "/api/generate", "ollama.js", "OLLAMA_", "pickModel"]) {
         if (code.includes(needle)) bad.push(`${file} 에 ${needle}`);
       }
+      if (file !== "src/llm.js" && !code.includes('from "./llm.js"')) bad.push(`${file} 가 llm.js 를 안 거친다`);
+    }
+    for (const file of ["server.js", ...readdirSync(join(ROOT, "src")).filter((f) => f.endsWith(".js")).map((f) => `src/${f}`)]) {
+      if (stripComments(read(file)).includes("/api/generate")) bad.push(`${file} 에 /api/generate — LLM 워밍업이 남았다`);
     }
     // 음성 대조 — 검사가 실제로 무언가를 읽는가
     if (!stripComments(read("src/llm.js")).includes("messages.create")) bad.push("llm.js 에서 messages.create 를 못 찾았다 — 이 게이트가 헛돌고 있다");
+    if (!stripComments(read("src/embed.js")).includes("/api/embed")) bad.push("embed.js 가 Ollama /api/embed 를 안 부른다 — 임베딩은 로컬이어야 한다");
     return bad;
   },
 
@@ -143,7 +177,7 @@ const GATES = {
       },
     });
     try {
-      await withServer(4411, { ...stub.env, EMBED_PREPARE: "0", VOYAGE_API_KEY: "" }, async (api) => {
+      await withServer(4411, { ...stub.env, EMBED_PREPARE: "0" }, async (api) => {
         const s = (await api(`/api/search?q=${encodeURIComponent(LOW_Q)}`)).json;
         if (s?.rewrite?.model !== "claude-haiku-4-5") bad.push(`재작성 모델이 ${s?.rewrite?.model} (claude-haiku-4-5 여야)`);
         if (JSON.stringify(s?.rewrite?.terms) !== JSON.stringify(["봄", "파스텔"])) bad.push(`재작성어가 스텁 답과 다르다: ${JSON.stringify(s?.rewrite?.terms)}`);
@@ -177,37 +211,27 @@ const GATES = {
     return bad;
   },
 
-  /** 코퍼스는 document, 질의는 query 로 Voyage 에 간다. 캐시가 모델별로 갈린다. */
+  /** 임베딩은 로컬 Ollama(bge-m3)로 간다 — Voyage 등 외부 임베딩 API 를 부르지 않는다(2026-09-30 대표 결정). */
   "S41-G3": async () => {
     const bad = [];
-    const stub = await startStubApis({ embed: (text) => [text.length % 7 + 1, 1, 0.5] });
-    const dir = gateDataDir();
+    for (const file of readdirSync(join(ROOT, "src")).filter((f) => f.endsWith(".js"))) {
+      if (/voyage/i.test(stripComments(read(`src/${file}`)))) bad.push(`src/${file} 코드에 voyage`);
+    }
+    const stub = await startStubApis({});
+    const ollama = await stubOllamaEmbed(() => [1, 0, 0]);
     try {
-      await withServer(4412, { ...stub.env, ANTHROPIC_API_KEY: "", TONEFIRST_DATA_DIR: dir }, async (api) => {
+      await withServer(4412, { ...stub.env, OLLAMA_HOST: ollama.host, ANTHROPIC_API_KEY: "" }, async (api) => {
         const st = await waitEmbed(api);
-        if (st.embed.model !== "voyage-4") bad.push(`임베딩 모델이 ${st.embed.model} (voyage-4 여야)`);
+        if (st.embed.model !== "bge-m3") bad.push(`임베딩 모델이 ${st.embed.model} (bge-m3 여야)`);
         await api(`/api/search?q=${encodeURIComponent(LOW_Q)}&rewrite=0`);
       });
-      const docs = stub.embeddings.filter((e) => e.body.input_type === "document");
-      const queries = stub.embeddings.filter((e) => e.body.input_type === "query");
-      const others = stub.embeddings.filter((e) => !["document", "query"].includes(e.body.input_type));
-      if (docs.length !== 1) bad.push(`코퍼스 벡터화 요청이 ${docs.length}건 (1건이어야)`);
-      if ((docs[0]?.body.input ?? []).length < 30) bad.push(`코퍼스 입력이 ${(docs[0]?.body.input ?? []).length}건 — 34건 안팎이어야`);
-      if (queries.length !== 1 || queries[0].body.input?.[0] !== LOW_Q) bad.push(`질의 벡터 요청이 ${queries.length}건이거나 입력이 질의가 아니다`);
-      if (others.length) bad.push(`input_type 이 없는 요청 ${others.length}건`);
-      for (const e of stub.embeddings) if (e.headers.authorization !== "Bearer stub-voyage-key") bad.push("Authorization 헤더가 Bearer 키가 아니다");
-
-      // 캐시 — 같은 모델로 다시 뜨면 코퍼스를 다시 안 보낸다. 모델을 바꾸면 다시 보낸다.
-      const cache = JSON.parse(readFileSync(join(dir, "embeddings.json"), "utf8"));
-      if (cache.model !== "voyage-4") bad.push(`캐시 모델이 ${cache.model}`);
-      const before = stub.embeddings.length;
-      await withServer(4412, { ...stub.env, ANTHROPIC_API_KEY: "", TONEFIRST_DATA_DIR: dir }, async (api) => waitEmbed(api));
-      if (stub.embeddings.length !== before) bad.push(`같은 모델로 재기동했는데 코퍼스를 다시 보냈다 (${stub.embeddings.length - before}건)`);
-      await withServer(4412, { ...stub.env, ANTHROPIC_API_KEY: "", TONEFIRST_DATA_DIR: dir, VOYAGE_MODEL: "voyage-4-lite" }, async (api) => waitEmbed(api));
-      const after = stub.embeddings.slice(before);
-      if (after.length !== 1 || after[0].body.model !== "voyage-4-lite") bad.push(`모델을 바꿨는데 코퍼스를 다시 안 만들었다 (${after.length}건)`);
+      const embeds = ollama.log.filter((e) => e.path === "/api/embed");
+      if (embeds.length < 2) bad.push(`가짜 Ollama 에 임베딩 요청이 ${embeds.length}건 (코퍼스 + 질의 2건 이상이어야)`);
+      if (embeds.some((e) => e.body.model !== "bge-m3")) bad.push("Ollama 임베딩 요청의 모델이 bge-m3 가 아니다");
+      if (stub.embeddings.length) bad.push(`외부 임베딩 API(/v1/embeddings)가 ${stub.embeddings.length}번 불렸다`);
     } finally {
       stub.close();
+      ollama.close();
     }
     return bad;
   },
@@ -215,7 +239,7 @@ const GATES = {
   /** 키가 없으면 1단계로 돌고 죽지 않는다. 루프백 밖에서는 사유가 숨는다. */
   "S41-G4": async () => {
     const bad = [];
-    await withServer(4413, { ANTHROPIC_API_KEY: "", VOYAGE_API_KEY: "" }, async (api) => {
+    await withServer(4413, { ANTHROPIC_API_KEY: "", OLLAMA_HOST: "" }, async (api) => {
       const st = (await api("/api/status")).json;
       if (st?.stage !== 1) bad.push(`키 없이 stage=${st?.stage} (1 이어야)`);
       if (st?.llm?.state !== "unavailable" || !/ANTHROPIC_API_KEY/.test(st?.llm?.detail ?? "")) bad.push(`LLM 상태·사유가 이상하다: ${JSON.stringify(st?.llm)}`);
@@ -225,7 +249,7 @@ const GATES = {
       const c = await api(`/api/character?q=${encodeURIComponent("빨간 머리 기사")}`);
       if (c.status !== 200 || c.json?.parse?.from !== "fallback") bad.push(`키 없이 캐릭터가 ${c.status} · from=${c.json?.parse?.from}`);
     });
-    await withServer(4414, { ANTHROPIC_API_KEY: "", VOYAGE_API_KEY: "", HOST: "0.0.0.0" }, async (api) => {
+    await withServer(4414, { ANTHROPIC_API_KEY: "", OLLAMA_HOST: "", HOST: "0.0.0.0" }, async (api) => {
       const st = (await api("/api/status")).json;
       if (JSON.stringify(Object.keys(st?.llm ?? {})) !== JSON.stringify(["state"])) bad.push(`루프백 밖에서 llm 이 state 말고도 낸다: ${JSON.stringify(st?.llm)}`);
       const s = (await api(`/api/search?q=${encodeURIComponent(LOW_Q)}`)).json;
@@ -234,56 +258,54 @@ const GATES = {
     return bad;
   },
 
-  /** 기준값을 안 잰 임베딩으로는 확신하지 않는다. 같은 조건에서 "잰 것으로 친다" 를 켜면 확신한다(양성 대조). */
+  /**
+   * 기준값을 잰 모델(bge-m3)이 아니면 임베딩으로는 확신하지 않는다 · bge-m3 면 확신한다(양성 대조).
+   * 임베딩을 한때 Voyage 로 바꿨을 때 들인 안전장치다 — 모델을 또 바꾸면 저절로 다시 걸린다.
+   */
   "S41-G5": async () => {
     const bad = [];
-    const src = read("src/hybrid.js");
-    if (!/export const THRESHOLDS_MEASURED_ON = "bge-m3"/.test(src)) bad.push("hybrid.js 의 THRESHOLDS_MEASURED_ON 이 bge-m3 가 아니다 — Voyage 로 쟀다면 이 게이트를 고친다");
+    if (!/export const THRESHOLDS_MEASURED_ON = "bge-m3"/.test(read("src/hybrid.js"))) bad.push("hybrid.js 의 THRESHOLDS_MEASURED_ON 이 bge-m3 가 아니다");
     // 코퍼스 첫 문서와 질의를 같은 벡터로, 나머지는 서로 다른 축으로 — 질의가 첫 문서로 확 튀어나온다.
-    let firstDoc = null;
     const axis = new Map();
     const vec = (i) => Array.from({ length: 64 }, (_, k) => (k === i % 64 ? 1 : 0));
-    const embed = (text, type) => {
-      if (type === "query") return vec(0);
-      firstDoc ??= text;
+    const embed = (text) => {
+      if (text === "zzqq") return vec(0);
       if (!axis.has(text)) axis.set(text, axis.size);
       return vec(axis.get(text));
     };
-    for (const trust of ["", "1"]) {
-      const stub = await startStubApis({ embed });
+    for (const model of ["other-embed-model", "bge-m3"]) {
       axis.clear();
-      firstDoc = null;
+      const ollama = await stubOllamaEmbed(embed);
       try {
-        await withServer(4415, { ...stub.env, ANTHROPIC_API_KEY: "", HYBRID_TRUST_UNMEASURED: trust }, async (api) => {
+        await withServer(4415, { OLLAMA_HOST: ollama.host, OLLAMA_EMBED_MODEL: model, ANTHROPIC_API_KEY: "", HYBRID_TRUST_UNMEASURED: "" }, async (api) => {
           await waitEmbed(api);
           // 전문 검색이 한 건도 못 잡는 질의 — 임베딩만이 증거다(어절이 걸리면 BM25 순위가 결합 1위를 바꾼다).
           const s = (await api(`/api/search?q=zzqq&rewrite=0`)).json;
-          if (trust === "" && s?.confident) bad.push(`안 잰 기준값으로 확신했다 (stage ${s?.stage} · route ${s?.route})`);
-          if (trust === "1" && !s?.confident) bad.push(`양성 대조 실패 — 잰 것으로 쳐도 확신 안 함 (stage ${s?.stage}) · 이 게이트가 헛돌고 있다`);
+          if (model !== "bge-m3" && s?.confident) bad.push(`안 잰 모델(${model})로 확신했다 (stage ${s?.stage} · route ${s?.route})`);
+          if (model === "bge-m3" && !s?.confident) bad.push(`양성 대조 실패 — bge-m3 인데 확신 안 함 (stage ${s?.stage}) · 이 게이트가 헛돌고 있다`);
         });
       } finally {
-        stub.close();
+        ollama.close();
       }
     }
     return bad;
   },
 
-  /** 화면 · 상태 API 에 Ollama 가 안 나온다. "로컬" 이라는 거짓 문구도 없다. */
+  /** 화면이 LLM 을 "로컬 · Ollama" 라고 부르지 않는다 — 상태 필은 Claude 상태를 말하고, `/api/status` 에 llm 이 있다. */
   "S41-G6": async () => {
     const bad = [];
     for (const f of ["public/index.html", "public/history.html", "public/saved.html"]) {
       const html = read(f);
-      if (/ollama/i.test(html)) bad.push(`${f} 에 Ollama`);
       if (html.includes('id="runtime-where">로컬<')) bad.push(`${f} 의 런타임 필 기본 문구가 "로컬"`);
       if (html.includes("로컬 LLM")) bad.push(`${f} 에 "로컬 LLM"`);
     }
     const ui = stripComments(read("public/ui.js"));
-    if (/ollama/i.test(ui)) bad.push("public/ui.js 코드에 Ollama");
+    if (/Ollama 준비됨|Ollama 없음|Ollama 기동/.test(ui)) bad.push("public/ui.js 가 LLM 상태를 Ollama 로 말한다");
     if (!ui.includes("data.llm")) bad.push("ui.js 가 /api/status 의 llm 을 안 읽는다");
-    await withServer(4416, { ANTHROPIC_API_KEY: "", VOYAGE_API_KEY: "" }, async (api) => {
+    await withServer(4416, { ANTHROPIC_API_KEY: "", OLLAMA_HOST: "" }, async (api) => {
       const st = (await api("/api/status")).json;
-      if (/ollama/i.test(JSON.stringify(st))) bad.push(`/api/status 에 ollama: ${JSON.stringify(st).slice(0, 120)}`);
       if (!st?.llm) bad.push("/api/status 에 llm 이 없다");
+      if (st?.llm?.state !== "unavailable") bad.push(`키 없이 llm.state=${st?.llm?.state}`);
     });
     return bad;
   },
@@ -306,10 +328,11 @@ const GATES = {
     if (onVercel !== "/tmp/tonefirst") bad.push(`VERCEL=1 인데 저장 폴더가 ${onVercel}`);
     const local = await probe({ VERCEL: "" });
     if (!/var[\\/]?$/.test(local)) bad.push(`로컬 저장 폴더가 var/ 가 아니다: ${local}`);
-    await withServer(4417, { ANTHROPIC_API_KEY: "", VOYAGE_API_KEY: "", VERCEL: "1" }, async (api) => {
+    await withServer(4417, { ANTHROPIC_API_KEY: "", OLLAMA_HOST: "", VERCEL: "1" }, async (api) => {
       const st = (await api("/api/status")).json;
       if (JSON.stringify(Object.keys(st?.llm ?? {})) !== JSON.stringify(["state"])) bad.push(`VERCEL=1 인데 llm 상세가 나간다: ${JSON.stringify(st?.llm)}`);
       if (st?.embed?.detail !== undefined) bad.push("VERCEL=1 인데 embed 사유가 나간다");
+      if (st?.ollama?.host !== undefined || st?.ollama?.detail !== undefined) bad.push("VERCEL=1 인데 ollama 호스트·사유가 나간다");
     });
     return bad;
   },
@@ -322,7 +345,7 @@ const GATES = {
       reply: (body) => (kindOf(body) === "structure" ? JSON.stringify({ ids: [...ids].reverse() }) : "{}"),
     });
     try {
-      await withServer(4418, { ...stub.env, EMBED_PREPARE: "0", VOYAGE_API_KEY: "", LLM_RATE_PER_MIN: "2" }, async (api) => {
+      await withServer(4418, { ...stub.env, EMBED_PREPARE: "0", LLM_RATE_PER_MIN: "2" }, async (api) => {
         const url = `/api/expand?seed=${encodeURIComponent(seedId())}&q=${encodeURIComponent("가을 카페 브랜딩")}`;
         const first = await api(url);
         const second = await api(url, { headers: { "x-forwarded-for": "203.0.113.9" } });

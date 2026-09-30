@@ -11,12 +11,12 @@
       "port": 4173
     },
     {
-      "name": "tonefirst-no-keys",
+      "name": "tonefirst-no-llm",
       "runtimeExecutable": "node",
       "runtimeArgs": [
         "--env-file-if-exists=.env",
         "-e",
-        "process.env.PORT='4399';process.env.ANTHROPIC_API_KEY='';process.env.VOYAGE_API_KEY='';import('./server.js')"
+        "process.env.PORT='4399';process.env.ANTHROPIC_API_KEY='';import('./server.js')"
       ],
       "port": 4399
     }

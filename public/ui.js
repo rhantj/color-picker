@@ -906,7 +906,7 @@ export function diagnosisCard(dx, rank) {
 
 /**
  * 상단 런타임 필. 세 화면이 같은 것을 쓴다.
- * 41단계부터 모델은 이 기계가 아니라 Claude API · Voyage API 에서 돈다 — "로컬" 이라고 쓰면 거짓이다.
+ * 41단계부터 LLM 은 이 기계가 아니라 Claude API 에서 돈다 — "로컬" 이라고 쓰면 거짓이다. 임베딩은 로컬 Ollama(bge-m3)다.
  */
 const RUNTIME_LABEL = {
   ready: "Claude API 준비됨",
