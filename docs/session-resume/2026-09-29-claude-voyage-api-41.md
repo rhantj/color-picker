@@ -72,9 +72,11 @@
   - `/` · `/history` 200 · `/server.js` · `/package.json` · `/.env` 404 · 검색 200(1단계, 사유는 "질의 재작성을 쓸 수 없습니다" 로 가려짐).
   - Vercel 에는 Claude 키도 Ollama 도 없어서 **배포판은 LLM · 임베딩 없이 1단계 전문 검색만** 돈다.
 - 로컬 재기동: `stage 4` · LLM ready · bge-m3 ready.
+- **같은 날 대표 지시로 배포판을 내렸다** — Vercel Settings → General → **Pause Project**(되돌릴 수 있다. 삭제는 안 했다).
+  운영 주소 · `-git-main` 별칭 · 프로젝트 별칭 전부 503 `DEPLOYMENT_PAUSED` `[실측]`. 다시 켜려면 같은 자리의 **Resume Project**
+  (재배포 없이 몇 분). main 에 푸시해도 Vercel 은 빌드하지만 일시 중지 중에는 서비스하지 않는다 `[판단]`.
 
 ## 다음에 할 일
 
-1. 배포판에 LLM 을 붙이려면 Vercel 환경변수에 `ANTHROPIC_API_KEY`(대표님이 직접) · Anthropic 콘솔 월 지출 상한. 임베딩은 open-work I4.
-2. **배포판은 공개다 — open-work I2(무인증 저장 · 대화 기록이 방문자끼리 보임)를 정해야 한다.**
-3. Claude 크레딧을 다 쓰면: open-work I8.
+1. 배포판은 일시 중지 상태다. 다시 켜기 전에 open-work I2(무인증 저장)를 정한다. 배포판에 LLM 을 붙이려면 Vercel 환경변수에 `ANTHROPIC_API_KEY`(대표님이 직접) · Anthropic 콘솔 월 지출 상한. 임베딩은 open-work I4.
+2. Claude 크레딧을 다 쓰면: open-work I8.
