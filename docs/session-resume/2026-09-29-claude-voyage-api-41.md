@@ -1,6 +1,7 @@
 # 41단계 — LLM 을 Claude API 로 · 임베딩은 로컬 bge-m3 그대로 (2026-09-29 ~ 30)
 
-> 브랜치 `stage-41-claude-voyage`. **Vercel 배포는 대표 결정으로 잠시 멈췄다(09-30).**
+> **2026-10-01 main 에 ff 머지 · 푸시(`1dc4cac..6cf022d`) → Vercel 자동 배포**(대표 지시 "41단계 진행하고 푸시해서 배포").
+> 09-30 에 잠시 멈췄던 배포를 다시 열었다.
 > 설계: `docs/superpowers/specs/2026-09-29-claude-voyage-api-design.md` — **맨 아래 부록(09-30)이 지금 상태다.**
 
 ## 무엇을 했나
@@ -63,9 +64,17 @@
   40단계의 23건 중 21 정확도가 그대로다.
 - 러너는 저장소 밖 임시 스크립트다(스크립트별로 순서대로, 스크립트끼리 4개씩 나란히 · open-work I7).
 
+## 머지 결과 (2026-10-01)
+
+- `main` = `6cf022d`. 배포판 `color-picker-sable-alpha.vercel.app` 확인 `[실측]`:
+  - `/api/status` → `{"stage":1, "llm":{"state":"unavailable"}, "ollama":{"state":"unavailable","startedByUs":false}, "embed":{"state":"unknown","count":0}}` —
+    **내부 상세(호스트 · 모델 목록 · 사유 원문)가 더는 안 나간다**(`VERCEL` 감지). 첫 배포의 노출이 닫혔다.
+  - `/` · `/history` 200 · `/server.js` · `/package.json` · `/.env` 404 · 검색 200(1단계, 사유는 "질의 재작성을 쓸 수 없습니다" 로 가려짐).
+  - Vercel 에는 Claude 키도 Ollama 도 없어서 **배포판은 LLM · 임베딩 없이 1단계 전문 검색만** 돈다.
+- 로컬 재기동: `stage 4` · LLM ready · bge-m3 ready.
+
 ## 다음에 할 일
 
-1. **Vercel 일시 중단을 어떻게 할지**(대표 확인) — 지금 배포판(40단계)을 그대로 둘지, 내릴지, main 에 머지해도 자동 배포되지 않게 막을지.
-2. 머지(`git merge --ff-only stage-41-claude-voyage`) · 푸시 — 위 1 을 정한 뒤.
-3. 배포를 다시 열 때: open-work I4(임베딩을 어디서) · I2(무인증 전제).
-4. Claude 크레딧을 다 쓰면: open-work I8.
+1. 배포판에 LLM 을 붙이려면 Vercel 환경변수에 `ANTHROPIC_API_KEY`(대표님이 직접) · Anthropic 콘솔 월 지출 상한. 임베딩은 open-work I4.
+2. **배포판은 공개다 — open-work I2(무인증 저장 · 대화 기록이 방문자끼리 보임)를 정해야 한다.**
+3. Claude 크레딧을 다 쓰면: open-work I8.
