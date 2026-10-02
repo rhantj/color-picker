@@ -2336,3 +2336,57 @@ S41-G8 IP 당 한도(`LLM_RATE_PER_MIN`)를 넘으면 Claude 를 안 부르고 2
 S41-G9 은퇴한 게이트(2개)가 GATES.md 에 "41단계로 은퇴" · `_RETIRED` · 제 스크립트로 적혀 있다
     CHECK: node scripts/check-stage41.mjs S41-G9
     EXPECT: S41_G9_OK
+
+## 42단계 — 문장 → 의도 → 색 (Claude 는 읽기만, 색은 OKLCH 엔진 · 대표 결정 2026-10-02)
+
+설계: `docs/superpowers/specs/2026-10-02-intent-palette-design.md`. 게이트 12개를 만들 때마다 일부러 망가뜨려 확인했다(21건 중 20건이 잡혔다 — 처음 살아남은 "진단으로 읽혀도 새 팔레트" 는 S42-G10 의 문장을 라우터가 먼저 진단으로 보내 헛돌던 구멍이라 문장을 바꾸고 "의도 질문이 갔는가" 를 더해 막았다).
+살아남은 하나는 **등가 변형**이다 — UI 본문의 대비 밀기(`pushContrast`)를 빼도 S42-G7 이 통과한다. 본문 밝기(0.26 · 다크 0.93)가 이미 모든 조합에서
+4.5:1 을 넘기 때문이다. 밀기가 실제로 일하는지는 따로 쟀다 — 본문 밝기를 0.5 로 망가뜨리면 밀기가 있을 때 통과, 없을 때 20건 실패.
+
+S42-G1 같은 의도는 같은 헥스를 낸다 — 같은 프로세스 두 번 · 다른 프로세스 · 부르는 순서를 뒤집어도(색상각별 기억이 결과에 안 샌다)
+    CHECK: node scripts/check-stage42.mjs S42-G1
+    EXPECT: S42_G1_OK
+
+S42-G2 색을 지어내지 않는다 — 의도 스키마의 문자열 칸은 `reading` 말고 전부 enum · 객체마다 additionalProperties:false · 모델이 헥스를 섞어 보내도 검증 결과와 색이 같다 · 엔진 · 해석기 본문에 상수 헥스가 없다
+    CHECK: node scripts/check-stage42.mjs S42-G2
+    EXPECT: S42_G2_OK
+
+S42-G3 의도 검증 — 뼈대(`kind` · `base`)가 없으면 null(다른 질문의 답이 기본값으로 둔갑하지 않는다) · 모르는 색상 · 톤 · 범위 밖 개수 · 타입 위장(`["ui"]`) · `__proto__` · `toString` 을 버린다 · 뺄 색이 바탕 · 포인트에서 빠진다 · 설명의 제어 문자 · 길이
+    CHECK: node scripts/check-stage42.mjs S42-G3
+    EXPECT: S42_G3_OK
+
+S42-G4 색 수 = `count`(3~7) · 면적은 정수 · 합 100 · 하한 이상 · 역할 이름이 안 겹친다 · 카드(`ratioFor`)가 엔진 면적을 쓰고 모양이 틀린 면적은 안 쓴다
+    CHECK: node scripts/check-stage42.mjs S42-G4
+    EXPECT: S42_G4_OK
+
+S42-G5 뺄 색 — 어느 칸도 뺄 색상각 ±20° 안에서 C 0.04 를 넘지 않는다(나온 헥스로 잰다 — 반올림이 띠 안으로 끌고 들어온 #68521F 를 잡았다)
+    CHECK: node scripts/check-stage42.mjs S42-G5
+    EXPECT: S42_G5_OK
+
+S42-G6 포인트가 가장 선명하다 — 일반은 다른 모든 칸보다, UI 는 바탕 · 면 · 테두리 · 본문보다. 사실상 무채색 포인트(C < 0.03)는 예외(누르면 화면이 회색이 된다)
+    CHECK: node scripts/check-stage42.mjs S42-G6
+    EXPECT: S42_G6_OK
+
+S42-G7 UI 대비 — 본문/바탕 ≥ 4.5 · 주색 · 보조 · 강조/바탕 ≥ 3 (WCAG 1.4.3 · 1.4.11). 색상 13 × 톤 12 × 대비 3 × 색 수 5 × 3안 × 포인트 유무 전부
+    CHECK: node scripts/check-stage42.mjs S42-G7
+    EXPECT: S42_G7_OK
+
+S42-G8 모든 결과가 `#RRGGBB` · OKLCH 변환이 sRGB 격자 4096색을 왕복한다(파랑 근처 경계가 휘어 #0000AA 가 바뀌던 것)
+    CHECK: node scripts/check-stage42.mjs S42-G8
+    EXPECT: S42_G8_OK
+
+S42-G9 3안 — 유채색 바탕이면 세 안이 나오고 서로 다르다(3색 UI 에서 대담 = 충실이던 것) · 어떤 의도에서도 같은 안이 두 번 안 나온다 · 첫 안은 충실
+    CHECK: node scripts/check-stage42.mjs S42-G9
+    EXPECT: S42_G9_OK
+
+S42-G10 경로 — 추천이 의도를 한 번 묻고 엔진 계산 그대로 `generated` 3안을 낸다(재작성은 안 부름) · 진단으로 읽히면 · 의도가 아닌 답이면 · 키가 없으면 옛 검색으로(과도기) · 색과 무관하면 되묻는다 · 사용자 문장은 user 자리에만
+    CHECK: node scripts/check-stage42.mjs S42-G10
+    EXPECT: S42_G10_OK
+
+S42-G11 저장 — 의도 · 안 번호로만 저장되고 서버가 같은 검증을 거쳐 다시 계산한다(거짓 색 무시) · 같은 의도 · 같은 안은 덮어쓰고 메모를 이어받는다 · 불량 입력 8가지 400 · 엔진 내보내기에 새 역할이 실린다
+    CHECK: node scripts/check-stage42.mjs S42-G11
+    EXPECT: S42_G11_OK
+
+S42-G12 기록 · 화면 — 내역 요약이 `generated` · LLM 사용 · 읽은 한 줄 · 트레이스에 `llm.intent` · 화면이 generated 를 새 블록으로 그리고 저장에 색을 안 보낸다
+    CHECK: node scripts/check-stage42.mjs S42-G12
+    EXPECT: S42_G12_OK

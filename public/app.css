@@ -1605,3 +1605,57 @@ a.action--primary:hover {
 .expand__more .expand__grid {
   padding-top: 12px;
 }
+
+/* ── 문장으로 만든 팔레트(42단계) ───────────────────────── */
+/* .answer 가 grid gap 으로 위아래를 띄운다 — 바깥 여백을 따로 주면 제목보다 들여쓰여 보였다. */
+.reading {
+  margin: 0;
+  font-size: 15px;
+  color: var(--ink);
+}
+/* UI 미리보기 — 칠하는 색은 전부 팔레트에서 온다. 여기 적은 것은 모양뿐이다. */
+.uiprev {
+  margin: 10px 0 4px;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+}
+.uiprev__card {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+.uiprev__title {
+  margin: 0 0 2px;
+  font-weight: 700;
+  font-size: 14px;
+}
+.uiprev__text {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+.uiprev__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.uiprev__button,
+.uiprev__ghost,
+.uiprev__badge {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+.uiprev__ghost {
+  border: 1px solid;
+}
+.uiprev__badge {
+  margin-left: auto;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0;
+}

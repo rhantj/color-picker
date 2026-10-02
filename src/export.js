@@ -19,6 +19,7 @@
 // 사용자가 대등 조합을 60:40 으로 조정했다면 그때부터 서열이 있는 것이다.
 
 import { applyFinish, toUnity, toUnreal } from "./material.js";
+import { materialRole } from "./compose.js";
 
 const ROLE = { ground: "ground", accent: "accent", equal: "tone" };
 
@@ -230,7 +231,8 @@ function enginePalette(entry, spec) {
   for (const color of entry.colors ?? []) {
     let material;
     try {
-      material = applyFinish(color.hex, finishes[color.role], color.role);
+      // 문장 팔레트(42단계)의 역할(주조색 · 보조색 …)은 재질 표에 없다 — 표가 아는 등급으로 옮겨 묻는다(`materialRole`).
+      material = applyFinish(color.hex, finishes[color.role], entry.structureId === "generated" ? materialRole(color.role) : color.role);
     } catch (err) {
       /*
        * **던지지 않는 것과 흔적을 안 남기는 것은 다르다**(리뷰 지적). 대부분은 손상된 저장
@@ -250,7 +252,7 @@ function enginePalette(entry, spec) {
 
   return {
     // 캐릭터(34단계)는 같은 배색 쌍에서 여럿이 나오므로 저장 id 가 유일한 이름이다.
-    id: entry.structureId === "character" ? String(entry.id) : `${entry.seedId}-${entry.structureId}-${entry.mode}`,
+    id: entry.structureId === "character" || entry.structureId === "generated" ? String(entry.id) : `${entry.seedId}-${entry.structureId}-${entry.mode}`,
     name: entry.name,
     seed: entry.seedLabel,
     structure: entry.structureId,

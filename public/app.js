@@ -346,6 +346,66 @@ function searchBlock(data, original) {
   return box;
 }
 
+/**
+ * UI 쓰임새 팔레트의 작은 화면 미리보기(42단계). 역할 이름(바탕 · 면 · 본문 · 주색 · 강조 …)대로 색을 칠해
+ * "이 색들이 화면에서 어떻게 앉나" 를 바로 보인다. 색은 서버가 준 것 그대로 — 여기서 만들지 않는다.
+ */
+function uiPreview(palette) {
+  const by = Object.fromEntries(palette.colors.map((c) => [c.role, c.hex]));
+  const frame = el("div", "uiprev");
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.background = by["바탕"];
+  frame.style.color = by["본문"];
+  const card = el("div", "uiprev__card");
+  card.style.background = by["면"] ?? by["바탕"];
+  if (by["테두리"]) card.style.borderColor = by["테두리"];
+  const title = el("p", "uiprev__title", "오늘의 색");
+  const line = el("p", "uiprev__text", "본문 글자는 바탕과 4.5:1 이상");
+  const row = el("div", "uiprev__row");
+  const primary = el("span", "uiprev__button", "확인");
+  primary.style.background = by["주색"] ?? by["강조"];
+  primary.style.color = by["바탕"];
+  row.append(primary);
+  if (by["보조"]) {
+    const second = el("span", "uiprev__ghost", "취소");
+    second.style.color = by["보조"];
+    second.style.borderColor = by["보조"];
+    row.append(second);
+  }
+  const badge = el("span", "uiprev__badge", "새 소식");
+  badge.style.background = by["강조"];
+  row.append(badge);
+  card.append(title, line, row);
+  frame.append(card);
+  return frame;
+}
+
+/**
+ * 문장으로 만든 팔레트(42단계). Claude 가 읽은 것 한 줄 + 읽은 칸들 + 3안.
+ * **저장은 의도와 안 번호만 보낸다** — 서버가 같은 검증을 거쳐 색을 다시 계산한다(S4 · S18 과 같은 규칙).
+ */
+function generatedBlock(data) {
+  const box = el("div", "answer");
+  const status = el("div", "status");
+  status.append(el("span", "status__timing", `${data.elapsedMs}ms · ${data.palettes.length}안`));
+  const strip = el("div", "rewrite");
+  strip.append(el("span", "status__badge", "읽은 것"));
+  for (const part of data.read ?? []) strip.append(el("span", "rewrite__term", part));
+  status.append(strip);
+  box.append(status);
+  if (data.reading) box.append(el("p", "reading", `이렇게 읽었어요 — ${data.reading}`));
+  box.append(el("h2", "results__title", "팔레트"), el("p", "results__note", "같은 해석에서 결을 달리한 안입니다. 비율을 옮겨 보고 마음에 드는 안을 저장하세요"));
+  const grid = el("div", "expand__grid");
+  for (const p of data.palettes ?? []) {
+    const onSave = (shares) => api("/api/saved/generated", { intent: data.intent, variant: p.variant, shares, query: data.query });
+    const card = structureCard(p, "light", null, onSave, null);
+    if (p.theme) card.insertBefore(uiPreview(p), card.querySelector(".struct__principle")?.nextSibling ?? null);
+    grid.append(card);
+  }
+  box.append(grid);
+  return box;
+}
+
 /** 캐릭터 답. 전의 renderCharacter 를 요소로. */
 function characterBlock(data) {
   const box = el("div", "answer");
@@ -401,7 +461,8 @@ function colorBlock(data) {
 }
 
 const BLOCK_BY_ROUTE = {
-  palette: (data, original) => searchBlock(data, original),
+  // Claude 를 못 써서 옛 검색으로 물러선 답(42·43단계 과도기)은 kind 가 없다.
+  palette: (data, original) => (data.kind === "generated" ? generatedBlock(data) : searchBlock(data, original)),
   diagnosis: (data, original) => searchBlock(data, original),
   character: (data) => characterBlock(data),
   color: (data) => colorBlock(data),

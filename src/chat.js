@@ -35,14 +35,17 @@ const askTurn = (reason, choices, question) => ({ kind: "ask", reason, question,
 
 /** 답한 턴을 내역에 남길 요약. app.js 가 하던 것을 서버로 옮겼다. */
 function summarize(route, payload) {
+  // 42단계 — 문장으로 만든 색. 검색 단계가 없다(Claude 한 번 + 계산). 내역의 "몇 단계" 자리는 LLM 을 쓴 2 로 적는다.
+  if (payload?.kind === "generated") return { stage: 2, usedLlm: true, confident: payload.intent.kind === "palette", topKind: "generated", topId: null, topLabel: payload.reading || payload.read.join(" · ") };
   if (route === "color") return { stage: 1, usedLlm: false, confident: true, topKind: "color", topId: payload.partners[0]?.pairId ?? null, topLabel: payload.partners[0]?.pairName ?? null };
   if (route === "character") return { stage: 1, usedLlm: payload.parse.from === "llm", confident: payload.palette.from === "search", topKind: "character", topId: payload.palette.id, topLabel: payload.palette.name };
   const top = payload.route === "diagnosis" ? payload.diagnostics[0] : payload.results[0];
   return { stage: payload.stage, usedLlm: payload.usedLlm === true, confident: payload.confident === true, topKind: top ? payload.route : null, topId: top?.id ?? null, topLabel: top ? (top.name ?? top.symptom) : null };
 }
 
-/** 검색이 끝까지 저신뢰이고 모델도 "other" 이거나 없으면 정보 부족이다. */
-const searchUnclear = (payload) => payload.confident !== true && (payload.rewrite == null || payload.rewrite.intent === "other");
+/** 검색이 끝까지 저신뢰이고 모델도 "other" 이거나 없으면 정보 부족이다. 문장 팔레트(42단계)는 Claude 가 "색과 무관" 으로 읽었을 때다. */
+const searchUnclear = (payload) =>
+  payload.kind === "generated" ? payload.intent.kind === "other" : payload.confident !== true && (payload.rewrite == null || payload.rewrite.intent === "other");
 
 /**
  * `router` 는 **함수**다 — 부를 때마다 지금 코퍼스로 만든 라우터를 돌려준다(server.js 가 `pipeline` 버전으로
@@ -64,6 +67,20 @@ export function createChat({ router, handlers, trace, store, limit }) {
       span.child("character", { query }).end({ parts: body.parse.parts, palette: body.palette.id, from: body.parse.from });
       if (body.parse.from === "llm") span.child("llm.character", { query, model: body.parse.model }).end({ parts: body.parse.parts, impression: body.parse.impression });
       return { route: "character", payload: body };
+    }
+    // 42단계 — 추천은 Claude 가 의도를 읽고 엔진이 색을 계산한다. **과도기(42·43단계)**: Claude 를 못 쓰거나 진단으로
+    // 읽혔으면 옛 검색 경로로 물러선다 — 진단표를 찾는 길이 아직 그쪽에 있다. 44단계에서 검색을 걷어내며 바뀐다.
+    //
+    // **라우터가 진단이라고 해도 Claude 에게 한 번 묻는다.** 진단 별칭은 BM25 시절 검색용으로 맞춘 낱말이라 팔레트 문장에도
+    // 걸린다 — "차분한데 포인트는 주황" 이 '차분하게 하고 싶다' 별칭으로 진단에 갔다 `[실측 10-02]`. Claude 가 팔레트로 읽으면
+    // 팔레트로 답한다. 진단 경로에서 "색과 무관" 으로 읽히면 되묻지 않고 옛 진단 검색 그대로 간다 — 별칭이 걸린 문장이다.
+    if ((route === "palette" || route === "diagnosis") && handlers.generate) {
+      const gen = await handlers.generate(query);
+      if (!gen.skipped) {
+        span.child("llm.intent", { query, model: gen.model ?? null }).end(gen.error ? { error: gen.error } : { kind: gen.intent.kind, usage: gen.intent.usage, count: gen.intent.count, variants: gen.palettes.length });
+      }
+      const wanted = route === "palette" ? ["palette", "other"] : ["palette"];
+      if (!gen.error && wanted.includes(gen.intent.kind)) return { route: "palette", payload: gen };
     }
     const body = await handlers.search(query);
     span.child("search", { query }).end({ stage: body.stage, route: body.route, confident: body.confident, topId: body.route === "diagnosis" ? body.diagnostics[0]?.id : body.results[0]?.id });

@@ -56,6 +56,9 @@ const CREATURE_PARTICLES = Object.freeze([
  */
 const CREATURE_TOO_COMMON = new Set(["사람", "인간", "기사", "마법사"]);
 
+/** 캐릭터 부위표에 있지만 팔레트 말이기도 한 표면형 [판단]. 혼자서는 부위로 안 센다(42단계). */
+const PALETTE_TOO_FORMS = new Set(["포인트", "강조"]);
+
 /** 종족 낱말이 어절로 서 있는가(흔한 낱말 제외). */
 function creatureStandsAlone(tokens, forms) {
   const bare = tokens.map((t) => t.replace(/[,.!?~…·]+$/u, ""));
@@ -91,7 +94,11 @@ export function createRouter({ words: table, diagnostics, corpus, creatures = []
     if (color) return { kind: "route", routes: ["color"], unclear: false, signals: { color: color.hex, parts: [], colorWords: [], compounds: [], creatures: [], diagnosis: [], partsOnly: false, partRoles: [] } };
 
     // 3. 캐릭터 신호
-    const parts = surfaceHits(text, tokens, partForms);
+    // "포인트" · "강조" 는 팔레트 말로 더 흔하다("차분한데 포인트는 주황") — 이 둘만 걸리고 다른 부위가 없으면 부위로 안 센다(42단계).
+    // 안 그러면 색 낱말과 만나 "강한 캐릭터 신호" 가 되어 추천 문장이 캐릭터로 갔다 `[실측 10-02]`. 다른 부위와 같이 오면
+    // ("상의는 갈색, 포인트는 금색") 그대로 센다 — 그때는 캐릭터의 강조 부위다.
+    const allParts = surfaceHits(text, tokens, partForms);
+    const parts = allParts.every((f) => PALETTE_TOO_FORMS.has(f)) ? [] : allParts;
     const colorWords = surfaceHits(text, tokens, colorForms);
     const compounds = surfaceHits(text, tokens, compoundForms);
     const creatureHits = surfaceHits(text, tokens, creatureForms);

@@ -115,11 +115,17 @@ export function redistribute(shares, index, next) {
 }
 
 /** @returns {number[]} palette.colors 와 같은 순서의 면적 비율 */
+/** 정수 배열 · 칸 수 일치 · 합 100 · 각자 하한 이상. */
+const validShares = (shares, n) =>
+  Array.isArray(shares) && shares.length === n && n > 0 && shares.every((v) => Number.isInteger(v) && v >= shareBounds(n).min) && shares.reduce((a, v) => a + v, 0) === 100;
+
 export function ratioFor(palette) {
   // **3색 이상은 균등 분할이다.** 코퍼스 2색에는 실측으로 정한 규칙이 있지만(아래), 3색 이상에는
   // 원전도 실측도 없다. 규칙을 지어내는 대신 균등으로 두고 사용자가 슬라이더로 옮겨 확인한다.
   // 파생 팔레트(src/expand.js)가 3~4색이라 이 경로가 실제로 쓰인다 — 물러서는 자리가 아니다.
   const colors = palette.colors ?? [];
+  // 문장 팔레트(42단계)는 엔진이 역할로 정한 기본 면적을 함께 준다(주조색이 가장 크고 강조색이 10). 모양이 맞을 때만 쓴다.
+  if (validShares(palette.shares, colors.length)) return [...palette.shares];
   if (colors.length !== 2) return equalShares(colors.length);
   if (palette.type !== "D") return [EQUAL, EQUAL];
   const [a, b] = colors;

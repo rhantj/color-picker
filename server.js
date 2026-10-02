@@ -24,6 +24,7 @@ import {
   savePalette,
   saveCharacter,
   saveDerived,
+  saveGenerated,
   updateSavedNote,
   updateSavedRatio,
 } from "./src/store.js";
@@ -45,6 +46,8 @@ import { CHARACTER_FINISH_BY_ROLE, DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, lo
 import { loadSeeds, seedLabel } from "./src/seeds.js";
 import { PARTNER_COUNT, hexFromSeedId, parseColorInput, partnersFor, structuresFor } from "./src/from-color.js";
 import { FORMATS } from "./src/export.js";
+import { readIntent } from "./src/intent.js";
+import { VARIANTS, compose, composeAll, describeIntent, intentKey, materialRole, parseIntent } from "./src/compose.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("./public/", import.meta.url));
 const PORT = Number(process.env.PORT ?? 4173);
@@ -497,9 +500,59 @@ const tracer = createTracer({
 });
 /** 대화 한 항목에 싣는 검색 결과 수. 옛 홈 화면의 `limit=3` 과 같은 값이다 [판단]. GET `/api/search` 기본(5)과는 다르다. */
 const CHAT_RESULT_LIMIT = 3;
+/**
+ * 문장 → 의도 → 색(42단계). Claude 가 의도를 읽고 `src/compose.js` 가 3안을 계산한다. 던지지 않는다.
+ * Claude 를 못 쓰면 `{ error }` — 채팅은 그때 옛 검색 경로로 물러선다(과도기, 44단계에서 걷어냄).
+ * `skipped` 는 아예 부르지 않았다는 뜻이다(키 없음). 트레이스에 헛 자식 런을 안 남기려고 가른다.
+ */
+async function computeGenerate(query) {
+  const started = Date.now();
+  const r = await readIntent(query);
+  if (r.error) {
+    return { error: LOOPBACK_ONLY ? r.error : "문장을 읽을 수 없습니다", skipped: (await refreshLlm()).state !== "ready", model: r.model ?? null };
+  }
+  return {
+    kind: "generated",
+    query,
+    intent: r.intent,
+    reading: r.intent.reading,
+    read: describeIntent(r.intent),
+    palettes: composeAll(r.intent),
+    model: LOOPBACK_ONLY ? r.model : null,
+    llmMs: r.elapsedMs,
+    elapsedMs: Date.now() - started,
+  };
+}
+
+/**
+ * 저장 요청의 의도 · 안 번호로 **색을 다시 계산한다**(`store.js` 규칙 4). 의도는 화면이 보낸 것이라 모델 답과 같은 검증을 거친다.
+ */
+function resolveGenerated(input) {
+  const intent = parseIntent(input.intent);
+  if (!intent || !Number.isInteger(input.variant) || !VARIANTS[input.variant]) return null;
+  const p = compose(intent, input.variant);
+  return {
+    key: `${intentKey(intent)}|${input.variant}`,
+    intent,
+    variant: input.variant,
+    colors: p.colors,
+    shares: p.shares,
+    name: p.name,
+    principle: p.principle,
+    source: p.source,
+    reading: intent.reading,
+  };
+}
+
+/** 문장 팔레트 저장의 재질 규칙. 역할을 재질 표가 아는 등급으로 옮겨 그 기본값을 빌린다(`materialRole`). */
+const GENERATED_MATERIALS = {
+  finishes: [...MATERIAL_FINISHES],
+  defaultFor: (role) => DEFAULT_FINISH_BY_ROLE[materialRole(role)],
+};
+
 const chat = createChat({
   router: currentRouter,
-  handlers: { search: (q) => computeSearch(q, CHAT_RESULT_LIMIT), character: computeCharacter, color: computeColor },
+  handlers: { search: (q) => computeSearch(q, CHAT_RESULT_LIMIT), generate: computeGenerate, character: computeCharacter, color: computeColor },
   trace: tracer,
   store: { findConversation, recordTurn },
   limit: LIMITS,
@@ -633,6 +686,9 @@ async function handleWrite(req, res, pathname) {
     }
     if (pathname === "/api/saved/derived") {
       return sendJson(res, 200, await saveDerived(body, resolveDerived, ratioFor, MATERIALS));
+    }
+    if (pathname === "/api/saved/generated") {
+      return sendJson(res, 200, await saveGenerated(body, resolveGenerated, GENERATED_MATERIALS));
     }
     if (pathname === "/api/saved/character") {
       return sendJson(res, 200, await saveCharacter(body, resolveCharacter, ratioFor, CHARACTER_MATERIALS));

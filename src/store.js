@@ -206,7 +206,8 @@ export function recordTurn(input) {
     confident: input.confident === true,
     // LLM 을 썼는가는 stage 로 못 센다 — 3단계 뒤에 재작성이 올 수 있다. 따로 받되 불리언만 믿는다.
     usedLlm: input.usedLlm === true,
-    topKind: ["diagnosis", "palette", "character", "color"].includes(input.topKind) ? input.topKind : null,
+    // generated — 문장으로 만든 색(42단계). 결과가 코퍼스 항목이 아니라 topId 는 비고 topLabel 이 Claude 가 읽은 한 줄이다.
+    topKind: ["diagnosis", "palette", "character", "color", "generated"].includes(input.topKind) ? input.topKind : null,
     topId: clip(input.topId, 40) || null,
     topLabel: clip(input.topLabel, 80) || null,
   };
@@ -533,6 +534,74 @@ export function saveCharacter(input, resolve, ratioFor, materials) {
       note: merged.note,
       character: { query, parts: found.parts, creature: found.creature },
       characterKey: key,
+    };
+
+    const rest = all.filter((e) => e !== previous);
+    writeJson("saved.json", [entry, ...rest].slice(0, LIMITS.saved));
+    return entry;
+  });
+}
+
+/**
+ * 문장으로 만든 팔레트를 저장한다(42단계). **캐릭터 저장과 같은 규칙** — 화면이 보낸 색은 안 믿고 `resolve` 가 의도 · 안 번호로
+ * 다시 계산한다. 의도도 화면이 보낸 것이라 `resolve` 안에서 모델 답과 **같은 검증**(`parseIntent`)을 거친다.
+ * 항목은 `kind: "derived"` · `structureId: "generated"` 라 `/saved` · 비율 · 메모 · 엔진 내보내기가 같은 길로 돈다.
+ *
+ * 같은 키(색에 닿는 의도 칸 + 안 번호)면 덮어쓰고 비율 · 재질 · 메모를 이어받는다.
+ *
+ * @param {(input: object) => null | {key: string, intent: object, variant: number, colors: {role:string, hex:string}[],
+ *   shares: number[], name: string, principle: string, source: string, reading: string}} resolve
+ * @param {{finishes: string[], defaultFor: (role:string) => string}} materials
+ */
+export function saveGenerated(input, resolve, materials) {
+  if (!input.intent || typeof input.intent !== "object" || Array.isArray(input.intent)) {
+    return Promise.reject(new Error("의도는 객체여야 한다"));
+  }
+  if (!Number.isInteger(input.variant)) return Promise.reject(new Error("안 번호는 정수여야 한다"));
+  const found = resolve(input);
+  if (!found) return Promise.reject(new Error("모르는 안이거나 쓸 수 없는 의도다"));
+
+  const count = found.colors.length;
+  const defaults = [...found.shares];
+  const adjusted = input.shares === undefined ? null : normalizeShares(input.shares, count);
+  if (input.shares !== undefined && !adjusted) {
+    return Promise.reject(new Error(`면적 비율은 ${count}칸 정수 배열이고 합이 100 이어야 한다`));
+  }
+  const query = typeof input.query === "string" ? clip(input.query, LIMITS.queryChars) : "";
+
+  return serialize(() => {
+    const all = listSaved();
+    const previous = all.find((e) => e.structureId === "generated" && e.generatedKey === found.key);
+    const merged = mergeWithPrevious(previous, { adjusted, defaults, note: input.note });
+    const ratio = merged.ratio;
+
+    const roles = found.colors.map((c) => c.role);
+    const sent = pickFinishes(input.finishes, roles, materials.finishes);
+    const inheritFinishes = previous?.finishesAdjusted ? previous.finishes : null;
+    const finishes = {};
+    for (const role of roles) finishes[role] = sent[role] ?? inheritFinishes?.[role] ?? materials.defaultFor(role);
+    const finishesAdjusted = roles.some((role) => finishes[role] !== materials.defaultFor(role));
+
+    const entry = {
+      id: newId("save"),
+      savedAt: now(),
+      kind: "derived",
+      seedId: "intent",
+      structureId: "generated",
+      mode: "light",
+      seedLabel: found.reading || null,
+      name: `${found.name} — ${clip(query || found.reading || "문장으로 만든 색", 40)}`,
+      principle: found.principle,
+      source: found.source,
+      colors: found.colors.map((c, i) => ({ role: c.role, hex: c.hex, ratio: ratio[i] })),
+      finishes,
+      finishesAdjusted,
+      ratioAdjusted: merged.ratioAdjusted,
+      defaultRatio: defaults,
+      note: merged.note,
+      // 이 둘이 있으면 색을 언제든 다시 계산할 수 있다 — 엔진 수치를 고치면 옛 저장도 따라간다.
+      generated: { intent: found.intent, variant: found.variant, query: query || null },
+      generatedKey: found.key,
     };
 
     const rest = all.filter((e) => e !== previous);

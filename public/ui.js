@@ -337,6 +337,22 @@ export function savedFields(entry) {
       finishes.push({ role: c.role, id });
     }
 
+    // 문장으로 만든 색(42단계)은 씨앗이 없다 — Claude 가 읽은 한 줄과 쓰임새가 정체다.
+    if (e.structureId === "generated") {
+      return {
+        kind: "derived",
+        title: or(e.name, "문장으로 만든 색"),
+        badge: "문장으로 만든 색",
+        text: or(e.principle, ""),
+        coords: [
+          ["읽은 것", or(e.seedLabel, "모름")],
+          ["쓰임새", or(e.source, "모름")],
+        ],
+        colors,
+        finishes,
+        finishesAdjusted: Boolean(e.finishesAdjusted),
+      };
+    }
     // 캐릭터(34단계)는 모드가 정체가 아니다 — 배색 쌍과 문장이 정체다.
     const isCharacter = e.structureId === "character";
     return {
