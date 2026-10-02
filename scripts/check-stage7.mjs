@@ -5,7 +5,7 @@
 // 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
 import "./lib/ollama-shim.mjs";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -143,16 +143,37 @@ const gates = {
     // 실패를 조용히 넘기면 '이어 쓰는 중' 이라고 표시한 채 새 대화가 열린다.
     if (!/catch[\s\S]{0,200}이어 쓸 수 없습니다/.test(app)) bad.push("이어 쓸 수 없을 때 알리지 않는다");
     if (!/thread-new/.test(app)) bad.push("새 대화로 빠져나올 방법이 없다");
-    // 기록 실패를 삼키면 안 된다.
-    // 정확한 옛 형태만 찾으면 `.catch(() => undefined)` 로 바꿔도 통과한다.
-    // catch 본문이 화면에 무언가를 쓰는지를 본다.
-    const recordCatch = app.match(/recordTurn\([^)]*\)\s*\.catch\(([\s\S]{0,300}?)\);/);
-    if (!recordCatch) bad.push("recordTurn 의 실패 처리를 찾지 못했다");
-    else if (!/textContent/.test(recordCatch[1])) bad.push("기록 실패를 화면에 알리지 않는다");
+    /*
+     * **기록 실패를 삼키지 않는다 — 동작으로 잰다(42단계 뒤에 고침).**
+     *
+     * 39단계 전에는 화면(app.js)이 `recordTurn(...).catch(...)` 로 기록했고 이 게이트는 그 글자 모양을 찾았다. 39단계부터는
+     * 서버가 `/api/chat` 안에서 기록한다(src/chat.js) — 기능은 남았는데 모양이 사라져 이 게이트가 main 에서 내내 실패했다(open-work I6).
+     * 모양을 다시 맞추는 대신 실제로 기록을 실패시킨다: 저장 폴더에 conversations.json 이라는 **폴더**를 만들어 두면 쓰기가 실패한다.
+     * 그때 서버가 200 으로 답하면(실패를 삼킴) 사용자는 기록된 줄 안다. 오류 응답이어야 하고, 화면은 그 오류를 말풍선으로 그려야 한다.
+     */
+    {
+      const dir = freshDataDir();
+      mkdirSync(join(dir, "conversations.json"));
+      const port = 4714;
+      const server = await startServer(port, { TONEFIRST_DATA_DIR: dir, ANTHROPIC_API_KEY: "" });
+      try {
+        const res = await post(`http://127.0.0.1:${port}`, "/api/chat", { text: "봄 파스텔" });
+        const body = await res.json().catch(() => null);
+        if (res.status < 500) bad.push(`기록이 실패했는데 /api/chat 이 ${res.status} 로 답했다 — 실패를 삼켰다`);
+        if (typeof body?.error !== "string" || !body.error) bad.push("기록 실패 응답에 error 문장이 없다");
+        if (body?.turn) bad.push("기록 실패 응답이 답(turn)을 실었다 — 화면이 기록된 줄 안다");
+      } finally {
+        server.kill();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+    // 화면은 /api/chat 실패를 말풍선으로 그린다 — 조용히 지우지 않는다.
+    const sendBody = app.match(/async function send\(body\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    if (!/catch \(err\) \{[\s\S]{0,200}errorItem\(/.test(sendBody)) bad.push("send 가 실패를 오류 말풍선(errorItem)으로 그리지 않는다");
 
-    // 대화 확인이 끝나기 전에 기록하면 그 턴이 엉뚱한 대화로 간다. run 이 그것을 기다려야 한다.
-    if (!/async function run\([\s\S]{0,400}?await ready;/.test(app)) {
-      bad.push("run 이 대화 확인(ready)을 기다리지 않는다 — 경합이 생긴다");
+    // 대화 확인이 끝나기 전에 보내면 그 턴이 엉뚱한 대화로 간다. 보내는 함수(39단계부터 send)가 그것을 기다려야 한다.
+    if (!/async function send\(body\) \{\s*await ready;/.test(app)) {
+      bad.push("send 가 대화 확인(ready)을 기다리지 않는다 — 경합이 생긴다");
     }
     if (!/const ready = \(async \(\) =>/.test(app)) bad.push("ready 프로미스가 없다");
 

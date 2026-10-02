@@ -201,7 +201,7 @@ S7-G3 내역 화면이 이어서·다시 묻기 링크와 앵커를 만든다 (i
     CHECK: node scripts/check-stage7.mjs S7-G3
     EXPECT: S7_G3_OK
 
-S7-G4 홈 화면이 대화의 실재를 확인하고, 못 이어 쓰면 그렇다고 말한다. 기록 실패도 삼키지 않는다
+S7-G4 홈 화면이 대화의 실재를 확인하고, 못 이어 쓰면 그렇다고 말한다. 기록 실패도 삼키지 않는다 — 기록 실패는 **동작으로** 잰다: 저장 폴더에 `conversations.json` 폴더를 만들어 쓰기를 실패시키면 `/api/chat` 이 5xx · error · turn 없음, 화면 `send` 는 `await ready` 로 시작하고 실패를 `errorItem` 으로 그린다(42단계 뒤에 고침 — 39단계에서 기록이 서버로 옮겨 가 옛 모양 검사가 내내 실패했다)
     CHECK: node scripts/check-stage7.mjs S7-G4
     EXPECT: S7_G4_OK
 
