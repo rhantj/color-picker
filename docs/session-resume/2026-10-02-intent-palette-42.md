@@ -66,4 +66,4 @@
 
 ## 머지
 
-(아래 docs 커밋에서 채운다)
+`stage-42-intent-engine` → main ff 머지 · 푸시 `d6da46a` (2026-10-02). Vercel 은 일시 중지 상태라 배포되지 않았다(open-work I2 · I4). 로컬 서버 재기동해 확인.
