@@ -187,8 +187,34 @@ export const intentKey = (intent) => JSON.stringify({ ...intent, kind: undefined
 
 const clampL = (l) => Math.min(0.97, Math.max(0.12, l));
 
-/** 색상 낱말 → 실제 각. 무채색이면 온도가 정한 기운의 각. */
-const angleOf = (hue, temperature) => HUES[hue] ?? NEUTRAL_TINT[temperature];
+/** 색상 낱말 → 실제 각. 무채색이면 온도가 정한 기운의 각. 온도로 돌리지 않은 각이다 — 포인트(사용자가 직접 말한 색)가 쓴다. */
+const rawAngleOf = (hue, temperature) => HUES[hue] ?? NEUTRAL_TINT[temperature];
+
+/**
+ * 온도의 극 `[판단]` (47단계). 따뜻하게는 주황(55)과 빨강(29) 사이, 차갑게는 그 정반대(하늘 205 와 파랑 258 사이)로 끌어당긴다.
+ * **두 극을 한 축의 양 끝에 둔다.** 처음엔 차가운 극을 235 로 잡았더니 주황(55)이 그 정반대라 "차갑게" 의 방향이 정해지지 않아
+ * 주황이 빨강 쪽(더 따뜻한 쪽)으로 돌았다(S47-G2 가 잡음). 한 축이면 어느 색이든 따뜻하게 · 차갑게가 늘 반대로 돈다.
+ */
+export const TEMPERATURE_POLE = Object.freeze({ warm: 45, cool: 225 });
+/**
+ * 온도로 색상각을 돌리는 최대 폭 `[판단]` (47단계). 색상 낱말 사이 간격이 20~35° 라 12° 면 그 색 이름을 넘지 않는다
+ * (분홍 355 → 7 은 아직 분홍빛 빨강, 초록 145 → 133 은 아직 초록). 극에 이보다 가까우면 극까지만 간다 — 넘어가지 않는다.
+ */
+export const TEMPERATURE_SHIFT = 12;
+
+/**
+ * 색 있는 칸의 각을 온도 쪽으로 돌린다(47단계). 전에는 온도가 무채색의 기운에만 닿아, "좀 더 따뜻하게" 가 온도 칸만 바꾸면
+ * 칩은 뜨는데 색이 하나도 안 바뀌었다(open-work J11 `[실측 10-03]`). 중립이면 그대로.
+ */
+export function tempered(h, temperature) {
+  const pole = TEMPERATURE_POLE[temperature];
+  if (pole === undefined) return h;
+  const delta = ((((pole - h) % 360) + 540) % 360) - 180;
+  return h + Math.sign(delta) * Math.min(TEMPERATURE_SHIFT, Math.abs(delta));
+}
+
+/** 바탕 색상 낱말 → 실제 각. 색 있는 낱말은 온도 쪽으로 돌리고, 무채색은 온도가 정한 기운의 각. */
+const angleOf = (hue, temperature) => (HUES[hue] === null ? NEUTRAL_TINT[temperature] : tempered(HUES[hue], temperature));
 
 /** 뺄 색 띠 밖으로 민다 — 그 각이 있는 쪽 가장자리 너머로. 세 번 밀어도 다른 띠에 걸리면 null(C 를 누를 차례). */
 function awayFromAvoid(h, avoidAngles) {
@@ -300,7 +326,8 @@ function composeUi(intent, v, theme) {
   // 강조 — 포인트가 없으면 첫 바탕 색상의 선명한 톤. 강조는 늘 그 화면에서 가장 선명해야 하므로 먼저 확정하고 나머지를 그 아래로 누른다.
   const accentName = intent.accent?.hue ?? h0Name;
   const accentNeutral = HUES[accentName] === null;
-  const ah = angleOf(accentName, intent.temperature);
+  // 사용자가 말한 포인트는 온도로 안 돌린다 — "청록 포인트" 는 따뜻하게 해도 청록이다. 포인트가 없으면 바탕 색상(돌린 각)을 쓴다.
+  const ah = intent.accent ? rawAngleOf(accentName, intent.temperature) : h0;
   const at = toneAt(intent.accent?.tone ?? "vivid", ah);
   const accentSpec = { l: at.l, cRel: v.accentC(at.cRel), h: ah, neutral: accentNeutral };
 
@@ -367,7 +394,7 @@ function composeGeneral(intent, v) {
   let cap = Infinity;
   let accentOut = null;
   if (intent.accent) {
-    const ah = angleOf(intent.accent.hue, intent.temperature);
+    const ah = rawAngleOf(intent.accent.hue, intent.temperature); // 말한 포인트는 온도로 안 돌린다(47단계)
     const at = toneAt(intent.accent.tone, ah);
     accentOut = realize({ l: at.l, cRel: v.accentC(at.cRel), h: ah, neutral: HUES[intent.accent.hue] === null }, avoidAngles);
     const measured = hexToOklch(accentOut.hex).c;

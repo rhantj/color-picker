@@ -10,3 +10,6 @@ node_modules/
 # OS
 .DS_Store
 Thumbs.db
+
+# 변형 검사 사본 — 게이트를 일부러 망가뜨릴 때 되돌리려고 만드는 파일(46단계에 두 개가 커밋됐다)
+*.mut-bak
