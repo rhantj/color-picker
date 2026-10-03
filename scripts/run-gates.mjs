@@ -3,6 +3,8 @@
 //   node scripts/run-gates.mjs            전부
 //   node scripts/run-gates.mjs S42 S41    그 단계만 (접두어)
 //
+// 전체는 약 14분이다(10-03 실측). 백그라운드 명령 제한(10분)에서 돌릴 때는 단계 묶음으로 나눠 **차례로** 돌린다 — 나란히 돌리면 포트가 부딪힌다.
+//
 // 같은 검사기 파일의 게이트는 **순서대로**, 다른 파일끼리는 나란히 돈다. 같은 파일 안의 게이트는 고정 포트를
 // 나눠 쓰므로 나란히 돌리면 포트가 부딪혀 거짓 실패가 난다. "1초 안" 같은 시간 게이트(S26-G4 등)는 부하에 흔들리므로
 // 동시에 도는 파일 수를 낮게 둔다(`GATE_JOBS`, 기본 3).
@@ -58,7 +60,7 @@ const runnable = all.filter((g) => g.script && g.expect);
  * **"회귀" 게이트는 맨 끝에 혼자 돈다.** S34-G10 · S39-G10 · S40-G9 같은 게이트는 다른 검사기를 통째로 다시 돌리는데, 그것이
  * 같은 검사기를 도는 다른 일꾼과 겹치면 고정 포트가 부딪힌다 — S27-G7 이 4358 에서 EADDRINUSE 로 죽었다(10-02 실측, 기준선에서도).
  */
-const isRegression = (g) => /회귀 —|게이트 d+개가 그대로 통과/.test(g.title);
+const isRegression = (g) => /회귀 —|게이트 \d+개가 그대로 통과/.test(g.title);
 const groups = new Map();
 for (const g of runnable.filter((g) => !isRegression(g))) groups.set(g.script, [...(groups.get(g.script) ?? []), g]);
 const queue = [...groups.values()];
@@ -70,6 +72,8 @@ async function worker() {
       const r = await runOne(gate);
       results.push(r);
       out(`${r.ok ? "ok  " : "FAIL"} ${r.id} (${r.ms}ms)`);
+      // 실패는 그 자리에서도 찍는다 — 러너가 도중에 멈추면(시간 제한) 끝의 요약이 안 나와 원인을 잃는다(43단계, S39-G10).
+      if (!r.ok) out(r.output.split("\n").slice(-8).map((l) => `     ${l}`).join("\n"));
     }
   }
 }

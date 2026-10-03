@@ -36,7 +36,8 @@ const askTurn = (reason, choices, question) => ({ kind: "ask", reason, question,
 /** 답한 턴을 내역에 남길 요약. app.js 가 하던 것을 서버로 옮겼다. */
 function summarize(route, payload) {
   // 42단계 — 문장으로 만든 색. 검색 단계가 없다(Claude 한 번 + 계산). 내역의 "몇 단계" 자리는 LLM 을 쓴 2 로 적는다.
-  if (payload?.kind === "generated") return { stage: 2, usedLlm: true, confident: payload.intent.kind === "palette", topKind: "generated", topId: null, topLabel: payload.reading || payload.read.join(" · ") };
+  // 의도를 함께 남긴다 — 다음 말이 이것을 고친다(43단계).
+  if (payload?.kind === "generated") return { stage: 2, usedLlm: true, confident: payload.intent.kind === "palette", topKind: "generated", topId: null, topLabel: payload.reading || payload.read.join(" · "), intent: payload.intent };
   if (route === "color") return { stage: 1, usedLlm: false, confident: true, topKind: "color", topId: payload.partners[0]?.pairId ?? null, topLabel: payload.partners[0]?.pairName ?? null };
   if (route === "character") return { stage: 1, usedLlm: payload.parse.from === "llm", confident: payload.palette.from === "search", topKind: "character", topId: payload.palette.id, topLabel: payload.palette.name };
   const top = payload.route === "diagnosis" ? payload.diagnostics[0] : payload.results[0];
@@ -53,7 +54,8 @@ const searchUnclear = (payload) =>
  */
 export function createChat({ router, handlers, trace, store, limit }) {
   /** 경로 하나로 실제 답을 만든다. color 인데 색이 아니면 추천으로 내려간다. */
-  async function answer(route, query, span) {
+  /** @param {{previous?: object|null, variant?: number}} [ctx] 다듬기 맥락(43단계) — 직전 의도(기록 원문, 서버가 검증)와 고른 안 */
+  async function answer(route, query, span, ctx = {}) {
     if (route === "color") {
       const body = await handlers.color(query);
       if (body) {
@@ -75,9 +77,9 @@ export function createChat({ router, handlers, trace, store, limit }) {
     // 걸린다 — "차분한데 포인트는 주황" 이 '차분하게 하고 싶다' 별칭으로 진단에 갔다 `[실측 10-02]`. Claude 가 팔레트로 읽으면
     // 팔레트로 답한다. 진단 경로에서 "색과 무관" 으로 읽히면 되묻지 않고 옛 진단 검색 그대로 간다 — 별칭이 걸린 문장이다.
     if ((route === "palette" || route === "diagnosis") && handlers.generate) {
-      const gen = await handlers.generate(query);
+      const gen = await handlers.generate(query, ctx);
       if (!gen.skipped) {
-        span.child("llm.intent", { query, model: gen.model ?? null }).end(gen.error ? { error: gen.error } : { kind: gen.intent.kind, usage: gen.intent.usage, count: gen.intent.count, variants: gen.palettes.length });
+        span.child("llm.intent", { query, model: gen.model ?? null, previous: ctx.previous != null }).end(gen.error ? { error: gen.error } : { kind: gen.intent.kind, basis: gen.intent.basis, usage: gen.intent.usage, count: gen.intent.count, variants: gen.palettes.length, changes: gen.refine?.changes ?? null });
       }
       const wanted = route === "palette" ? ["palette", "other"] : ["palette"];
       if (!gen.error && wanted.includes(gen.intent.kind)) return { route: "palette", payload: gen };
@@ -108,6 +110,10 @@ export function createChat({ router, handlers, trace, store, limit }) {
     // 서버가 그 질문을 되묻기의 답으로 읽어 두 질의를 이어 붙인다 — 사용자는 전혀 다른 답을 받는다(최종 리뷰 P1-3).
     const fresh = input?.fresh === true;
     const pending = fresh ? null : conversation?.pending ?? null;
+    // 다듬기 맥락(43단계). 직전 의도는 **같은 대화의 마지막 답**에만 있다 — 새 대화 · 10턴 롤오버(위에서 conversation=null) · fresh 면 없다.
+    // 마지막 답이 문장 팔레트가 아니면(색 · 캐릭터 · 진단) intent 가 없어 새로 읽는다. 고른 안은 0~2 정수만, 아니면 충실(0).
+    const lastAnswer = fresh ? null : [...(conversation?.turns ?? [])].reverse().find((t) => t.kind !== "ask") ?? null;
+    const ctx = { previous: lastAnswer?.intent ?? null, variant: [0, 1, 2].includes(input?.variant) ? input.variant : 0 };
 
     // 칩(choice)은 되물은 질문에 대한 답이다. 되물은 것이 없는데 칩만 오면(10턴 롤오버로 pending 이
     // 사라진 경우 포함) router.route("") 를 부르는 대신 여기서 바로 400 이다(리뷰 1차 · 항목 3).
@@ -131,7 +137,7 @@ export function createChat({ router, handlers, trace, store, limit }) {
         return { conversationId: saved.conversationId, turn };
       };
       const answerAndRecord = async (route, query, routeTrace) => {
-        const { route: finalRoute, payload } = await answer(route, query, span);
+        const { route: finalRoute, payload } = await answer(route, query, span, ctx);
         const turn = { kind: "answer", route: finalRoute, original: query, payload, trace: routeTrace };
         return record(turn, { kind: "answer", route: finalRoute, pending: null, ...summarize(finalRoute, payload) }, query);
       };
@@ -199,7 +205,7 @@ export function createChat({ router, handlers, trace, store, limit }) {
 
       const route = r.routes[0];
       if (route === "palette" || route === "diagnosis") {
-        const { route: finalRoute, payload } = await answer(route, text, span);
+        const { route: finalRoute, payload } = await answer(route, text, span, ctx);
         if (searchUnclear(payload) && !isLastTurn) {
           const turn = { ...askTurn("unclear", ["palette", "diagnosis", "character", "color"], QUESTION.unclearPalette), original: text, trace: routeTrace };
           span.child("ask", { reason: "unclear" }).end({ choices: turn.choices.map((c) => c.id) });

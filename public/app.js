@@ -380,9 +380,18 @@ function uiPreview(palette) {
   return frame;
 }
 
+/*
+ * 다듬기 기준 안(43단계). 다음 말을 보낼 때 `variant` 로 싣는다 — 서버는 0~2 정수만 받고, 직전 답이 문장 팔레트이고 Claude 가
+ * "고친다" 로 읽었을 때만 쓴다. **화면이 보내는 것은 이 번호뿐이다** — 직전 의도는 서버가 대화 기록에서 꺼낸다.
+ * 새 답이 그려질 때마다 그 답의 맨 앞 안으로 돌아가고, 옛 답의 고르개는 잠근다(직전 의도는 늘 마지막 답의 것이다).
+ */
+let pinnedVariant = 0;
+let retirePins = null;
+
 /**
  * 문장으로 만든 팔레트(42단계). Claude 가 읽은 것 한 줄 + 읽은 칸들 + 3안.
  * **저장은 의도와 안 번호만 보낸다** — 서버가 같은 검증을 거쳐 색을 다시 계산한다(S4 · S18 과 같은 규칙).
+ * 다듬은 답(43단계)은 바뀐 칸을 칩으로 보이고, 고른 안을 맨 앞에 두고 나머지 결은 접어 둔다.
  */
 function generatedBlock(data) {
   const box = el("div", "answer");
@@ -392,17 +401,71 @@ function generatedBlock(data) {
   strip.append(el("span", "status__badge", "읽은 것"));
   for (const part of data.read ?? []) strip.append(el("span", "rewrite__term", part));
   status.append(strip);
+  if (data.refine) {
+    const changed = el("div", "rewrite refine");
+    changed.append(el("span", "status__badge", "바뀐 것"));
+    if (data.refine.changes.length === 0) changed.append(el("span", "rewrite__label", "칸은 그대로입니다"));
+    for (const c of data.refine.changes) changed.append(el("span", "rewrite__term refine__chip", c));
+    status.append(changed);
+  }
   box.append(status);
   if (data.reading) box.append(el("p", "reading", `이렇게 읽었어요 — ${data.reading}`));
-  box.append(el("h2", "results__title", "팔레트"), el("p", "results__note", "같은 해석에서 결을 달리한 안입니다. 비율을 옮겨 보고 마음에 드는 안을 저장하세요"));
-  const grid = el("div", "expand__grid");
-  for (const p of data.palettes ?? []) {
+  box.append(
+    el("h2", "results__title", "팔레트"),
+    el("p", "results__note", "비율을 옮겨 보고 마음에 드는 안을 저장하세요. 이어서 “좀 더 따뜻하게” 처럼 쓰면 ‘기준’ 안을 고칩니다"),
+  );
+
+  retirePins?.();
+  const pins = [];
+  const choose = (variant) => {
+    pinnedVariant = variant;
+    for (const { button, variant: v } of pins) {
+      const on = v === variant;
+      button.setAttribute("aria-pressed", String(on));
+      button.textContent = on ? "기준 — 다음 말이 이 안을 고친다" : "이 안으로 다듬기";
+    }
+  };
+  retirePins = () => {
+    for (const { button } of pins) button.disabled = true;
+  };
+
+  const cardFor = (p) => {
     const onSave = (shares) => api("/api/saved/generated", { intent: data.intent, variant: p.variant, shares, query: data.query });
     const card = structureCard(p, "light", null, onSave, null);
     if (p.theme) card.insertBefore(uiPreview(p), card.querySelector(".struct__principle")?.nextSibling ?? null);
-    grid.append(card);
+    const pin = el("button", "pin");
+    pin.type = "button";
+    pin.dataset.variant = String(p.variant);
+    pin.addEventListener("click", () => choose(p.variant));
+    pins.push({ button: pin, variant: p.variant });
+    card.append(pin);
+    return card;
+  };
+
+  const [first, ...rest] = data.palettes ?? [];
+  const grid = el("div", "expand__grid");
+  if (data.refine && rest.length) {
+    // 고른 결 하나를 앞에, 나머지는 접어 둔다 — 지우지 않는다. 다듬은 결과가 기대와 다를 때 다른 결이 볼 자리다.
+    grid.append(cardFor(first));
+    const moreBox = el("div", "expand__more");
+    const more = el("button", "expand__more-toggle", `다른 결 ${rest.length}가지 보기`);
+    more.type = "button";
+    more.setAttribute("aria-expanded", "false");
+    const restGrid = el("div", "expand__grid");
+    restGrid.hidden = true;
+    for (const p of rest) restGrid.append(cardFor(p));
+    more.addEventListener("click", () => {
+      restGrid.hidden = !restGrid.hidden;
+      more.setAttribute("aria-expanded", String(!restGrid.hidden));
+      more.textContent = restGrid.hidden ? `다른 결 ${rest.length}가지 보기` : "다른 결 접기";
+    });
+    moreBox.append(more, restGrid);
+    box.append(grid, moreBox);
+  } else {
+    for (const p of data.palettes ?? []) grid.append(cardFor(p));
+    box.append(grid);
   }
-  box.append(grid);
+  if (first) choose(first.variant);
   return box;
 }
 
@@ -589,7 +652,8 @@ async function send(body) {
   chatList.append(waiting);
   waiting.scrollIntoView({ block: "end" });
   try {
-    const data = await api("/api/chat", { conversationId, ...body });
+    // 고른 안 번호를 함께 싣는다(43단계) — 서버는 직전 답을 다듬을 때만 쓴다.
+    const data = await api("/api/chat", { conversationId, variant: pinnedVariant, ...body });
     if (ticket !== latestTicket) {
       // 이 응답을 기다리는 사이 다른 턴이 시작됐다 — 낡은 "생각 중…" 을 남겨 두면 화면에 두 개가 겹친다.
       waiting.remove();
@@ -647,6 +711,8 @@ function showThread(conversation) {
 
 document.getElementById("thread-new").addEventListener("click", () => {
   conversationId = null;
+  pinnedVariant = 0;
+  retirePins?.();
   threadBox.hidden = true;
   chatList.replaceChildren();
   history.replaceState(null, "", "/");

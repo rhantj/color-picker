@@ -61,6 +61,8 @@ export const USAGES = Object.freeze({ general: "일반", ui: "UI", illustration:
 export const CONTRASTS = Object.freeze({ low: "약하게", medium: "보통", high: "강하게" });
 export const TEMPERATURES = Object.freeze({ warm: "따뜻하게", cool: "차갑게", neutral: "중립" });
 export const KINDS = Object.freeze(["palette", "diagnosis", "other"]);
+/** 다음 말이 직전 의도를 고치는가(refine) 새로 시작하는가(new) — 43단계. 색에는 안 닿는다. */
+export const BASES = Object.freeze(["refine", "new"]);
 
 export const COUNT_MIN = 3;
 export const COUNT_MAX = 7;
@@ -171,11 +173,12 @@ export function parseIntent(raw) {
     contrast: oneOf(own(value, "contrast"), CONTRASTS, "medium"),
     avoid,
     reading,
+    basis: BASES.includes(own(value, "basis")) ? own(value, "basis") : "new",
   };
 }
 
 /** 같은 색을 내는 의도는 같은 키. `reading`(설명 문장)은 색에 안 닿으므로 빼고, `kind` 도 뺀다. */
-export const intentKey = (intent) => JSON.stringify({ ...intent, kind: undefined, reading: undefined });
+export const intentKey = (intent) => JSON.stringify({ ...intent, kind: undefined, reading: undefined, basis: undefined });
 
 /* ── 엔진 ──────────────────────────────────────────────── */
 
@@ -429,6 +432,36 @@ export function materialRole(role) {
   if (role === "면" || role === "테두리") return "면";
   // 바탕 · 주조색 · 보조색 · 보조색 N — 조용한 넓은 면이다. 처음엔 보조색을 "면" 에 붙였더니 기본 재질이 메탈릭이 됐다 `[판단]`.
   return "바탕";
+}
+
+/**
+ * 두 의도의 차이 — 화면의 "바뀐 것" 칩(43단계). **Claude 가 쓴 설명이 아니라 칸을 비교한 결과다.** 낱말표의 한국어 이름만 쓴다.
+ * 색에 닿는 칸만 본다(kind · reading · basis 제외).
+ */
+export function diffIntent(before, after) {
+  const out = [];
+  const hues = (list) => (list.length ? list.map((h) => HUE_NAMES[h]).join("·") : "없음");
+  const accent = (a) => (a ? `${HUE_NAMES[a.hue]} ${TONES[a.tone].name}` : "없음");
+  if (before.usage !== after.usage) out.push(`쓰임새 ${USAGES[before.usage]}→${USAGES[after.usage]}`);
+  if (before.count !== after.count) out.push(`색 ${before.count}→${after.count}`);
+  if (before.base.hues.join() !== after.base.hues.join()) out.push(`바탕 색 ${hues(before.base.hues)}→${hues(after.base.hues)}`);
+  if (before.base.tone !== after.base.tone) out.push(`바탕 톤 ${TONES[before.base.tone].name}→${TONES[after.base.tone].name}`);
+  if (accent(before.accent) !== accent(after.accent)) out.push(`포인트 ${accent(before.accent)}→${accent(after.accent)}`);
+  if (before.temperature !== after.temperature) out.push(`온도 ${TEMPERATURES[before.temperature]}→${TEMPERATURES[after.temperature]}`);
+  if (before.contrast !== after.contrast) out.push(`대비 ${CONTRASTS[before.contrast]}→${CONTRASTS[after.contrast]}`);
+  for (const h of after.avoid) if (!before.avoid.includes(h)) out.push(`뺀 색 +${HUE_NAMES[h]}`);
+  for (const h of before.avoid) if (!after.avoid.includes(h)) out.push(`뺀 색 −${HUE_NAMES[h]}`);
+  return out;
+}
+
+/**
+ * 고른 안을 맨 앞에(43단계). 나머지는 `composeAll` 순서 그대로 — 같은 헥스인 안은 한 번만.
+ * @param {number} focus 0~2. 검증은 부르는 쪽이 한다
+ */
+export function composeFocused(intent, focus) {
+  const first = compose(intent, focus);
+  const key = first.colors.map((c) => c.hex).join();
+  return [first, ...composeAll(intent).filter((p) => p.variant !== focus && p.colors.map((c) => c.hex).join() !== key)];
 }
 
 /** 화면에 "이렇게 읽었어요" 옆에 붙일 칸들. 낱말표의 한국어 이름만 쓴다 — 지어낸 말 없음. */

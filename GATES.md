@@ -2390,3 +2390,47 @@ S42-G11 저장 — 의도 · 안 번호로만 저장되고 서버가 같은 검�
 S42-G12 기록 · 화면 — 내역 요약이 `generated` · LLM 사용 · 읽은 한 줄 · 트레이스에 `llm.intent` · 화면이 generated 를 새 블록으로 그리고 저장에 색을 안 보낸다
     CHECK: node scripts/check-stage42.mjs S42-G12
     EXPECT: S42_G12_OK
+
+## 43단계 — 대화로 다듬기 (고른 안 기준 · 바뀐 칸 칩 · 대표 결정 2026-10-02)
+
+설계: `docs/superpowers/specs/2026-10-02-intent-palette-design.md` 6절. 게이트 10개를 만들 때마다 일부러 망가뜨려 확인했다(18건 전부 잡힘).
+
+S43-G1 `basis` 검증 — 기본 new · 모르는 값 · 타입 위장은 new · refine 은 남는다 · 저장 키(`intentKey`)에 안 닿는다 · 직전 의도가 없으면 모델이 refine 이라고 해도 new(칩 없음)
+    CHECK: node scripts/check-stage43.mjs S43-G1
+    EXPECT: S43_G1_OK
+
+S43-G2 바뀐 것 칩(`diffIntent`) — 쓰임새 · 개수 · 바탕 색 · 톤 · 포인트 · 온도 · 대비 · 뺀 색 더함/지움이 칸마다 맞다 · 색과 무관한 칸(kind · reading · basis)만 다르면 빈 칩 · 헥스 없음
+    CHECK: node scripts/check-stage43.mjs S43-G2
+    EXPECT: S43_G2_OK
+
+S43-G3 고른 안이 맨 앞(`composeFocused`) — 그 안은 `compose(의도, 안)` 그대로 · 나머지는 3안 순서 · 같은 안은 한 번만
+    CHECK: node scripts/check-stage43.mjs S43-G3
+    EXPECT: S43_G3_OK
+
+S43-G4 자리 — 첫 턴은 문장 그대로, 둘째 턴은 `<previous_intent>`(검증한 첫 의도, kind · basis 뺌) + `<message>`(문장) · 두 턴의 시스템 프롬프트가 같고 문장 · 직전 의도 내용이 안 섞인다
+    CHECK: node scripts/check-stage43.mjs S43-G4
+    EXPECT: S43_G4_OK
+
+S43-G5 다듬기 응답 — refine 이면 칩이 `diffIntent` 그대로 · 고른 안을 안 보내면 충실이 맨 앞 · 색이 `composeFocused` 그대로
+    CHECK: node scripts/check-stage43.mjs S43-G5
+    EXPECT: S43_G5_OK
+
+S43-G6 고른 안 번호 — 2 면 대담안이 맨 앞 · 0~2 정수가 아니면(`"2"` · 5 · -1 · 1.5 · `__proto__` · null · `[2]`) 충실로
+    CHECK: node scripts/check-stage43.mjs S43-G6
+    EXPECT: S43_G6_OK
+
+S43-G7 새 요청 — 직전 의도가 실려 가도 Claude 가 new 로 읽으면 칩 없음 · 고른 안 무시 · 3안 그대로
+    CHECK: node scripts/check-stage43.mjs S43-G7
+    EXPECT: S43_G7_OK
+
+S43-G8 같은 대화 안에서만 — 새 대화 · fresh · 마지막 답이 색 경로 · 10턴 롤오버면 직전 의도가 안 실린다 · 같은 대화 이어 쓰기면 실린다(양성 대조)
+    CHECK: node scripts/check-stage43.mjs S43-G8
+    EXPECT: S43_G8_OK
+
+S43-G9 조작된 기록 — 뼈대 없는 의도는 안 싣고, 헥스 · 모르는 값 · 범위 밖이 섞인 의도는 걸러진 것만 싣는다
+    CHECK: node scripts/check-stage43.mjs S43-G9
+    EXPECT: S43_G9_OK
+
+S43-G10 기록 · 트레이스 · 화면 — 턴에 의도가 남는다 · 트레이스에 `previous:true` · `basis:refine` · 화면은 고른 안 번호만 보내고(의도는 안 보냄) 새 답에서 옛 고르개를 잠근다 · 칩 · "다른 결" 접기 · 접은 격자를 숨기는 CSS(`.expand__grid[hidden]`)
+    CHECK: node scripts/check-stage43.mjs S43-G10
+    EXPECT: S43_G10_OK

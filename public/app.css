@@ -1350,6 +1350,10 @@ a.action--primary:hover {
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 16px;
 }
+/* display: grid 가 hidden 속성을 덮는다 — "나머지 N가지 보기" · "다른 결 보기" 가 접힌 채로도 다 보였다(43단계에서 발견, 14단계부터). */
+.expand__grid[hidden] {
+  display: none;
+}
 
 .struct {
   border: 1px solid var(--line);
@@ -1658,4 +1662,33 @@ a.action--primary:hover {
   padding: 0;
   border-radius: 50%;
   font-size: 0;
+}
+
+/* ── 대화로 다듬기(43단계) ───────────────────────────────── */
+.refine__chip {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.pin {
+  margin-top: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.pin[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+.pin:disabled {
+  cursor: default;
+  opacity: 0.55;
 }

@@ -188,6 +188,19 @@ function normalizePending(value) {
   return { original, choices, reason: value.reason === "unclear" ? "unclear" : "ambiguous", askedAt: now() };
 }
 
+/** 의도를 기록에 남길 모양인가 — 평범한 객체이고 JSON 으로 2000자 이하. 아니면 null. */
+const INTENT_JSON_MAX = 2000;
+function storableIntent(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  let json;
+  try {
+    json = JSON.stringify(value);
+  } catch {
+    return null;
+  }
+  return json.length <= INTENT_JSON_MAX ? JSON.parse(json) : null;
+}
+
 /**
  * 턴 하나를 기록한다. conversationId 가 없거나 모르는 값이면 새 대화를 연다.
  * 화면이 보낸 값은 전부 형태를 강제해서 넣는다 — 문자열 길이, 열거값, 숫자 범위.
@@ -210,6 +223,9 @@ export function recordTurn(input) {
     topKind: ["diagnosis", "palette", "character", "color", "generated"].includes(input.topKind) ? input.topKind : null,
     topId: clip(input.topId, 40) || null,
     topLabel: clip(input.topLabel, 80) || null,
+    // 문장 팔레트의 의도(43단계) — 다음 말이 "좀 더 따뜻하게" 면 이것을 고친다. **저장소는 모양만 본다**(객체 · 크기):
+    // 색 규칙을 아는 것은 src/compose.js 이고, 읽어 쓰는 쪽(src/chat.js)이 parseIntent 로 다시 거른다 — 파일이 조작돼도 걸린다.
+    intent: storableIntent(input.intent),
   };
 
   return serialize(() => {

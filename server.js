@@ -47,7 +47,7 @@ import { loadSeeds, seedLabel } from "./src/seeds.js";
 import { PARTNER_COUNT, hexFromSeedId, parseColorInput, partnersFor, structuresFor } from "./src/from-color.js";
 import { FORMATS } from "./src/export.js";
 import { readIntent } from "./src/intent.js";
-import { VARIANTS, compose, composeAll, describeIntent, intentKey, materialRole, parseIntent } from "./src/compose.js";
+import { VARIANTS, compose, composeAll, composeFocused, describeIntent, diffIntent, intentKey, materialRole, parseIntent } from "./src/compose.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("./public/", import.meta.url));
 const PORT = Number(process.env.PORT ?? 4173);
@@ -505,9 +505,11 @@ const CHAT_RESULT_LIMIT = 3;
  * Claude 를 못 쓰면 `{ error }` — 채팅은 그때 옛 검색 경로로 물러선다(과도기, 44단계에서 걷어냄).
  * `skipped` 는 아예 부르지 않았다는 뜻이다(키 없음). 트레이스에 헛 자식 런을 안 남기려고 가른다.
  */
-async function computeGenerate(query) {
+async function computeGenerate(query, { previous: rawPrevious = null, variant = 0 } = {}) {
   const started = Date.now();
-  const r = await readIntent(query);
+  // 직전 의도는 대화 기록에서 왔다 — 파일이 조작됐을 수 있으니 모델 답과 같은 검증을 거친다(43단계). 못 쓰면 새로 읽는다.
+  const previous = parseIntent(rawPrevious);
+  const r = await readIntent(query, { previous });
   if (r.error) {
     return { error: LOOPBACK_ONLY ? r.error : "문장을 읽을 수 없습니다", skipped: (await refreshLlm()).state !== "ready", model: r.model ?? null };
   }
@@ -517,12 +519,16 @@ async function computeGenerate(query) {
     intent: r.intent,
     reading: r.intent.reading,
     read: describeIntent(r.intent),
-    palettes: composeAll(r.intent),
+    // 다듬기(refine)면 고른 안을 맨 앞에, 새로 읽었으면 3안 그대로. 칩은 두 의도를 코드가 비교한 것이다.
+    palettes: refined(previous, r.intent) ? composeFocused(r.intent, VARIANTS[variant] ? variant : 0) : composeAll(r.intent),
+    refine: refined(previous, r.intent) ? { changes: diffIntent(previous, r.intent), focus: VARIANTS[variant] ? variant : 0 } : null,
     model: LOOPBACK_ONLY ? r.model : null,
     llmMs: r.elapsedMs,
     elapsedMs: Date.now() - started,
   };
 }
+
+const refined = (previous, intent) => previous !== null && intent.basis === "refine";
 
 /**
  * 저장 요청의 의도 · 안 번호로 **색을 다시 계산한다**(`store.js` 규칙 4). 의도는 화면이 보낸 것이라 모델 답과 같은 검증을 거친다.
