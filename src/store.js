@@ -562,7 +562,7 @@ export function saveCharacter(input, resolve, ratioFor, materials) {
  *
  * 같은 키(색에 닿는 의도 칸 + 안 번호)면 덮어쓰고 비율 · 재질 · 메모를 이어받는다.
  *
- * @param {(input: object) => null | {key: string, intent: object, variant: number, colors: {role:string, hex:string}[],
+ * @param {(input: object) => null | {key: string, theme: "light"|"dark"|null, intent: object, variant: number, colors: {role:string, hex:string}[],
  *   shares: number[], name: string, principle: string, source: string, reading: string}} resolve
  * @param {{finishes: string[], defaultFor: (role:string) => string}} materials
  */
@@ -601,7 +601,8 @@ export function saveGenerated(input, resolve, materials) {
       kind: "derived",
       seedId: "intent",
       structureId: "generated",
-      mode: "light",
+      // UI 쓰임새는 테마가 있다(46단계 — 밝게/어둡게). 일반 팔레트는 테마가 없어 "light" 로 둔다(46단계 전과 같다).
+      mode: found.theme === "dark" ? "dark" : "light",
       seedLabel: found.reading || null,
       name: `${found.name} — ${clip(query || found.reading || "문장으로 만든 색", 40)}`,
       principle: found.principle,
@@ -613,7 +614,7 @@ export function saveGenerated(input, resolve, materials) {
       defaultRatio: defaults,
       note: merged.note,
       // 이 둘이 있으면 색을 언제든 다시 계산할 수 있다 — 엔진 수치를 고치면 옛 저장도 따라간다.
-      generated: { intent: found.intent, variant: found.variant, query: query || null },
+      generated: { intent: found.intent, variant: found.variant, query: query || null, theme: found.theme ?? null },
       generatedKey: found.key,
     };
 

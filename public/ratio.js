@@ -119,6 +119,20 @@ export function redistribute(shares, index, next) {
 const validShares = (shares, n) =>
   Array.isArray(shares) && shares.length === n && n > 0 && shares.every((v) => Number.isInteger(v) && v >= shareBounds(n).min) && shares.reduce((a, v) => a + v, 0) === 100;
 
+/**
+ * 다듬은 답이 직전에 손으로 맞춘 비율을 이어받을까(46단계). **역할 목록이 순서까지 같을 때만** 돌려준다 — 색 수나 역할이 바뀌면
+ * 옛 비율이 다른 색에 붙는다(5색의 "주색 20%" 가 4색의 "강조" 로 가는 식). 형식이 틀린 비율도 버린다.
+ *
+ * @param {{roles: string[], shares: number[]} | null} prev 직전 답의 기준 안에서 맞춘 것
+ * @param {string[]} nextRoles 새 답 맨 앞 안의 역할
+ * @returns {number[] | null}
+ */
+export function carryShares(prev, nextRoles) {
+  if (!prev || !Array.isArray(prev.roles) || !Array.isArray(nextRoles)) return null;
+  if (prev.roles.length !== nextRoles.length || prev.roles.some((r, i) => r !== nextRoles[i])) return null;
+  return validShares(prev.shares, nextRoles.length) ? [...prev.shares] : null;
+}
+
 export function ratioFor(palette) {
   // **3색 이상은 균등 분할이다.** 코퍼스 2색에는 실측으로 정한 규칙이 있지만(아래), 3색 이상에는
   // 원전도 실측도 없다. 규칙을 지어내는 대신 균등으로 두고 사용자가 슬라이더로 옮겨 확인한다.

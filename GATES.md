@@ -2479,3 +2479,40 @@ S44-G9 화면 · 문서 — 세 화면의 상태 배지가 BM25 가 아니다 ·
 S44-G10 은퇴 기록 — 44단계로 은퇴한 게이트(66개)가 GATES.md 에 "44단계로 은퇴" · `_RETIRED` · 제 스크립트로 적혀 있고, 실제로 돌리면 `_RETIRED` 를 찍는다
     CHECK: node scripts/check-stage44.mjs S44-G10
     EXPECT: S44_G10_OK
+
+## 46단계 — 문장 팔레트 다듬기 (색 이름 · 밝게/어둡게 · 저장 메모 · 비율 이어받기 — open-work J4 · J5 · J10 · J8)
+
+대표: "팔레트 다듬기 진행하자"(2026-10-03). 45단계(배포 철회)는 S41-G7 의 뜻을 바꿨을 뿐 게이트를 더하지 않았다.
+게이트 8개를 일부러 망가뜨려 확인했다(17건 중 처음 15건 — 놓친 둘을 보고 G3 에 어두운 톤 UI 를, G4 에 46단계 전 저장 키 대조를 더해 17건 전부).
+
+S46-G1 엔진의 테마 — UI 쓰임새는 받은 테마대로 짓는다(바탕 밝기) · 13색상 × 12톤 × 색 수 3 · 5 · 7 × 3안 × 두 테마 전부 WCAG 대비(본문 4.5 · 주색 · 보조 · 강조 3) · 의도가 정한 테마를 따로 달라 해도 색이 같다 · 테마를 안 주면 46단계 전과 같다 · 모르는 테마 · 일반 팔레트는 무시
+    CHECK: node scripts/check-stage46.mjs S46-G1
+    EXPECT: S46_G1_OK
+
+S46-G2 색 이름 — 가장 가까운 코퍼스 색(독립 전수 비교와 대조) · 상한 0.15 밖이면 null · 코퍼스에 없는 이름 없음 · 이름 붙음 · 안 붙음이 둘 다 50건 넘게 일어난다(양성 · 음성 대조) · 이름 없는 항목 · 빈 코퍼스
+    CHECK: node scripts/check-stage46.mjs S46-G2
+    EXPECT: S46_G2_OK
+
+S46-G3 서버 응답 — 색마다 `near`(이름 또는 null) · 헥스는 compose 그대로 · UI 는 `colorsByTheme` 두 벌(compose 와 일치 · 역할이 같다)이고 `colors` 는 의도가 정한 테마 쪽(밝은 톤 · 어두운 톤 둘 다) · 일반 팔레트에는 두 벌이 없다
+    CHECK: node scripts/check-stage46.mjs S46-G3
+    EXPECT: S46_G3_OK
+
+S46-G4 테마 저장 — 서버가 의도 · 안 번호 · 테마로 다시 계산한다(보낸 헥스 무시) · 어두운 테마는 따로 저장(mode dark) · 의도가 정한 테마는 46단계 전 키 그대로(테마 없음 · light · 모르는 테마가 한 항목) · 일반 팔레트는 테마를 안 받는다
+    CHECK: node scripts/check-stage46.mjs S46-G4
+    EXPECT: S46_G4_OK
+
+S46-G5 저장 메모 — 문장 팔레트 저장이 메모를 싣는다 · 메모 없이 다시 저장해도 예전 메모가 남는다 · 상한 200자 · `structureCard` 를 최소 DOM 으로 불러 메모 칸 → onSave(빈 칸이면 note 를 안 싣는다) · 비율을 옮기면 onShares 가 알린다 · 옵션이 없으면 칸이 없다
+    CHECK: node scripts/check-stage46.mjs S46-G5
+    EXPECT: S46_G5_OK
+
+S46-G6 비율 이어받기 — `carryShares` 는 역할 목록이 순서까지 같을 때만 직전 비율의 사본을 돌려준다 · 색 수 · 순서 · 이름이 다르거나 합 · 하한 · 정수 · 문자열이 틀리면 null
+    CHECK: node scripts/check-stage46.mjs S46-G6
+    EXPECT: S46_G6_OK
+
+S46-G7 화면 — 색 이름 줄이 서버의 near 를 그린다 · 토글은 두 벌이 있을 때만 · 사이트 기본 모드(modeStore)를 안 쓴다 · 저장은 두 벌이 있는 안만 theme 을 싣는다 · 다듬은 답만 이어받는다 · 마지막 답만 이어받을 상태를 고친다 · 새 대화가 비운다 · 메모 칸을 켠다 · 저장 목록이 테마를 보인다 · CSS
+    CHECK: node scripts/check-stage46.mjs S46-G7
+    EXPECT: S46_G7_OK
+
+S46-G8 회귀 — 42 · 43단계(문장 팔레트 · 다듬기) 게이트 22개가 그대로 통과한다
+    CHECK: node scripts/check-stage46.mjs S46-G8
+    EXPECT: S46_G8_OK

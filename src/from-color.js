@@ -90,6 +90,30 @@ export function colorDistance(a, b) {
 }
 
 /**
+ * 색 이름을 붙이는 거리 상한 `[판단]` (46단계). 문장 팔레트 780색(13색상 × 12톤 × 5칸)을 재 보니 가장 가까운 코퍼스 색까지
+ * 중앙값 0.119 · 상위 25% 0.172 `[실측 10-03]`. 0.17 쯤에서는 청회색(#6A8E93)이 세이지그린(#719470)으로 불려 이름이 거짓말이 된다.
+ */
+export const NAME_MAX_DISTANCE = 0.15;
+
+/**
+ * 헥스에 가장 가까운 코퍼스 색의 이름(46단계 — 문장 팔레트의 색 이름). **이름을 지어내지 않는다** — 코퍼스 80색의
+ * 한국어 이름 또는 원명이다. 상한보다 멀면 null — 화면은 "가까운 이름 없음" 이라고 적는다.
+ *
+ * @param {string} hex
+ * @param {{hex:string, name?:string|null}[]} corpus
+ * @returns {null | {name:string, hex:string, distance:number}}
+ */
+export function nearestName(hex, corpus, max = NAME_MAX_DISTANCE) {
+  let best = null;
+  for (const c of corpus ?? []) {
+    if (typeof c?.name !== "string" || !c.name.trim() || typeof c.hex !== "string") continue;
+    const d = colorDistance(hex, c.hex);
+    if (!best || d < best.distance) best = { name: c.name, hex: c.hex.toUpperCase(), distance: d };
+  }
+  return best && best.distance <= max ? { ...best, distance: Math.round(best.distance * 1000) / 1000 } : null;
+}
+
+/**
  * 씨앗 쌍 중 입력 색과 가장 가까운 색을 가진 쌍 `count` 개. 쌍마다 한 번만 센다(가까운 쪽 색으로).
  *
  * @param {string} hex `#RRGGBB`

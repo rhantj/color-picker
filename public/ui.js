@@ -347,6 +347,8 @@ export function savedFields(entry) {
         coords: [
           ["읽은 것", or(e.seedLabel, "모름")],
           ["쓰임새", or(e.source, "모름")],
+          // UI 쓰임새는 밝은 · 어두운 테마가 있다(46단계). 일반 팔레트에는 테마가 없어 줄을 안 그린다.
+          ...(e.generated?.theme === "dark" || e.generated?.theme === "light" ? [["테마", e.generated.theme === "dark" ? "어두운 화면" : "밝은 화면"]] : []),
         ],
         colors,
         finishes,
@@ -687,6 +689,9 @@ export function structureColors(structure, mode = "light") {
  *   재질을 고칠 수 있게 할 때 넘긴다(21단계). 안 넘기면 17단계의 읽기 전용 표시 그대로다.
  *   **`onFinish` 는 담아 두기만 해야 한다** — 거기서 카드를 다시 그리면 사용자가 맞춘 비율과
  *   포커스가 날아간다(`S21-G4` 가 검사한다).
+ * @param {{note?: boolean, onShares?: (shares:number[]) => void}} [options] 46단계 — 문장 팔레트 카드가 쓴다.
+ *   `note` 면 저장 옆에 메모 칸을 두고 `onSave(shares, { note })` 로 넘긴다(비어 있으면 note 를 안 싣는다 — 다시 저장할 때
+ *   예전 메모를 지우지 않게). `onShares` 는 비율을 옮길 때마다 지금 비율을 알린다(테마를 바꿔 다시 그리거나 다음 답이 이어받게).
  */
 /**
  * 캐릭터 응답을 `structureCard` 가 그릴 수 있는 구조 모양으로(34단계). 카드를 새로 만들지 않는다 — 스와치·다색 슬라이더·
@@ -715,7 +720,7 @@ export function sourceLine(colors) {
   return line;
 }
 
-export function structureCard(structure, mode = "light", finishes = null, onSave = null, editing = null) {
+export function structureCard(structure, mode = "light", finishes = null, onSave = null, editing = null, options = {}) {
   const card = el("article", "struct");
 
   const head = el("div", "struct__head");
@@ -732,7 +737,10 @@ export function structureCard(structure, mode = "light", finishes = null, onSave
   const control = shareControl({
     colors,
     value: ratio,
-    onInput: (next) => view.set(next),
+    onInput: (next) => {
+      view.set(next);
+      options.onShares?.(next);
+    },
   });
 
   card.append(head, el("p", "struct__principle", structure.principle), view.node);
@@ -787,6 +795,17 @@ export function structureCard(structure, mode = "light", finishes = null, onSave
    */
   if (onSave) {
     const box = el("div", "struct__save");
+    // 저장 메모(46단계). 44단계에 검색 결과 카드와 함께 빠졌던 것을 문장 팔레트 카드에 되살렸다. 상한은 서버(LIMITS.noteChars)와 같다.
+    let note = null;
+    if (options.note) {
+      note = document.createElement("input");
+      note.type = "text";
+      note.className = "struct__note";
+      note.maxLength = 200;
+      note.placeholder = "메모 (선택)";
+      note.setAttribute("aria-label", `${structure.name} 저장 메모`);
+      box.append(note);
+    }
     const button = el("button", "struct__save-button", "이 배색 저장");
     button.type = "button";
     const feedback = el("span", "struct__save-feedback");
@@ -794,7 +813,8 @@ export function structureCard(structure, mode = "light", finishes = null, onSave
       button.disabled = true;
       feedback.textContent = "저장 중…";
       try {
-        await onSave(control.shares());
+        const memo = note?.value.trim();
+        await onSave(control.shares(), memo ? { note: memo } : {});
         feedback.textContent = "저장됨";
       } catch (err) {
         // 실패를 삼키면 사용자는 저장된 줄 안다.

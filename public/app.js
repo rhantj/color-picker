@@ -1,6 +1,7 @@
 // 홈 화면 — 채팅창 하나(39단계). 렌더 조각은 ui.js 가 세 화면과 공유한다.
 
-import { api, applyModeButton, characterStructure, diagnosisCard, el, finishEditing, finishOverrides, modeStore, nextMode, refreshRuntime, sourceLine, structureCard, swatchView } from "./ui.js";
+import { api, applyModeButton, characterStructure, diagnosisCard, el, finishEditing, finishOverrides, modeStore, modeToggle, nextMode, refreshRuntime, sourceLine, structureCard, swatchView } from "./ui.js";
+import { carryShares } from "./ratio.js";
 
 const form = document.getElementById("search-form");
 const input = document.getElementById("q");
@@ -95,11 +96,32 @@ function uiPreview(palette) {
  */
 let pinnedVariant = 0;
 let retirePins = null;
+/*
+ * 기준 안에서 손으로 맞춘 것(46단계) — `{ roles, shares, theme }`. 다음 답이 다듬은 답이면 맨 앞 안이 이 비율 · 테마를 이어받는다.
+ * **서버로 보내지 않는다** — 색은 의도만으로 정해지고, 비율 · 테마는 보는 방식이다. 마지막 답만 이것을 고친다(`liveBlock`).
+ */
+let pinnedState = null;
+let liveBlock = 0;
+
+/**
+ * 색 이름 줄(46단계). 서버가 붙인 가장 가까운 코퍼스 색 이름(`near`)이다 — 거리 상한 밖이면 "가까운 이름 없음".
+ * **화면이 이름을 고르지 않는다.** 헥스도 여기서 처음 글자로 보인다(스와치 라벨은 역할 · 비율뿐).
+ */
+function nameLine(colors) {
+  const line = el("div", "sources names");
+  for (const c of colors) {
+    const item = el("span", "sources__item");
+    item.append(el("b", null, c.role), document.createTextNode(` ${c.hex} · ${c.near?.name ? `≈ ${c.near.name}` : "가까운 이름 없음"}`));
+    line.append(item);
+  }
+  return line;
+}
 
 /**
  * 문장으로 만든 팔레트(42단계). Claude 가 읽은 것 한 줄 + 읽은 칸들 + 3안.
- * **저장은 의도와 안 번호만 보낸다** — 서버가 같은 검증을 거쳐 색을 다시 계산한다(S4 · S18 과 같은 규칙).
+ * **저장은 의도와 안 번호(UI 면 테마도)만 보낸다** — 서버가 같은 검증을 거쳐 색을 다시 계산한다(S4 · S18 과 같은 규칙).
  * 다듬은 답(43단계)은 바뀐 칸을 칩으로 보이고, 고른 안을 맨 앞에 두고 나머지 결은 접어 둔다.
+ * 46단계: 색 이름 줄 · UI 쓰임새의 밝게/어둡게 토글 · 저장 메모 · 다듬은 답이 직전 비율 · 테마를 이어받는다.
  */
 function generatedBlock(data) {
   const box = el("div", "answer");
@@ -123,45 +145,113 @@ function generatedBlock(data) {
     el("p", "results__note", "비율을 옮겨 보고 마음에 드는 안을 저장하세요. 이어서 “좀 더 따뜻하게” 처럼 쓰면 ‘기준’ 안을 고칩니다"),
   );
 
+  // 이어받을 것은 옛 답의 고르개를 잠그기 **전에** 집는다. 새로 읽은 답(다듬기 아님)은 아무것도 이어받지 않는다.
+  const carried = data.refine ? pinnedState : null;
   retirePins?.();
   const pins = [];
+  const live = ++liveBlock;
+  const palettes = data.palettes ?? [];
+  const [first, ...rest] = palettes;
+
+  /** 안마다 지금 비율. 테마를 바꿔 다시 그려도 사용자가 옮긴 비율이 남는다(역할이 같다). */
+  const shares = new Map();
+  const carriedShares = first ? carryShares(carried, first.colors.map((c) => c.role)) : null;
+  if (carriedShares) shares.set(first.variant, carriedShares);
+
+  // 테마는 의도의 톤이 정한다(어두운 톤 → 다크 UI). 다듬은 답은 직전에 바꿔 둔 테마를 이어받는다.
+  const themed = palettes.some((p) => p.colorsByTheme);
+  let theme = first?.theme ?? "light";
+  if (themed && (carried?.theme === "light" || carried?.theme === "dark")) theme = carried.theme;
+  const colorsOf = (p) => p.colorsByTheme?.[theme] ?? p.colors;
+
+  let chosen = first?.variant ?? 0;
+  const remember = () => {
+    if (live !== liveBlock) return;
+    const p = palettes.find((x) => x.variant === chosen);
+    if (p) pinnedState = { roles: p.colors.map((c) => c.role), shares: shares.get(p.variant) ?? p.shares, theme: p.colorsByTheme ? theme : null };
+  };
+
   const choose = (variant) => {
-    pinnedVariant = variant;
+    chosen = variant;
+    if (live === liveBlock) pinnedVariant = variant;
     for (const { button, variant: v } of pins) {
       const on = v === variant;
       button.setAttribute("aria-pressed", String(on));
       button.textContent = on ? "기준 — 다음 말이 이 안을 고친다" : "이 안으로 다듬기";
     }
+    remember();
   };
+  let retired = false;
   retirePins = () => {
+    retired = true;
     for (const { button } of pins) button.disabled = true;
   };
 
   const cardFor = (p) => {
-    const onSave = (shares) => api("/api/saved/generated", { intent: data.intent, variant: p.variant, shares, query: data.query });
-    const card = structureCard(p, "light", null, onSave, null);
-    if (p.theme) card.insertBefore(uiPreview(p), card.querySelector(".struct__principle")?.nextSibling ?? null);
+    const colors = colorsOf(p);
+    const view = { ...p, colors, shares: shares.get(p.variant) ?? p.shares };
+    // 테마는 UI 쓰임새(두 벌이 있는 안)만 싣는다. 색은 안 보낸다 — 서버가 의도 · 안 번호 · 테마로 다시 계산한다.
+    const twoThemes = Boolean(p.colorsByTheme);
+    const onSave = (s, extra = {}) =>
+      api("/api/saved/generated", { intent: data.intent, variant: p.variant, shares: s, query: data.query, ...(twoThemes ? { theme } : {}), ...extra });
+    const card = structureCard(view, "light", null, onSave, null, {
+      note: true,
+      onShares: (next) => {
+        shares.set(p.variant, next);
+        remember();
+      },
+    });
+    card.querySelector(".swatch")?.after(nameLine(colors));
+    if (p.theme) card.insertBefore(uiPreview(view), card.querySelector(".struct__principle")?.nextSibling ?? null);
+    if (carriedShares && p === first) card.insertBefore(el("p", "carry", "직전 안에서 맞춘 비율을 이어받았습니다"), card.querySelector(".struct__principle")?.nextSibling ?? null);
     const pin = el("button", "pin");
     pin.type = "button";
     pin.dataset.variant = String(p.variant);
+    pin.disabled = retired;
     pin.addEventListener("click", () => choose(p.variant));
     pins.push({ button: pin, variant: p.variant });
     card.append(pin);
     return card;
   };
 
-  const [first, ...rest] = data.palettes ?? [];
+  if (themed) {
+    // 밝게/어둡게(46단계). 기본값 저장(modeStore)은 안 쓴다 — 이 테마는 의도의 톤이 정한 것이라 사이트 기본값으로 덮지 않는다.
+    const modeBtn = el("button", "expand__mode-toggle");
+    modeBtn.type = "button";
+    applyModeButton(modeBtn, theme);
+    modeBtn.addEventListener("click", () => {
+      theme = modeToggle(theme).next;
+      applyModeButton(modeBtn, theme);
+      draw();
+      remember();
+      modeBtn.focus();
+    });
+    const modeBox = el("div", "expand__mode");
+    modeBox.append(modeBtn);
+    box.append(modeBox);
+  }
+
   const grid = el("div", "expand__grid");
-  if (data.refine && rest.length) {
+  const restGrid = el("div", "expand__grid");
+  const folded = Boolean(data.refine && rest.length);
+  const draw = () => {
+    pins.length = 0;
+    if (folded) {
+      grid.replaceChildren(cardFor(first));
+      restGrid.replaceChildren(...rest.map(cardFor));
+    } else {
+      grid.replaceChildren(...palettes.map(cardFor));
+    }
+    choose(chosen);
+  };
+
+  if (folded) {
     // 고른 결 하나를 앞에, 나머지는 접어 둔다 — 지우지 않는다. 다듬은 결과가 기대와 다를 때 다른 결이 볼 자리다.
-    grid.append(cardFor(first));
     const moreBox = el("div", "expand__more");
     const more = el("button", "expand__more-toggle", `다른 결 ${rest.length}가지 보기`);
     more.type = "button";
     more.setAttribute("aria-expanded", "false");
-    const restGrid = el("div", "expand__grid");
     restGrid.hidden = true;
-    for (const p of rest) restGrid.append(cardFor(p));
     more.addEventListener("click", () => {
       restGrid.hidden = !restGrid.hidden;
       more.setAttribute("aria-expanded", String(!restGrid.hidden));
@@ -170,10 +260,9 @@ function generatedBlock(data) {
     moreBox.append(more, restGrid);
     box.append(grid, moreBox);
   } else {
-    for (const p of data.palettes ?? []) grid.append(cardFor(p));
     box.append(grid);
   }
-  if (first) choose(first.variant);
+  draw();
   return box;
 }
 
@@ -420,6 +509,7 @@ function showThread(conversation) {
 document.getElementById("thread-new").addEventListener("click", () => {
   conversationId = null;
   pinnedVariant = 0;
+  pinnedState = null;
   retirePins?.();
   threadBox.hidden = true;
   chatList.replaceChildren();
