@@ -52,9 +52,9 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 
 // 루프백 밖이면 모델 상세·오류 원문을 내보내지 않는다. 오류 원문에는 API 상태 코드와 키 문제("키가 거절됐다")가
 // 들어간다 — 방문자에게 보일 것이 아니다.
-// **Vercel 은 루프백이 아니다**(41단계). 거기서 HOST 는 기본값 127.0.0.1 그대로라 이 검사만으로는 루프백으로 보인다 —
-// 실제로 첫 배포에서 `/api/status` 가 방문자에게 내부 상세를 그대로 보였다(2026-09-29 [실측]).
-const LOOPBACK_ONLY = !process.env.VERCEL && /^(127\.|::1$|localhost$)/.test(HOST);
+// 45단계(2026-10-03)부터 이 앱은 로컬에서만 돈다 — 배포 계획을 철회해 Vercel 분기(`process.env.VERCEL`)를 뺐다.
+// `HOST=0.0.0.0` 처럼 같은 망에 여는 경우를 위해 이 검사는 남긴다.
+const LOOPBACK_ONLY = /^(127\.|::1$|localhost$)/.test(HOST);
 
 // 확장자 없는 화면 경로. 목록에 없는 경로는 정적 파일로도 안 찾는다.
 const PAGES = {

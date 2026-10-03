@@ -311,9 +311,16 @@ const GATES = {
     return bad;
   },
 
-  /** Vercel 위에서는 설정 없이 맞게 돈다 — 루프백으로 치지 않고, 저장 폴더는 /tmp. */
+  /**
+   * 배포 분기가 없다 — 45단계(2026-10-03)에 배포 계획을 철회했다. 41단계의 이 게이트는 `VERCEL=1` 이면 /tmp 에 저장하고
+   * 상세를 숨기는지 쟀다. 이제는 거꾸로 `VERCEL=1` 을 줘도 로컬과 똑같이 도는지 잰다(저장 var/ · 루프백 상세 그대로).
+   * 루프백 밖(`HOST=0.0.0.0`)에서 상세를 숨기는 것은 같은 망에 여는 경우라 그대로 지킨다(양성 대조).
+   */
   "S41-G7": async () => {
     const bad = [];
+    for (const f of ["server.js", "src/store.js", "src/quota.js"]) {
+      if (/process\.env\.VERCEL/.test(stripComments(read(f)))) bad.push(`${f} 가 아직 process.env.VERCEL 로 갈린다`);
+    }
     // DATA_DIR 은 모듈 적재 때 정해진다 — 자식 프로세스에서 본다. 쓰지는 않는다(윈도우에서 /tmp 는 드라이브 루트다).
     const probe = (env) =>
       new Promise((resolve) => {
@@ -326,14 +333,16 @@ const GATES = {
         child.on("exit", () => resolve(s));
       });
     const onVercel = await probe({ VERCEL: "1" });
-    if (onVercel !== "/tmp/tonefirst") bad.push(`VERCEL=1 인데 저장 폴더가 ${onVercel}`);
+    if (!/var[\\/]?$/.test(onVercel)) bad.push(`VERCEL=1 인데 저장 폴더가 var/ 가 아니다: ${onVercel}`);
     const local = await probe({ VERCEL: "" });
     if (!/var[\\/]?$/.test(local)) bad.push(`로컬 저장 폴더가 var/ 가 아니다: ${local}`);
-    await withServer(4417, { ANTHROPIC_API_KEY: "", OLLAMA_HOST: "", VERCEL: "1" }, async (api) => {
+    await withServer(4417, { ANTHROPIC_API_KEY: "", VERCEL: "1" }, async (api) => {
       const st = (await api("/api/status")).json;
-      if (JSON.stringify(Object.keys(st?.llm ?? {})) !== JSON.stringify(["state"])) bad.push(`VERCEL=1 인데 llm 상세가 나간다: ${JSON.stringify(st?.llm)}`);
-      if (st?.embed?.detail !== undefined) bad.push("VERCEL=1 인데 embed 사유가 나간다");
-      if (st?.ollama?.host !== undefined || st?.ollama?.detail !== undefined) bad.push("VERCEL=1 인데 ollama 호스트·사유가 나간다");
+      if (typeof st?.llm?.detail !== "string") bad.push(`VERCEL=1 · 루프백인데 llm 상세가 숨는다: ${JSON.stringify(st?.llm)}`);
+    });
+    await withServer(4419, { ANTHROPIC_API_KEY: "", HOST: "0.0.0.0" }, async (api) => {
+      const st = (await api("/api/status")).json;
+      if (JSON.stringify(Object.keys(st?.llm ?? {})) !== JSON.stringify(["state"])) bad.push(`HOST=0.0.0.0 인데 llm 상세가 나간다: ${JSON.stringify(st?.llm)}`);
     });
     return bad;
   },

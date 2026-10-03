@@ -2325,7 +2325,7 @@ S41-G6 화면이 LLM 을 "로컬 · Ollama" 라고 부르지 않는다 — 세 H
     CHECK: node scripts/check-stage41.mjs S41-G6
     EXPECT: S41_G6_OK
 
-S41-G7 `VERCEL=1` 이면 저장 폴더가 `/tmp/tonefirst` · 루프백으로 치지 않는다(llm·embed·ollama 상세 숨김) · 로컬은 var/ 그대로
+S41-G7 **배포 분기가 없다(45단계에 고침 — 배포 계획 철회)** — `server.js`·`store.js`·`quota.js` 에 `process.env.VERCEL` 이 없다 · `VERCEL=1` 을 줘도 저장 폴더는 var/ · 루프백이면 llm 상세가 보인다 · `HOST=0.0.0.0` 이면 숨긴다(양성 대조). 41단계에는 `VERCEL=1` 이면 /tmp · 상세 숨김을 쟀다
     CHECK: node scripts/check-stage41.mjs S41-G7
     EXPECT: S41_G7_OK
 

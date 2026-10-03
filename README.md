@@ -136,7 +136,7 @@ node scripts/check-stage1.mjs S1-G1
 | S36 | 5 | **헥스 씨앗 저장 왕복 — 가짜 색 무시·재계산·덮어쓰기·엔진 id** · 씨앗 풀 쌍 저장 · `/api/color` 재질 기본 배정(LLM 아님) · 화면(저장 버튼·토글·고르개·탭 전환 초기화) · 회귀 44 |
 | S39 | 10 | **탭 셋을 지우고 채팅창 하나 — `/api/chat` 라우터 · 되묻기 1회 · 대화 10턴 상한 · LangSmith 트레이스(키 없음/있음)** · 로컬 트레이스 기록 · 탭 소멸(`tabStore`·`asTab`·`applyTab`·`tab=` 없음) · 바로잡기 · 회귀(S2·S4·S22·S31·S34·S35·S36) |
 | S40 | 9 | **임베딩이 조용히 죽어도 틀린 확신을 안 낸다** — 기동 때 임베딩 모델을 먼저 올림 · 700ms 예산은 기다림만 멈추고 요청은 안 끊음 · 어절 하나짜리 BM25 확신은 임베딩을 기다림 · 트레이스·LangSmith 에 `embed` 런 · BM25 증거가 없으면 1위가 튀어나와야 확신("안녕" 확신 안 함) · 종족 낱말만 있으면 캐릭터·추천을 되묻기 · 회귀(S3·S22·S26~30·S34·S39) |
-| S41 | 9 | **LLM 을 Claude API 로 · 임베딩은 로컬 bge-m3 그대로** — LLM 이 Ollama 를 안 부름 · 요청 모양(모델·스키마·키) · 임베딩은 로컬로만 · 키 없으면 LLM 없이 · 안 잰 임베딩 모델로 확신 안 함 · Vercel 감지 · IP 당 호출 한도 · 은퇴 기록 |
+| S41 | 9 | **LLM 을 Claude API 로 · 임베딩은 로컬 bge-m3 그대로** — LLM 이 Ollama 를 안 부름 · 요청 모양(모델·스키마·키) · 임베딩은 로컬로만 · 키 없으면 LLM 없이 · 안 잰 임베딩 모델로 확신 안 함 · 배포 분기 없음(45단계) · IP 당 호출 한도 · 은퇴 기록 |
 | S42 | 12 | **문장 → 의도 → 색** — 결정성 · 색을 지어내지 않음 · 의도 검증 · 색 수와 면적 · 뺄 색 · 포인트가 가장 선명 · UI 대비(WCAG) 전수 · 화면 안 · 3안이 다름 · 경로와 과도기 폴백 · 저장 재계산 · 기록 |
 | S43 | 10 | **대화로 다듬기** — basis 검증 · 바뀐 칸 칩 · 고른 안이 맨 앞 · 직전 의도의 자리(user 블록) · 다듬기 응답 · 고른 안 번호 검증 · 새 요청 · 같은 대화 안에서만 · 조작된 기록 · 기록 · 화면 |
 | S44 | 10 | **검색 장치 걷어내기** — 검색 모듈 · Ollama · `/api/search` 가 없다 · 의도의 진단 칸(진단표 enum) · Claude 가 고른 진단 · 캐릭터 배색 쌍(16쌍 enum) · 못 읽음은 지어내지 않음 · 코퍼스 다시 읽기 · 키 없을 때 · 폭 0 문자 · 화면 · 문서 · 은퇴 기록 |
@@ -145,15 +145,14 @@ node scripts/check-stage1.mjs S1-G1
 
 `PORT` `HOST` `ANTHROPIC_API_KEY` `CLAUDE_MODEL`(기본 `claude-haiku-4-5`) `LLM_MAX_RETRIES`(기본 1)
 `LLM_RATE_PER_MIN`(IP 당 1분 호출 한도, 기본 30) `LLM_RATE_GLOBAL_PER_MIN`(기본 200)
-`INTENT_TIMEOUT_MS` `STRUCTURE_TIMEOUT_MS` `FINISH_TIMEOUT_MS` `DESCRIBE_TIMEOUT_MS`(기본 10초) `TONEFIRST_DATA_DIR`(Vercel 에서는 기본 `/tmp/tonefirst`)
-`VERCEL` 은 Vercel 이 넣는다(루프백으로 안 친다 · 저장 폴더 /tmp)
+`INTENT_TIMEOUT_MS` `STRUCTURE_TIMEOUT_MS` `FINISH_TIMEOUT_MS` `DESCRIBE_TIMEOUT_MS`(기본 10초) `TONEFIRST_DATA_DIR`(기본 `var/`)
 `TONEFIRST_CORPUS_DIR`(코퍼스 둘의 자리, 기본 `data/`). Ollama · 임베딩 환경변수(`OLLAMA_*` · `EMBED_*` · `REWRITE_TIMEOUT_MS`)는 44단계에서 없어졌다
 
 ## 알려진 한계 (의도적)
 
 - **인증이 없다.** 대화·저장·내보내기가 무인증 GET 이고 루프백 바인딩이 유일한 방어다.
-  로컬 단일 사용자 전제로 만들었다. **Vercel 배포는 이 전제와 부딪힌다** — 방문자끼리 저장 목록·대화 기록이 서로
-  보이고 지워질 수 있다(Vercel 에서는 /tmp 라 서버가 바뀌면 사라지기도 한다). 공개 전에 정할 일이다(`docs/com/open-work.md` I 절).
+  로컬 단일 사용자 전제로 만들었다. **이 앱은 로컬에서만 돈다** — 배포 계획은 45단계(2026-10-03)에 철회했다(대표 결정).
+  `HOST=0.0.0.0` 으로 같은 망에 열면 저장 목록·대화 기록을 누구나 보고 지울 수 있다.
 - 저신뢰 질의가 동시에 오면 LLM 을 각각 부른다(단일 비행 없음).
 - 대화 경계가 세션이라 같은 대화를 두 탭에서 열면 마지막 쓰기가 이긴다.
 

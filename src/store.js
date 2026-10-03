@@ -27,11 +27,8 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 // 저장 위치. 검사가 사용자 데이터를 오염시키지 않도록 환경변수로 갈아끼울 수 있게 둔다.
-// **Vercel 에서는 /tmp 뿐이다**(41단계). 배포 폴더는 쓰기 금지라 var/ 에 쓰면 저장이 전부 실패한다. /tmp 는 서버가 바뀌면
-// 비워진다 — 영구 저장은 따로 정한다(open-work). `VERCEL` 은 Vercel 이 스스로 넣는 환경변수다.
-export const DATA_DIR =
-  process.env.TONEFIRST_DATA_DIR ||
-  (process.env.VERCEL ? "/tmp/tonefirst" : fileURLToPath(new URL("../var/", import.meta.url)));
+// 41단계에 Vercel 용 `/tmp/tonefirst` 분기가 있었다 — 45단계에 배포 계획을 철회해 뺐다. 저장은 늘 이 PC 의 var/ 다.
+export const DATA_DIR = process.env.TONEFIRST_DATA_DIR || fileURLToPath(new URL("../var/", import.meta.url));
 
 // 한쪽이 가질 수 있는 최소·최대 지분. 이 밖으로 나가면 사실상 단색이 된다.
 export const RATIO_MIN = 10;

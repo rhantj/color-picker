@@ -1,10 +1,10 @@
 // 유료 API 호출 한도 — 방문자 IP 하나가 1분에 몇 번까지 모델을 부를 수 있나(41단계).
 //
-// 왜 필요한가: LLM 이 Claude API 로 바뀌면서 호출마다 돈이 든다(임베딩은 로컬 Ollama 라 세지 않는다). 배포 사이트는 누구나 연다 —
-// 스크립트 하나가 검색을 수천 번 돌리면 그 비용이 대표님 계정에 쌓인다.
+// 왜 필요한가: LLM 이 Claude API 라 호출마다 돈이 든다. 처음에는 배포 사이트를 막으려고 들였다 —
+// 45단계(2026-10-03)에 배포 계획을 철회해 이 앱은 로컬에서만 돈다. 그래도 남긴다: 화면 버그나 스크립트가
+// 요청을 되풀이할 때 비용이 쌓이지 않게 막는 안전띠다.
 //
-// **이건 보조 장치다.** 진짜 상한은 Anthropic 콘솔의 월 지출 한도다(대표님이 건다). 이 파일의 숫자는
-// 프로세스 메모리에 있어서, Vercel 처럼 서버가 여러 대로 나뉘면 **서버마다 따로 센다** `[판단]`.
+// **이건 보조 장치다.** 진짜 상한은 Anthropic 콘솔의 월 지출 한도다(대표님이 건다).
 //
 // 한도를 넘으면 던지지 않는다 — 호출부가 모델 없이 물러선다(검색은 재작성 없이, 캐릭터는 정규식, 구조·재질은 기본값).
 // 사이트가 멈추지 않고 덜 똑똑해질 뿐이다.
@@ -35,14 +35,10 @@ let global = [];
 export const runWithClient = (client, fn) => context.run({ client }, fn);
 
 /**
- * 요청의 방문자 IP. Vercel 에서는 `x-forwarded-for` 첫 값이 방문자다(Vercel 이 넣는다).
- * 로컬에서는 이 헤더를 믿지 않는다 — 아무나 적어 보낼 수 있어서 한도를 우회하는 데 쓰인다.
+ * 요청의 방문자 IP — 소켓 주소만 본다. `x-forwarded-for` 는 믿지 않는다: 아무나 적어 보낼 수 있어서 한도를 우회하는 데 쓰인다.
+ * (41단계에 Vercel 일 때만 그 헤더를 읽는 분기가 있었다 — 45단계에 뺐다.)
  */
 export function clientOf(req) {
-  if (process.env.VERCEL) {
-    const forwarded = String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim();
-    if (forwarded) return forwarded;
-  }
   return req.socket?.remoteAddress ?? "unknown";
 }
 
