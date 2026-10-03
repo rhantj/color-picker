@@ -9,7 +9,9 @@ const ROUTE_LABEL = { palette: "추천", diagnosis: "진단", character: "캐릭
 function turnRow(turn, conversationId) {
   const row = el("li", "turn");
 
-  const stage = el("span", `turn__stage turn__stage--${turn.stage}`, `${turn.stage}단계`);
+  // 44단계 — 검색 사다리(1~4단계)를 걷어냈다. 이제 보일 것은 "Claude 가 문장을 읽었는가" 하나다. 옛 기록은 stage 2 가 곧 LLM 이었다.
+  const llm = turn.usedLlm === undefined ? turn.stage === 2 : turn.usedLlm === true;
+  const stage = el("span", `turn__stage turn__stage--${llm ? 2 : 1}`, llm ? "Claude" : "규칙");
   const query = el("span", "turn__query", turn.query);
 
   const meta = el("span", "turn__meta");

@@ -14,12 +14,17 @@ import { findCreature, loadCharacterWords, loadCreatures } from "./color-words.j
 // 구조 선택·재질 배정과 같은 값을 독립적으로 적는다. 물러설 자리(정규식)가 분명하다.
 const TIMEOUT_MS = Number(process.env.DESCRIBE_TIMEOUT_MS ?? 10000);
 
-/** 인상 한 줄의 상한. 검색 질의로 들어가므로 길면 BM25 가 흐려진다. */
+/** 인상 한 줄의 상한 — 화면에 한 줄로 보인다(44단계 전에는 검색 질의였다). */
 export const IMPRESSION_MAX = 120;
 
 const emptyParts = () => Object.fromEntries(CHARACTER_ROLES.map((r) => [r, null]));
 
-export const systemPrompt = (words) => `너는 한국어 캐릭터 외형 설명을 읽는 파서다.
+/** 배색 쌍 목록 줄(44단계). 코퍼스에서 온다 — 사용자 문장은 안 섞인다. */
+const pairLines = (pairs) => pairs.map((p) => `- ${p.id}: ${p.name} — ${p.impression ?? p.summary ?? ""}`).join("\n");
+
+export const systemPrompt = (words, pairs = []) => `${basePrompt(words)}${pairs.length ? `\n\n배색 쌍(pair 칸): 캐릭터의 인상에 가장 어울리는 쌍 하나의 id. 고를 수 없으면 null.\n${pairLines(pairs)}` : ""}`;
+
+const basePrompt = (words) => `너는 한국어 캐릭터 외형 설명을 읽는 파서다.
 
 문장에서 **부위마다 말해진 색**과 **전체 인상 한 줄**을 뽑는다.
 
@@ -40,10 +45,11 @@ const clipChars = (s, max) => Array.from(s).slice(0, max).join("");
  * 모델이 뭘 뱉든 여기서 걸러 낸다 — 없는 부위 · 없는 색 낱말 · 문자열 아닌 값 · 프로토타입 이름.
  * 인상은 문자열만 받고 비면 **문장 전체**로 물러선다 — 검색이 빈 질의를 받으면 안 된다.
  */
-export function parseDescription(raw, words, query) {
+export function parseDescription(raw, words, query, pairIds = []) {
   const parts = emptyParts();
   let matched = 0;
   let impression = "";
+  let pair = null;
   let parsed = null;
   try {
     parsed = JSON.parse(raw);
@@ -62,8 +68,10 @@ export function parseDescription(raw, words, query) {
       }
     }
     if (typeof parsed.impression === "string") impression = clipChars(parsed.impression.trim(), IMPRESSION_MAX);
+    // 배색 쌍(44단계) — 목록에 있는 id 만. 자기 속성 · 문자열만 본다.
+    if (Object.hasOwn(parsed, "pair") && typeof parsed.pair === "string" && pairIds.includes(parsed.pair)) pair = parsed.pair;
   }
-  return { parts, impression: impression || query, matched };
+  return { parts, impression: impression || query, matched, pair };
 }
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -112,8 +120,20 @@ export function fallbackParse(query, words) {
 }
 
 /** 구조화 출력 스키마. 부위마다 색 낱말 id 또는 null — 그래도 parseDescription 이 다시 거른다. */
-export const descriptionSchema = (words) => {
+export const descriptionSchema = (words, pairIds = []) => {
   const colorIds = Object.keys(words.colorWords);
+  return {
+    ...baseSchema(colorIds),
+    properties: {
+      ...baseSchema(colorIds).properties,
+      // 배색 쌍(44단계) — 목록 밖 답을 못 하게 enum 으로 묶는다.
+      pair: pairIds.length ? { anyOf: [{ type: "string", enum: [...pairIds] }, { type: "null" }] } : { type: "null" },
+    },
+    required: ["parts", "impression", "pair"],
+  };
+};
+
+const baseSchema = (colorIds) => {
   return {
     type: "object",
     properties: {
@@ -134,14 +154,17 @@ export const descriptionSchema = (words) => {
 
 /**
  * @param {string} query 캐릭터 외형 문장
- * @returns {Promise<{parts, creature, impression, from: "llm"|"fallback", model?, elapsedMs?, error?}>}
+ * @param {{ pairs?: {id:string, name:string, impression?:string}[] }} [options] 배색 쌍 목록(44단계 — 지금 코퍼스, 서버가 넘긴다)
+ * @returns {Promise<{parts, creature, impression, pair: string|null, from: "llm"|"fallback", model?, elapsedMs?, error?}>}
  *   모델·네트워크 실패로는 던지지 않는다. 낱말표·종족표가 깨졌으면 던진다(호출부가 기동 때 알아야 한다).
+ *   pair 는 모델이 고른 배색 쌍 id(목록 안) — 못 고르거나 폴백이면 null 이고 호출부가 기본 쌍으로 물러선다.
  */
-export async function describe(query) {
+export async function describe(query, { pairs = [] } = {}) {
+  const pairIds = pairs.map((p) => p.id);
   const words = wordsTable();
   const creature = findCreature(query, loadCreatures());
   const text = cleanQuery(query);
-  const fallback = (error, extra = {}) => ({ ...fallbackParse(text, words), creature, from: "fallback", ...(error ? { error } : {}), ...extra });
+  const fallback = (error, extra = {}) => ({ ...fallbackParse(text, words), creature, pair: null, from: "fallback", ...(error ? { error } : {}), ...extra });
   if (!text) return fallback(null);
 
   const state = await refresh();
@@ -153,20 +176,20 @@ export async function describe(query) {
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const raw = await chatJson({
-      system: systemPrompt(words),
+      system: systemPrompt(words, pairs),
       user: text,
-      schema: descriptionSchema(words),
+      schema: descriptionSchema(words, pairIds),
       timeoutMs: TIMEOUT_MS,
       signal: controller.signal,
     });
-    const { parts, impression, matched } = parseDescription(raw, words, text);
+    const { parts, impression, matched, pair } = parseDescription(raw, words, text, pairIds);
     const elapsedMs = Date.now() - started;
     // 모델이 부위를 하나도 안 줬어도 인상은 썼을 수 있다 — 인상이 문장과 다르면 모델이 일한 것이다.
     if (matched === 0 && impression === text) return fallback("모델 응답에서 쓸 수 있는 것이 없었다", { model, elapsedMs });
     // 폴백 파서가 잡은 것 중 모델이 놓친 부위를 채운다 — "빨간 머리" 는 규칙이 더 확실하다.
     const regex = fallbackParse(text, words).parts;
     for (const role of CHARACTER_ROLES) if (parts[role] === null && regex[role] !== null) parts[role] = regex[role];
-    return { parts, creature, impression, from: "llm", model, elapsedMs };
+    return { parts, creature, impression, pair, from: "llm", model, elapsedMs };
   } catch (err) {
     const reason = err instanceof LlmError && err.kind === "abort" ? `${TIMEOUT_MS / 1000}초 안에 응답하지 않았다` : err.message;
     return fallback(reason, { model });

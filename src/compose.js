@@ -107,6 +107,7 @@ export const VARIANTS = Object.freeze([
 const own = (obj, key) => (obj && typeof obj === "object" && Object.hasOwn(obj, key) ? obj[key] : undefined);
 const oneOf = (value, table, fallback) => (typeof value === "string" && Object.hasOwn(table, value) ? value : fallback);
 const BIDI_AND_CONTROL = /[\p{Cc}\p{Cf}]/gu;
+const DIAGNOSIS_ID = /^[a-z0-9-]{1,40}$/;
 
 /** 색상 낱말 배열. 문자열만 · 아는 것만 · 겹침 없이 · 최대 셋. `neutral` 을 허락할지는 호출부가 정한다. */
 function hueList(value, { allowNeutral }) {
@@ -174,11 +175,13 @@ export function parseIntent(raw) {
     avoid,
     reading,
     basis: BASES.includes(own(value, "basis")) ? own(value, "basis") : "new",
+    // 진단 id(44단계) — 모양만 본다. 지금 코퍼스에 있는 id 인지는 코퍼스를 아는 서버가 본다.
+    diagnosis: typeof own(value, "diagnosis") === "string" && DIAGNOSIS_ID.test(own(value, "diagnosis")) ? own(value, "diagnosis") : null,
   };
 }
 
 /** 같은 색을 내는 의도는 같은 키. `reading`(설명 문장)은 색에 안 닿으므로 빼고, `kind` 도 뺀다. */
-export const intentKey = (intent) => JSON.stringify({ ...intent, kind: undefined, reading: undefined, basis: undefined });
+export const intentKey = (intent) => JSON.stringify({ ...intent, kind: undefined, reading: undefined, basis: undefined, diagnosis: undefined });
 
 /* ── 엔진 ──────────────────────────────────────────────── */
 

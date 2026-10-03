@@ -19,6 +19,8 @@
 // `localStorage` 는 읽기만 해도 던진다.
 
 // 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+// 44단계 — 걷어낸 기능을 지키던 게이트는 은퇴(scripts/lib/retired.mjs). 맨 앞에서 불러야 다른 불러오기 전에 끝난다.
+import "./lib/retired.mjs";
 import "./lib/ollama-shim.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

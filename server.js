@@ -1,7 +1,7 @@
 // HTTP 서버. Node 내장 http 만 쓴다(의존성은 Claude SDK 하나 — src/llm.js · 41단계).
 //
-// 검색 색인은 기동 시 한 번만 만든다. 1단계 리뷰에서 "요청마다 createSearcher() 를 부르면
-// 트래픽이 늘 때 병목"이라는 지적이 나왔고, 코퍼스가 정적이라 재색인할 이유가 없다.
+// 44단계에서 검색 장치(BM25 · 로컬 Ollama 임베딩 · 질의 재작성)를 걷어냈다 — 문장은 Claude 가 읽고(src/intent.js) 색은 엔진이
+// 계산한다(src/compose.js). 코퍼스는 src/corpus.js 가 들고, 파일이 바뀌면 요청 때 다시 읽는다.
 
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 import { CorpusError } from "./src/palettes.js";
 import { palettesForAxis } from "./src/bridge.js";
-import { createPipeline } from "./src/pipeline.js";
+import { createCorpus } from "./src/corpus.js";
 import { refresh as refreshLlm } from "./src/llm.js";
 import { clientOf, runWithClient } from "./src/quota.js";
 import {
@@ -39,9 +39,6 @@ import { expandAll, expandSeed, loadStructures } from "./src/expand.js";
 import { PICK_COUNT, selectStructures } from "./src/structure.js";
 import { selectFinishes } from "./src/finish.js";
 import { cleanQuery } from "./src/query.js";
-import { prepare as prepareEmbeddings, refresh as refreshEmbeddings, warmUp as warmUpEmbeddings } from "./src/embed.js";
-// 임베딩은 로컬 Ollama(bge-m3)다(41단계에서 대표 결정으로 되돌림). 대화 모델만 Claude API.
-import { ensureRunning, refresh as refreshOllama } from "./src/ollama.js";
 import { CHARACTER_FINISH_BY_ROLE, DEFAULT_FINISH_BY_ROLE, MATERIAL_FINISHES, loadFinishes } from "./src/material.js";
 import { loadSeeds, seedLabel } from "./src/seeds.js";
 import { PARTNER_COUNT, hexFromSeedId, parseColorInput, partnersFor, structuresFor } from "./src/from-color.js";
@@ -52,13 +49,6 @@ import { VARIANTS, compose, composeAll, composeFocused, describeIntent, diffInte
 const PUBLIC_DIR = fileURLToPath(new URL("./public/", import.meta.url));
 const PORT = Number(process.env.PORT ?? 4173);
 const HOST = process.env.HOST ?? "127.0.0.1";
-
-// 화면의 6단계 사다리는 "이 서버가 실제로 할 수 있는 단계"를 그린다.
-// 재작성은 LLM(Claude API 키)이 준비돼 있을 때만 가능하므로 능력치는 고정값이 아니라 상태에서 계산한다 —
-// 화면이 실제보다 앞서 보이지 않게 하려는 것이다. 개별 질의가 몇 단계에서 끝났는지는 따로 알린다.
-// 4단계(온디맨드 재적재)는 임베딩이 준비됐을 때 — 재적재 자체는 늘 가능하므로 3 은 이제 안 나온다.
-// 2단계는 LLM 이 준비됐을 때만 가능하다.
-const maxStage = (llmState, embedState) => (embedState === "ready" ? 4 : llmState === "ready" ? 2 : 1);
 
 // 루프백 밖이면 모델 상세·오류 원문을 내보내지 않는다. 오류 원문에는 API 상태 코드와 키 문제("키가 거절됐다")가
 // 들어간다 — 방문자에게 보일 것이 아니다.
@@ -83,9 +73,9 @@ const MIME = {
   ".json": "application/json; charset=utf-8",
 };
 
-let pipeline;
+let catalog;
 try {
-  pipeline = createPipeline();
+  catalog = createCorpus();
 } catch (err) {
   const message = err instanceof CorpusError ? err.message : String(err);
   process.stderr.write(Buffer.from(`기동 실패: ${message}\n`, "utf8"));
@@ -136,46 +126,9 @@ async function serveStatic(res, urlPath) {
   }
 }
 
-const shapeMatched = (matched) =>
-  matched.slice(0, 6).map((m) => ({
-    term: m.term,
-    whole: m.whole,
-    contribution: Number(m.contribution.toFixed(2)),
-  }));
-
-const shapePalette = ({ doc, score, matched, wholeMatches }) => ({
-  id: doc.id,
-  name: doc.name,
-  type: doc.type,
-  hueRelation: doc.hueRelation,
-  toneRelation: doc.toneRelation,
-  summary: doc.summary,
-  impression: doc.impression,
-  // 면적 비율은 코퍼스가 모르는 값이라 여기서 내려보내지 않는다. 화면이 public/ratio.js 로 계산한다.
-  colors: doc.colors,
-  score: Number(score.toFixed(3)),
-  wholeMatches,
-  matched: shapeMatched(matched),
-});
-
-// 코퍼스 34건을 벡터로 만든다. 호출부는 기다리지 않고 결과만 적는다. EMBED_PREPARE=0 이면 건너뛴다(게이트용).
-// 준비가 끝나면 임베딩 모델을 GPU 에 올린다 — 캐시가 다 차 있으면 준비가 Ollama 를 안 불러 모델이 없는 채
-// 시작하기 때문이다(40단계 · H1). 41단계부터 LLM 은 Claude API 라 그 뒤에 걸던 LLM 워밍업은 없다.
-function prepareCorpusEmbeddings() {
-  if (process.env.EMBED_PREPARE === "0") return Promise.resolve();
-  return prepareEmbeddings(pipeline.embedDocs).then(async (e) => {
-    const line = e.state === "ready" ? `임베딩 준비됨 — ${e.model} ${e.count}건` : `임베딩 쓸 수 없음 — ${e.detail}`;
-    process.stdout.write(Buffer.from(line + "\n", "utf8"));
-    if (e.state !== "ready" || process.env.OLLAMA_WARMUP === "0") return;
-    const w = await warmUpEmbeddings();
-    const warm = w.skipped ? `임베딩 워밍업 건너뜀 — ${w.skipped}` : `임베딩 워밍업 완료 — ${e.model} ${w.elapsedMs}ms`;
-    process.stdout.write(Buffer.from(warm + "\n", "utf8"));
-  });
-}
-
-// 관계 어휘는 파이프라인이 코퍼스와 함께 다시 만든다(27단계). 여기서 상수로 들면 재적재 뒤 낡는다.
-const shapeDiagnostic = ({ doc, score, matched, wholeMatches }) => {
-  const { hue, tone, matches } = palettesForAxis(doc.axis, pipeline.palettes, pipeline.relationVocab);
+// 관계 어휘는 코퍼스와 함께 다시 만든다(27단계). 여기서 상수로 들면 재적재 뒤 낡는다.
+const shapeDiagnostic = (doc) => {
+  const { hue, tone, matches } = palettesForAxis(doc.axis, catalog.palettes, catalog.relationVocab);
   return {
     id: doc.id,
     symptom: doc.symptom,
@@ -185,13 +138,10 @@ const shapeDiagnostic = ({ doc, score, matched, wholeMatches }) => {
     // **연결이 없어도 필드를 낸다.** 빼 버리면 화면이 "연결이 없다" 와 "서버가 아직 모른다" 를
     // 구분하지 못해, 없는 것을 로딩 중으로 그리거나 그 반대를 하게 된다.
     bridge: { hue, tone, palettes: matches.map(shapeBridgePalette) },
-    score: Number(score.toFixed(3)),
-    wholeMatches,
-    matched: shapeMatched(matched),
   };
 };
 
-// 이어 붙인 조합은 목록에 얹는 것이라 검색 점수가 없다. 스와치를 그릴 만큼만 낸다.
+// 이어 붙인 조합은 목록에 얹는 것이라 점수가 없다. 스와치를 그릴 만큼만 낸다.
 const shapeBridgePalette = (p) => ({
   id: p.id,
   name: p.name,
@@ -202,47 +152,17 @@ const shapeBridgePalette = (p) => ({
   colors: p.colors,
 });
 
-/** 검색 응답 본문. `/api/search` 와 `/api/chat` 이 함께 쓴다(39단계). */
-async function computeSearch(query, limit, { allowRewrite = true } = {}) {
-  pipeline.reloadIfChanged(); // 2초 TTL. 바뀌었으면 이 요청부터 새 코퍼스다(27단계)
-  const r = await pipeline.resolve(query, limit, { allowRewrite });
-
-  return {
-    query,
-    // 이 질의가 실제로 몇 단계에서 끝났는지. 능력치가 아니라 결과다.
-    stage: r.stage,
-    route: r.route,
-    // 어절 전체로 겹친 항이 없으면 어미 조각만 맞은 것이다. 화면이 이걸 숨기지 않고 그대로 알린다.
-    confident: r.confident,
-    elapsedMs: r.searchMs,
-    rewrite: r.rewrite ? { intent: r.rewrite.intent, terms: r.rewrite.terms, model: r.rewrite.model, elapsedMs: r.rewrite.elapsedMs } : null,
-    // /api/status 와 같은 경계를 적용한다. 재작성 실패 사유에는 API 상태 코드·키 문제가
-    // 들어가므로, 루프백 밖이면 원문을 내보내지 않는다.
-    rewriteError: r.rewriteError ? (LOOPBACK_ONLY ? r.rewriteError : "질의 재작성을 쓸 수 없습니다") : null,
-    hybrid: r.hybrid ?? null,
-    // rewriteError 와 같은 경계.
-    hybridError: r.hybridError ? (LOOPBACK_ONLY ? r.hybridError : "임베딩을 쓸 수 없습니다") : null,
-    // 임베딩을 얼마나 기다렸고 몇 ms 걸렸나. budgetMs 가 null 이면 부르지 않았다(준비 안 됨). 40단계 · H2
-    embed: r.embed ? { elapsedMs: r.embed.elapsedMs, budgetMs: r.embed.budgetMs } : null,
-    usedLlm: r.usedLlm === true,
-    results: r.paletteHits.map(shapePalette),
-    diagnostics: r.diagnosticHits.map(shapeDiagnostic),
-  };
-}
-
-async function handleSearch(res, params) {
-  // 서식 문자만 있는 q 는 빈 질의다. 안 거르면 전문 검색이 못 잡고 재작성이 모델을 헛되이 부른다.
-  const query = cleanQuery(params.get("q"));
-  if (!query) return sendJson(res, 400, { error: "q 가 비어 있다" });
-
-  const rawLimit = params.get("limit");
-  const limit = rawLimit === null ? 5 : Number(rawLimit);
-  if (!Number.isInteger(limit) || limit < 1 || limit > 10) {
-    return sendJson(res, 400, { error: "limit 는 1~10 의 정수" });
-  }
-
-  const allowRewrite = params.get("rewrite") !== "0";
-  sendJson(res, 200, await computeSearch(query, limit, { allowRewrite }));
+/**
+ * 진단 답(44단계). 진단표에서 **id 로** 찾는다 — 검색이 아니다. id 는 둘 중 하나에서 온다:
+ *   "llm"   — Claude 가 의도를 읽으며 진단 목록(enum)에서 고른 것
+ *   "alias" — 라우터가 별칭으로 잡은 것(Claude 없이도 돈다)
+ * 지금 코퍼스에 없는 id 는 버린다. 하나도 안 남으면 `diagnostics: []` — 채팅이 되묻는다.
+ */
+function computeDiagnosis(ids, from) {
+  catalog.reloadIfChanged();
+  const byId = new Map(catalog.diagnostics.map((d) => [d.id, d]));
+  const found = [...new Set(ids)].map((id) => byId.get(id)).filter(Boolean).slice(0, 2);
+  return { kind: "diagnosis", route: "diagnosis", from, diagnostics: found.map(shapeDiagnostic) };
 }
 
 /**
@@ -299,7 +219,7 @@ async function readJsonBody(req) {
   return parsed;
 }
 
-const paletteById = (id) => pipeline.palettes.find((p) => p.id === id);
+const paletteById = (id) => catalog.palettes.find((p) => p.id === id);
 
 // 씨앗 풀은 기동 시 한 번만 읽는다. 코퍼스와 같은 이유다 - 요청마다 디스크를 다시 읽을 게 없다.
 // 없으면 빈 배열이고, 그래도 코퍼스 16쌍은 그대로 확장된다(S12-G4).
@@ -329,7 +249,7 @@ const structureCatalog = fullCatalog.map((x) => ({
  */
 const seedById = (id) => {
   const wanted = String(id ?? "");
-  const corpus = pipeline.palettes.find((p) => p.id === wanted);
+  const corpus = catalog.palettes.find((p) => p.id === wanted);
   if (corpus) return { seed: corpus, label: corpus.name, from: "corpus" };
   const pooled = seedPool.find((s) => s.id === wanted);
   return pooled ? { seed: pooled, label: seedLabel(pooled), from: "pool" } : null;
@@ -399,7 +319,7 @@ const FINISH_NAMES = () => Object.fromEntries(loadFinishes().map((f) => [f.id, f
  * 팔레트는 재적재될 수 있어(27단계) 요청마다 모은다. 80개라 비용이 없다.
  */
 const corpusColors = () => [
-  ...pipeline.palettes.flatMap((p) => p.colors.map((c) => ({ hex: c.hex, name: c.name, origName: c.origName }))),
+  ...catalog.palettes.flatMap((p) => p.colors.map((c) => ({ hex: c.hex, name: c.name, origName: c.origName }))),
   ...seedPool.flatMap((s) => s.colors.map((c) => ({ hex: c.hex, name: c.origName }))),
 ];
 
@@ -416,7 +336,7 @@ const paletteOrPoolById = (id) => {
 
 /** 짝 찾기가 훑는 씨앗 40쌍 — 코퍼스 16(이름 있음) 뒤에 풀 24. 순서가 동률의 우선순위다. */
 const seedsForPartners = () => [
-  ...pipeline.palettes.map((p) => ({ id: p.id, name: p.name, colors: p.colors })),
+  ...catalog.palettes.map((p) => ({ id: p.id, name: p.name, colors: p.colors })),
   ...seedPool.map((s) => ({ id: s.id, colors: s.colors })),
 ];
 
@@ -425,7 +345,7 @@ const seedsForPartners = () => [
  * 색 응답 본문. 못 읽는 색이면 null — 호출부가 400 을 낼지(GET) 다른 경로로 갈지(chat) 정한다.
  */
 async function computeColor(query) {
-  pipeline.reloadIfChanged();
+  catalog.reloadIfChanged();
   const started = Date.now();
   const corpus = corpusColors();
   const input = parseColorInput(query, corpus);
@@ -463,7 +383,7 @@ async function handleColor(res, params) {
 
 /** 검색이 배색 쌍을 못 고르면 여기로 물러선다. 코퍼스 1번이고, 없으면 첫 항목. */
 const FALLBACK_PAIR_ID = "pair-01";
-const fallbackPair = () => paletteById(FALLBACK_PAIR_ID) ?? pipeline.palettes[0];
+const fallbackPair = () => paletteById(FALLBACK_PAIR_ID) ?? catalog.palettes[0];
 
 /** 캐릭터 저장이 쓰는 재질 규칙. `MATERIALS` 와 같은 모양, 표만 캐릭터 것. */
 const CHARACTER_MATERIALS = {
@@ -480,15 +400,14 @@ const creatureById = (id) => (typeof id === "string" ? creatureTable.find((c) =>
 // 39단계 — 라우터·트레이서·상태 기계.
 //
 // 라우터는 **코퍼스를 쓴다**(색 이름 표와 진단 별칭). 그래서 기동 때 한 번 만들면 27단계의 코퍼스 재적재가
-// `/api/chat` 에만 안 미친다 — `data/diagnostics.json` 에 별칭을 더해도 `/api/search` 는 2초 뒤 잡는데
-// 채팅은 서버를 다시 띄워야 잡는다(최종 리뷰 P1-5). 그래서 **버전이 바뀔 때만** 다시 만든다.
+// `/api/chat` 에만 안 미친다 — `data/diagnostics.json` 에 별칭을 더해도 채팅은 서버를 다시 띄워야 잡았다(최종 리뷰 P1-5). 그래서 **버전이 바뀔 때만** 다시 만든다.
 // 어휘표 대조라 만드는 비용은 작지만, 요청마다 만들 이유도 없다.
 let routerCache = { version: -1, router: null };
 const currentRouter = () => {
-  pipeline.reloadIfChanged(); // 2초 TTL. 처리기(computeSearch)와 같은 자리에서 같은 조건으로 부른다
-  const version = pipeline.corpusStatus().version;
+  catalog.reloadIfChanged(); // 2초 TTL. 다른 처리기와 같은 조건으로 부른다
+  const version = catalog.corpusStatus().version;
   if (routerCache.version !== version) {
-    routerCache = { version, router: createRouter({ words: loadCharacterWords(), diagnostics: pipeline.diagnostics, corpus: corpusColors(), creatures: loadCreatures() }) };
+    routerCache = { version, router: createRouter({ words: loadCharacterWords(), diagnostics: catalog.diagnostics, corpus: corpusColors(), creatures: loadCreatures() }) };
   }
   return routerCache.router;
 };
@@ -498,21 +417,23 @@ const tracer = createTracer({
   endpoint: process.env.LANGSMITH_ENDPOINT || "https://api.smith.langchain.com",
   file: join(DATA_DIR, "traces.jsonl"),
 });
-/** 대화 한 항목에 싣는 검색 결과 수. 옛 홈 화면의 `limit=3` 과 같은 값이다 [판단]. GET `/api/search` 기본(5)과는 다르다. */
-const CHAT_RESULT_LIMIT = 3;
 /**
  * 문장 → 의도 → 색(42단계). Claude 가 의도를 읽고 `src/compose.js` 가 3안을 계산한다. 던지지 않는다.
- * Claude 를 못 쓰면 `{ error }` — 채팅은 그때 옛 검색 경로로 물러선다(과도기, 44단계에서 걷어냄).
+ * Claude 를 못 쓰면 `{ error }` — 채팅이 정직하게 "못 읽었다" 고 답한다(44단계 — 옛 검색 폴백은 걷어냈다). 진단으로 읽혔으면
+ * `intent.diagnosis` 에 지금 코퍼스의 진단 id(또는 null)가 실린다.
  * `skipped` 는 아예 부르지 않았다는 뜻이다(키 없음). 트레이스에 헛 자식 런을 안 남기려고 가른다.
  */
 async function computeGenerate(query, { previous: rawPrevious = null, variant = 0 } = {}) {
   const started = Date.now();
   // 직전 의도는 대화 기록에서 왔다 — 파일이 조작됐을 수 있으니 모델 답과 같은 검증을 거친다(43단계). 못 쓰면 새로 읽는다.
   const previous = parseIntent(rawPrevious);
-  const r = await readIntent(query, { previous });
+  catalog.reloadIfChanged();
+  const r = await readIntent(query, { previous, diagnostics: catalog.diagnostics });
   if (r.error) {
     return { error: LOOPBACK_ONLY ? r.error : "문장을 읽을 수 없습니다", skipped: (await refreshLlm()).state !== "ready", model: r.model ?? null };
   }
+  // 진단 id 는 enum 으로 묶었지만, 응답이 오는 사이 코퍼스가 바뀌었을 수 있다 — 지금 진단표에 없으면 버린다.
+  if (r.intent.diagnosis && !catalog.diagnostics.some((d) => d.id === r.intent.diagnosis)) r.intent.diagnosis = null;
   return {
     kind: "generated",
     query,
@@ -558,7 +479,7 @@ const GENERATED_MATERIALS = {
 
 const chat = createChat({
   router: currentRouter,
-  handlers: { search: (q) => computeSearch(q, CHAT_RESULT_LIMIT), generate: computeGenerate, character: computeCharacter, color: computeColor },
+  handlers: { generate: computeGenerate, diagnose: computeDiagnosis, character: computeCharacter, color: computeColor },
   trace: tracer,
   store: { findConversation, recordTurn },
   limit: LIMITS,
@@ -595,16 +516,16 @@ function resolveCharacter(input) {
  * 캐릭터 외형 문장 → 부위 여섯의 색과 재질.
  *
  * **LLM 은 색에 닿지 않는다.** `describe` 가 주는 것은 부위별 색 낱말 id 와 인상 한 줄이고, 헥스는 `composeCharacter` 가
- * 코퍼스 80색에서 고른다. 인상은 기존 검색으로 배색 쌍 하나를 고르는 데 쓴다 — 검색이 진단으로 가거나 못 잡으면
- * 코퍼스 1번 쌍으로 물러서고 `palette.from` 에 그렇게 적는다.
+ * 코퍼스 80색에서 고른다. 배색 쌍은 **같은 파서 호출이 16쌍 목록(enum)에서 고른다**(44단계 — 전에는 인상 문구로 검색했다).
+ * 못 고르거나 모델을 못 쓰면 코퍼스 1번 쌍으로 물러서고 `palette.from` 에 "fallback" 이라고 적는다.
  *
- * 파서와 재질 배정은 서로의 결과를 안 쓰므로 나란히 부른다(`/api/expand` 와 같은 이유). 검색은 인상이 있어야 하므로 그 뒤다.
+ * 파서와 재질 배정은 서로의 결과를 안 쓰므로 나란히 부른다(`/api/expand` 와 같은 이유).
  */
 async function computeCharacter(query) {
-  pipeline.reloadIfChanged();
+  catalog.reloadIfChanged();
   const started = Date.now();
   const [parsed, finishes] = await Promise.all([
-    describe(query),
+    describe(query, { pairs: catalog.palettes }),
     selectFinishes(query, [...CHARACTER_ROLES], CHARACTER_FINISH_BY_ROLE).catch((err) => ({
       assignments: {},
       from: "fallback",
@@ -613,9 +534,7 @@ async function computeCharacter(query) {
     })),
   ]);
 
-  // 인상은 모델이 만든 말이라 잡담 거르기(튀어나옴)를 안 쓴다 — 40단계 전 판정 그대로(리뷰 P2-2).
-  const r = await pipeline.resolve(parsed.impression, 3, { judgeProminence: false });
-  const hit = r.route === "palette" ? (r.paletteHits[0]?.doc ?? null) : null;
+  const hit = parsed.pair ? (paletteById(parsed.pair) ?? null) : null;
   const pair = hit ?? fallbackPair();
   const { colors, warnings } = composeCharacter({ parts: parsed.parts, creature: parsed.creature, pair, corpus: corpusColors() });
   // 종족표의 재질은 결정적 규칙이라 모델 판단보다 앞선다(로봇 피부는 금속이다).
@@ -636,7 +555,7 @@ async function computeCharacter(query) {
       // /api/expand 와 같은 경계 — 사유에 API 상태 코드·키 문제가 들어간다.
       error: parsed.error ? (LOOPBACK_ONLY ? parsed.error : "설명 읽기를 쓸 수 없습니다") : null,
     },
-    palette: { id: pair.id, name: pair.name, from: hit ? "search" : "fallback", route: r.route, confident: r.confident === true },
+    palette: { id: pair.id, name: pair.name, from: hit ? "llm" : "fallback" },
     colors,
     warnings,
     finishes: {
@@ -749,26 +668,16 @@ function handleConversations(res, params) {
 }
 
 async function handleStatus(res) {
-  pipeline.reloadIfChanged();
-  // LLM 은 키가 있는지만 본다 — 네트워크를 안 탄다.
+  catalog.reloadIfChanged();
+  // LLM 은 키가 있는지만 본다 — 네트워크를 안 탄다. 44단계부터 Ollama · 임베딩 상태는 없다(걷어냈다).
   const llm = await refreshLlm();
-  // Ollama(임베딩용)는 확인만 한다 — 요청이 프로세스 기동을 유발하지 않는다(S3-G5).
-  const ollama = await refreshOllama();
-  // 임베딩도 확인만 한다 — 쓸 수 없는 상태면 TTL 마다 다시 시도해 살아난 것을 알아챈다(리뷰 지적).
-  const embed = await refreshEmbeddings();
   sendJson(res, 200, {
-    stage: maxStage(llm.state, embed.state),
-    corpus: pipeline.palettes.length,
-    diagnostics: pipeline.diagnostics.length,
+    diagnostics: catalog.diagnostics.length,
     llm: LOOPBACK_ONLY ? llm : { state: llm.state },
-    // 임베딩을 돌리는 로컬 Ollama. 루프백 밖에서는 모델 목록·호스트를 안 낸다.
-    ollama: LOOPBACK_ONLY ? ollama : { state: ollama.state, startedByUs: ollama.startedByUs },
-    // 같은 경계. 모델명·사유는 루프백에서만.
-    embed: LOOPBACK_ONLY ? embed : { state: embed.state, count: embed.count },
-    // 코퍼스 재적재 상태(27단계). 사유에 파일 경로가 들어가므로 같은 경계.
+    // 코퍼스 재적재 상태(27단계). 사유에 파일 경로가 들어가므로 루프백 밖에서는 숨긴다.
     corpus: LOOPBACK_ONLY
-      ? pipeline.corpusStatus()
-      : { ...pipeline.corpusStatus(), error: pipeline.corpusStatus().error ? "코퍼스 파일을 읽을 수 없습니다" : null },
+      ? catalog.corpusStatus()
+      : { ...catalog.corpusStatus(), error: catalog.corpusStatus().error ? "코퍼스 파일을 읽을 수 없습니다" : null },
   });
 }
 
@@ -786,7 +695,7 @@ async function handleStatus(res) {
  * 둔 것을 버리는 셈이 된다. 파생은 결정적이므로(S11-G3) 여덟을 다 주는 비용이 사실상 없다.
  */
 async function handleExpand(res, params) {
-  pipeline.reloadIfChanged();
+  catalog.reloadIfChanged();
   const id = params.get("seed");
   if (id === null || id.trim() === "") return sendJson(res, 400, { error: "seed 가 비어 있다" });
   if (id.length > 60) return sendJson(res, 400, { error: "seed 가 너무 길다" });
@@ -892,7 +801,6 @@ function dispatch(req, res, url) {
   if (req.method === "POST") return handleWrite(req, res, url.pathname);
   if (req.method !== "GET") return sendJson(res, 405, { error: "GET·POST 만 받는다" });
 
-  if (url.pathname === "/api/search") return handleSearch(res, url.searchParams);
   if (url.pathname === "/api/status") return handleStatus(res);
   if (url.pathname === "/api/conversations") return handleConversations(res, url.searchParams);
   /*
@@ -948,7 +856,7 @@ const server = createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   process.stdout.write(
     Buffer.from(
-      `Color Picker · http://${HOST}:${PORT} · 팔레트 ${pipeline.palettes.length}쌍 · 진단 ${pipeline.diagnostics.length}건\n`,
+      `Color Picker · http://${HOST}:${PORT} · 팔레트 ${catalog.palettes.length}쌍 · 진단 ${catalog.diagnostics.length}건\n`,
       "utf8",
     ),
   );
@@ -956,21 +864,4 @@ server.listen(PORT, HOST, () => {
     process.stdout.write(Buffer.from(`LLM ${s.state === "ready" ? "준비됨" : "쓸 수 없음"} — ${s.detail}\n`, "utf8")),
   );
 
-  // 자동 기동을 껐어도 떠 있는 Ollama 가 있으면 임베딩은 쓴다. 없으면 unavailable 로 남는다.
-  if (process.env.OLLAMA_AUTOSTART === "0") {
-    prepareCorpusEmbeddings();
-    return;
-  }
-
-  // 기동을 기다리지 않는다. Ollama 가 없거나 느려도 전문 검색은 이미 서비스 가능한 상태다.
-  ensureRunning().then((s) => {
-    const mark = { ready: "준비됨", starting: "기동 중", unavailable: "쓸 수 없음" }[s.state] ?? s.state;
-    process.stdout.write(
-      Buffer.from(`Ollama(임베딩) ${mark} — ${s.detail}${s.startedByUs ? " (우리가 띄웠다)" : ""}\n`, "utf8"),
-    );
-    // 코퍼스 벡터를 미리 만든다. 기다리지 않는다 — 준비 전 질의는 3단계를 건너뛴다.
-    // **Ollama 기동에 실패해도 부른다.** 그래야 임베딩 상태가 "unknown" 에 갇히지 않고 "unavailable" 로
-    // 정직하게 남는다(리뷰 지적 · S26-G3). prepare 는 스스로 실패를 잡는다.
-    prepareCorpusEmbeddings();
-  });
 });

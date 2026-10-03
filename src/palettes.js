@@ -1,8 +1,7 @@
-// 코퍼스 적재 + 색인 대상 텍스트 정의.
-// "무엇을 색인하는가" 는 검색 품질을 좌우하므로 검색 로직(bm25.js)과 분리해 여기 한 곳에만 둔다.
+// 배색 코퍼스(16쌍) 적재. 44단계에서 검색(BM25 · 임베딩)을 걷어내며 색인 텍스트와 검색기를 뺐다 — 남은 쓰임은 색 경로의 짝 ·
+// 캐릭터 배색 쌍 · 진단의 연결 조합 · 씨앗.
 
 import { readFileSync } from "node:fs";
-import { buildIndex, search } from "./bm25.js";
 import { corpusPath } from "./corpus-paths.js";
 
 const CORPUS_PATH = corpusPath("palettes.json");
@@ -30,40 +29,4 @@ export function loadPalettes() {
     throw new CorpusError("팔레트 코퍼스에 palettes 배열이 없다 (data/palettes.json)");
   }
   return parsed.palettes;
-}
-
-const TYPE_LABEL = {
-  A: "A형 대등 보색 톤통일 속삭임",
-  B: "B형 대등 보색 강렬 절제안함",
-  C: "C형 대등 유사색 톤통일 연결",
-  D: "D형 서열 위계 비대칭 명쾌함",
-};
-
-// 색인 텍스트. 이름·원명·헥스까지 넣는 이유는 사용자가 "#F3A257 비슷한 거" 나
-// "Golden Yellow" 로도 물어볼 수 있기 때문이다 — 전문 검색이 도메인 용어에 강한 지점이다.
-export function indexText(p) {
-  return [
-    p.name,
-    ...p.colors.map((c) => `${c.name} ${c.origName} ${c.hex}`),
-    TYPE_LABEL[p.type] ?? p.type,
-    p.hueRelation,
-    p.toneRelation,
-    p.summary,
-    p.impression,
-    p.tags.join(" "),
-  ].join(" ");
-}
-
-// 임베딩용 문장. BM25 색인 문장(indexText)과 **다르다** — 색 이름·헥스·유형 라벨을 빼고 뜻이 있는
-// 문장만 남긴다. 실측: 전체 색인 문장으로 임베딩하면 23건 top1 13, 이 문장으로 17 [실측].
-// 헥스와 유형 라벨은 임베딩에 잡음이고, 정확 매칭은 BM25 가 맡는다.
-export const embedText = (p) => `${p.name}. ${p.summary} ${p.impression} ${p.tags.join(" ")}`;
-
-export function createSearcher() {
-  const palettes = loadPalettes();
-  const index = buildIndex(palettes, indexText);
-  return {
-    palettes,
-    search: (query, limit) => search(index, query, limit),
-  };
 }

@@ -8,6 +8,8 @@
 // 이 저장소가 "게이트가 감시 대상에서 값을 가져오면 함께 느슨해진다" 로 여러 번 뚫렸다.
 
 // 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+// 44단계 — 걷어낸 기능을 지키던 게이트는 은퇴(scripts/lib/retired.mjs). 맨 앞에서 불러야 다른 불러오기 전에 끝난다.
+import "./lib/retired.mjs";
 import "./lib/ollama-shim.mjs";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
@@ -539,7 +541,8 @@ const GATES = {
     if (!/characterStructure\(/.test(app) || !/structureCard\(/.test(app)) bad.push("캐릭터 카드가 structureCard 를 재사용하지 않는다");
     if (!/character:\s*\(data\)\s*=>\s*characterBlock\(data\)/.test(app)) bad.push("BLOCK_BY_ROUTE 에 캐릭터 블록이 없다(39단계가 탭 단정을 대체)");
     if (/LLM/.test(app)) bad.push("app.js 에 'LLM'");
-    if (!app.includes("인상을 못 읽어 기본 배색을 썼습니다")) bad.push("폴백 안내 문장이 없다");
+    // 44단계 — 배색 쌍은 파서가 목록에서 고른다(전에는 인상으로 검색). 못 고른 경우를 그 말로 알린다.
+    if (!app.includes("배색 쌍을 못 골라 기본 배색을 썼습니다")) bad.push("폴백 안내 문장이 없다");
 
     const ui = read("public/ui.js");
     const hits = [...ui.matchAll(/localStorage/g)].length;

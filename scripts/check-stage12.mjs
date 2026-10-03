@@ -10,7 +10,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expandAll, hexToHsl, perceivedChroma } from "../src/expand.js";
-import { createSearcher, indexText, loadPalettes } from "../src/palettes.js";
+// 44단계 — 검색기 · 색인 텍스트를 걷어냈다. 그것을 쓰던 S12-G3 은 은퇴(scripts/lib/retired.mjs).
+import "./lib/retired.mjs";
+import { loadPalettes } from "../src/palettes.js";
 import { loadSeeds, seedLabel } from "../src/seeds.js";
 
 const out = (line = "") => process.stdout.write(Buffer.from(line + "\n", "utf8"));
@@ -194,9 +196,10 @@ const gates = {
       if (!Array.isArray(got) || got.length !== 0) bad.push(`${label} 가 빈 배열이 아니다`);
     }
 
-    // 서버가 이 파일 없이도 기동 가능한 상태인가 — 검색 경로가 씨앗 풀을 import 하지 않아야 한다.
-    for (const rel of ["src/palettes.js", "src/pipeline.js", "src/bm25.js"]) {
-      if (read(rel).includes("seeds.js")) bad.push(`${rel} 가 씨앗 풀을 읽는다 — 검색이 이 파일에 묶인다`);
+    // 서버가 이 파일 없이도 기동 가능한 상태인가 — 코퍼스 경로가 씨앗 풀을 import 하지 않아야 한다.
+    // (44단계 — 검색 파일(pipeline · bm25)을 걷어내고 코퍼스 홀더 corpus.js 로 바꿨다.)
+    for (const rel of ["src/palettes.js", "src/diagnostics.js", "src/corpus.js"]) {
+      if (read(rel).includes("seeds.js")) bad.push(`${rel} 가 씨앗 풀을 읽는다 — 코퍼스가 이 파일에 묶인다`);
     }
 
     if (bad.length) throw new Error(bad.join(" / "));

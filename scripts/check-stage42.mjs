@@ -385,14 +385,16 @@ process.stdout.write(JSON.stringify([r, rev]));`;
       stub.close();
     }
 
-    // (2) 진단으로 읽힘 — 옛 검색 경로(payload 에 kind 없음, 진단표를 찾는 길).
+    // (2) 진단으로 읽힘 — Claude 가 진단 목록에서 고른 id 로 진단표를 찾는다(44단계 — 전에는 옛 검색으로 넘겼다).
     // **라우터가 추천으로 보내는 문장이어야 한다.** 처음엔 "칙칙하고 탁해 보여요" 를 썼는데 라우터가 별칭으로 먼저 진단에 보내
     // Claude 까지 오지 않았고, "진단도 새 팔레트로 낸다" 는 변형이 살아남았다(변형 검사). 그래서 의도 질문이 갔는지도 본다.
-    stub = await stubWith({ ...GOOD, kind: "diagnosis" });
+    stub = await stubWith({ ...GOOD, kind: "diagnosis", diagnosis: "dx-childish" });
     try {
       await withServer(4422, stub.env, async (api) => {
-        const p = (await api("/api/chat", { text: "내가 만든 포스터 색 조합이 어딘가 어색해" })).json?.turn?.payload;
-        if (!p || p.kind === "generated") bad.push(`진단: 옛 검색으로 안 갔다 (kind=${p?.kind})`);
+        const t = (await api("/api/chat", { text: "내가 만든 포스터 색 조합이 어딘가 어색해" })).json?.turn;
+        const p = t?.payload;
+        if (t?.route !== "diagnosis" || p?.kind !== "diagnosis") bad.push(`진단: ${t?.kind}/${t?.route} kind=${p?.kind} (진단 답이어야)`);
+        if (p?.diagnostics?.[0]?.id !== "dx-childish" || p?.from !== "llm") bad.push(`진단: Claude 가 고른 진단이 아니다 (${p?.diagnostics?.map((d) => d.id)} · from=${p?.from})`);
       });
       if (!stub.messages.some((m) => kindOf(m.body) === "intent")) bad.push("진단: 의도 질문이 안 갔다 — 라우터가 먼저 보냈다, 이 검사가 헛돈다");
     } finally {
@@ -411,12 +413,12 @@ process.stdout.write(JSON.stringify([r, rev]));`;
     } finally {
       stub.close();
     }
-    // 같은 진단 별칭 문장을 Claude 도 진단으로 읽으면 옛 진단 검색 그대로
+    // 진단 별칭 문장을 Claude 가 "색과 무관" 으로 읽으면 되묻지 않고 별칭 id 로 진단한다(44단계)
     stub = await stubWith({ ...GOOD, kind: "other" });
     try {
       await withServer(4429, stub.env, async (api) => {
         const t = (await api("/api/chat", { text: "전체적으로 너무 칙칙하고 탁해 보여요" })).json?.turn;
-        if (t?.kind !== "answer" || t?.payload?.kind === "generated") bad.push(`진단 문장 · Claude 무관: ${t?.kind}/${t?.route} kind=${t?.payload?.kind} (옛 진단 검색이어야)`);
+        if (t?.kind !== "answer" || t?.payload?.kind !== "diagnosis" || t?.payload?.from !== "alias" || !t.payload.diagnostics.length) bad.push(`진단 문장 · Claude 무관: ${t?.kind}/${t?.route} kind=${t?.payload?.kind} from=${t?.payload?.from} (별칭 진단이어야)`);
       });
     } finally {
       stub.close();
@@ -433,23 +435,25 @@ process.stdout.write(JSON.stringify([r, rev]));`;
       stub.close();
     }
 
-    // (4) 모델이 의도가 아닌 것을 줌 — 옛 검색으로
+    // (4) 모델이 의도가 아닌 것을 줌 — 지어내지 않고 "못 읽었다" 고 답한다(44단계)
     stub = await stubWith({ intent: "palette", terms: ["봄"] });
     try {
       await withServer(4424, stub.env, async (api) => {
         const p = (await api("/api/chat", { text: "봄 파스텔" })).json?.turn?.payload;
-        if (!p || p.kind === "generated") bad.push(`엉뚱한 답: 옛 검색으로 안 갔다 (kind=${p?.kind})`);
+        if (p?.kind !== "unavailable") bad.push(`엉뚱한 답: 못 읽었다고 안 했다 (kind=${p?.kind})`);
       });
     } finally {
       stub.close();
     }
 
-    // (5) 키 없음 — 옛 검색으로, 가짜 Claude 는 0번
+    // (5) 키 없음 — 추천은 "못 읽었다", 진단 별칭 문장은 모델 없이 진단. 가짜 Claude 는 0번
     stub = await stubWith(GOOD);
     try {
       await withServer(4425, { ...stub.env, ANTHROPIC_API_KEY: "" }, async (api) => {
         const p = (await api("/api/chat", { text: "봄 파스텔" })).json?.turn?.payload;
-        if (!p || p.kind === "generated") bad.push(`키 없음: 옛 검색으로 안 갔다 (kind=${p?.kind})`);
+        if (p?.kind !== "unavailable") bad.push(`키 없음: 못 읽었다고 안 했다 (kind=${p?.kind})`);
+        const d = (await api("/api/chat", { text: "전체적으로 너무 칙칙하고 탁해 보여요" })).json?.turn?.payload;
+        if (d?.kind !== "diagnosis" || d?.from !== "alias" || !d.diagnostics.length) bad.push(`키 없음: 진단 별칭 문장이 진단으로 안 갔다 (kind=${d?.kind} from=${d?.from})`);
       });
       if (stub.messages.length) bad.push(`키 없음: 가짜 Claude 가 ${stub.messages.length}번 불렸다`);
     } finally {
@@ -538,7 +542,7 @@ process.stdout.write(JSON.stringify([r, rev]));`;
 
     // 화면 — 추천 답이 generated 면 새 블록, 아니면 옛 검색 블록. 저장은 의도와 안 번호만 보낸다.
     const app = read("public/app.js");
-    if (!/data\.kind === "generated" \? generatedBlock\(data\) : searchBlock\(data, original\)/.test(app)) bad.push("화면이 generated 를 새 블록으로 가르지 않는다");
+    if (!/data\.kind === "generated" \? generatedBlock\(data\) : unavailableBlock\(data\)/.test(app)) bad.push("화면이 generated 를 새 블록으로 가르지 않는다");
     const save = app.match(/api\("\/api\/saved\/generated", \{([^}]*)\}/)?.[1] ?? "";
     if (!save.includes("intent") || !save.includes("variant")) bad.push(`화면 저장이 의도 · 안 번호를 안 보낸다: {${save}}`);
     if (/hex|colors/.test(save)) bad.push(`화면 저장이 색을 보낸다: {${save}}`);

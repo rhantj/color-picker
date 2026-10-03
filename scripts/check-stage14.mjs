@@ -5,6 +5,8 @@
 // 서버마다 빈 임시 데이터 폴더를 준다(27단계). 임베딩 캐시가 var/ 에 남게 되면서 게이트가 저장소 var/ 를
 // 더럽히게 됐다(리뷰 지적). 명시적으로 넘긴 TONEFIRST_DATA_DIR 이 있으면 그것이 이긴다(뒤의 ...env).
 // 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+// 44단계 — 걷어낸 기능을 지키던 게이트는 은퇴(scripts/lib/retired.mjs). 맨 앞에서 불러야 다른 불러오기 전에 끝난다.
+import "./lib/retired.mjs";
 import "./lib/ollama-shim.mjs";
 import { mkdtempSync as gateMkdtemp } from "node:fs";
 import { tmpdir as gateTmpdir } from "node:os";
@@ -191,13 +193,11 @@ const gates = {
       if (body.structures?.length !== 8) bad.push(`구조가 ${body.structures?.length}개`);
       if (!body.selection?.error) bad.push("못 쓴 이유를 안 알린다");
 
-      // 검색은 그대로 돌아야 한다.
-      const search = await get(`/api/search?q=${encodeURIComponent("가을 카페")}`);
-      if (search.status !== 200) bad.push(`Ollama 없이 검색이 ${search.status}`);
+      // (44단계 — 여기 있던 "Ollama 없이 /api/search 가 돈다" 확인은 검색을 걷어내며 뺐다. 펼치기 폴백이 이 게이트의 본뜻이다.)
     });
 
     if (bad.length) throw new Error(bad.join(" / "));
-    out(`Ollama 없이도 200 · 폴백 ${PICK_COUNT}개 · 검색 정상`);
+    out(`Ollama 없이도 200 · 폴백 ${PICK_COUNT}개`);
     out("S14_G2_OK");
   },
 

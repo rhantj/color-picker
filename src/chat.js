@@ -39,14 +39,19 @@ function summarize(route, payload) {
   // 의도를 함께 남긴다 — 다음 말이 이것을 고친다(43단계).
   if (payload?.kind === "generated") return { stage: 2, usedLlm: true, confident: payload.intent.kind === "palette", topKind: "generated", topId: null, topLabel: payload.reading || payload.read.join(" · "), intent: payload.intent };
   if (route === "color") return { stage: 1, usedLlm: false, confident: true, topKind: "color", topId: payload.partners[0]?.pairId ?? null, topLabel: payload.partners[0]?.pairName ?? null };
-  if (route === "character") return { stage: 1, usedLlm: payload.parse.from === "llm", confident: payload.palette.from === "search", topKind: "character", topId: payload.palette.id, topLabel: payload.palette.name };
-  const top = payload.route === "diagnosis" ? payload.diagnostics[0] : payload.results[0];
-  return { stage: payload.stage, usedLlm: payload.usedLlm === true, confident: payload.confident === true, topKind: top ? payload.route : null, topId: top?.id ?? null, topLabel: top ? (top.name ?? top.symptom) : null };
+  // 44단계 — 배색 쌍은 파서가 목록에서 고른다(전에는 검색). "llm" 이면 근거 있는 쌍, "fallback" 이면 기본 쌍.
+  if (route === "character") return { stage: 1, usedLlm: payload.parse.from === "llm", confident: payload.palette.from === "llm", topKind: "character", topId: payload.palette.id, topLabel: payload.palette.name };
+  if (payload?.kind === "diagnosis") {
+    const top = payload.diagnostics[0];
+    return { stage: payload.usedLlm ? 2 : 1, usedLlm: payload.usedLlm === true, confident: Boolean(top), topKind: top ? "diagnosis" : null, topId: top?.id ?? null, topLabel: top?.symptom ?? null };
+  }
+  // Claude 를 못 써서 문장을 못 읽은 답(44단계) — 지어낸 답이 없다.
+  return { stage: 1, usedLlm: false, confident: false, topKind: null, topId: null, topLabel: null };
 }
 
-/** 검색이 끝까지 저신뢰이고 모델도 "other" 이거나 없으면 정보 부족이다. 문장 팔레트(42단계)는 Claude 가 "색과 무관" 으로 읽었을 때다. */
-const searchUnclear = (payload) =>
-  payload.kind === "generated" ? payload.intent.kind === "other" : payload.confident !== true && (payload.rewrite == null || payload.rewrite.intent === "other");
+/** 정보가 모자라 되물을 답인가 — Claude 가 "색과 무관" 으로 읽었거나, 진단으로 읽었는데 진단표에 맞는 것이 없을 때(44단계). */
+const unclear = (payload) =>
+  (payload.kind === "generated" && payload.intent.kind === "other") || (payload.kind === "diagnosis" && payload.diagnostics.length === 0);
 
 /**
  * `router` 는 **함수**다 — 부를 때마다 지금 코퍼스로 만든 라우터를 돌려준다(server.js 가 `pipeline` 버전으로
@@ -70,30 +75,34 @@ export function createChat({ router, handlers, trace, store, limit }) {
       if (body.parse.from === "llm") span.child("llm.character", { query, model: body.parse.model }).end({ parts: body.parse.parts, impression: body.parse.impression });
       return { route: "character", payload: body };
     }
-    // 42단계 — 추천은 Claude 가 의도를 읽고 엔진이 색을 계산한다. **과도기(42·43단계)**: Claude 를 못 쓰거나 진단으로
-    // 읽혔으면 옛 검색 경로로 물러선다 — 진단표를 찾는 길이 아직 그쪽에 있다. 44단계에서 검색을 걷어내며 바뀐다.
-    //
-    // **라우터가 진단이라고 해도 Claude 에게 한 번 묻는다.** 진단 별칭은 BM25 시절 검색용으로 맞춘 낱말이라 팔레트 문장에도
-    // 걸린다 — "차분한데 포인트는 주황" 이 '차분하게 하고 싶다' 별칭으로 진단에 갔다 `[실측 10-02]`. Claude 가 팔레트로 읽으면
-    // 팔레트로 답한다. 진단 경로에서 "색과 무관" 으로 읽히면 되묻지 않고 옛 진단 검색 그대로 간다 — 별칭이 걸린 문장이다.
-    if ((route === "palette" || route === "diagnosis") && handlers.generate) {
-      const gen = await handlers.generate(query, ctx);
-      if (!gen.skipped) {
-        span.child("llm.intent", { query, model: gen.model ?? null, previous: ctx.previous != null }).end(gen.error ? { error: gen.error } : { kind: gen.intent.kind, basis: gen.intent.basis, usage: gen.intent.usage, count: gen.intent.count, variants: gen.palettes.length, changes: gen.refine?.changes ?? null });
-      }
-      const wanted = route === "palette" ? ["palette", "other"] : ["palette"];
-      if (!gen.error && wanted.includes(gen.intent.kind)) return { route: "palette", payload: gen };
+    // 추천 · 진단 — Claude 가 의도를 한 번 읽는다(42단계). 44단계에서 검색 장치를 걷어내 판정은 이렇다:
+    //   팔레트로 읽음 → 문장 팔레트
+    //   진단으로 읽음 → Claude 가 진단 목록(enum)에서 고른 id, 못 골랐으면 라우터 별칭 id → 진단표. 둘 다 없으면 되묻는다
+    //   색과 무관     → 추천 경로면 되묻는다. 진단 경로(별칭이 걸린 문장)면 별칭 id 로 진단
+    //   Claude 못 씀  → 진단 경로면 별칭 id 로 진단(모델 없이 돈다). 추천 경로면 "못 읽었다" 고 말한다 — 지어내지 않는다
+    // **라우터가 진단이라고 해도 Claude 에게 묻는 이유**: 진단 별칭이 팔레트 문장에도 걸린다 — "차분한데 포인트는 주황" (42단계 실측).
+    const gen = await handlers.generate(query, ctx);
+    if (!gen.skipped) {
+      span.child("llm.intent", { query, model: gen.model ?? null, previous: ctx.previous != null }).end(gen.error ? { error: gen.error } : { kind: gen.intent.kind, basis: gen.intent.basis, diagnosis: gen.intent.diagnosis, usage: gen.intent.usage, count: gen.intent.count, variants: gen.palettes.length, changes: gen.refine?.changes ?? null });
     }
-    const body = await handlers.search(query);
-    span.child("search", { query }).end({ stage: body.stage, route: body.route, confident: body.confident, topId: body.route === "diagnosis" ? body.diagnostics[0]?.id : body.results[0]?.id });
-    // 임베딩 결과를 따로 남긴다. 실패해도 답은 1단계로 나가서, 이게 없으면 기록만 봐서는 실패를 모른다(40단계 · H2).
-    // 못 부른 턴(임베딩 키가 없거나 API 가 죽어 준비 안 됨)도 남긴다 — 가장 흔한 실패다(리뷰 P2-1). skipped 로 "느렸다" 와 가른다.
-    if (body.embed) {
-      const skipped = body.embed.budgetMs == null;
-      span.child("embed", { query, budgetMs: body.embed.budgetMs }).end({ ok: !skipped && !body.hybridError, skipped, elapsedMs: body.embed.elapsedMs, error: body.hybridError ?? null });
+    // 라우터 별칭으로 잡힌 진단 id — 결정적이다. 칩 · 되묻기 답처럼 라우터를 안 거친 길도 있어 여기서 다시 잰다.
+    const aliasIds = router().route(query).signals?.diagnosis ?? [];
+    const diagnose = (ids, from, usedLlm) => {
+      const body = { ...handlers.diagnose(ids, from), usedLlm };
+      span.child("diagnosis", { query, from }).end({ ids: body.diagnostics.map((d) => d.id) });
+      return { route: "diagnosis", payload: body };
+    };
+    if (gen.error) {
+      if (route === "diagnosis" && aliasIds.length) return diagnose(aliasIds, "alias", false);
+      return { route: "palette", payload: { kind: "unavailable", query, reason: gen.error } };
     }
-    if (body.rewrite) span.child("llm.rewrite", { query, model: body.rewrite.model }).end({ intent: body.rewrite.intent, terms: body.rewrite.terms });
-    return { route: ROUTES.includes(body.route) ? body.route : "palette", payload: body };
+    if (gen.intent.kind === "palette") return { route: "palette", payload: gen };
+    if (gen.intent.kind === "diagnosis") {
+      const picked = gen.intent.diagnosis;
+      return diagnose(picked ? [picked, ...aliasIds] : aliasIds, picked ? "llm" : "alias", true);
+    }
+    if (route === "diagnosis" && aliasIds.length) return diagnose(aliasIds, "alias", true);
+    return { route: "palette", payload: gen };
   }
 
   async function step(input) {
@@ -206,7 +215,7 @@ export function createChat({ router, handlers, trace, store, limit }) {
       const route = r.routes[0];
       if (route === "palette" || route === "diagnosis") {
         const { route: finalRoute, payload } = await answer(route, text, span, ctx);
-        if (searchUnclear(payload) && !isLastTurn) {
+        if (unclear(payload) && !isLastTurn) {
           const turn = { ...askTurn("unclear", ["palette", "diagnosis", "character", "color"], QUESTION.unclearPalette), original: text, trace: routeTrace };
           span.child("ask", { reason: "unclear" }).end({ choices: turn.choices.map((c) => c.id) });
           return record(turn, { kind: "ask", route: "ask", pending: { original: text, choices: turn.choices.map((c) => c.id), reason: "unclear" } }, text);

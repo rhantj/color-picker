@@ -924,13 +924,15 @@ export function diagnosisCard(dx, rank) {
  * 상단 런타임 필. 세 화면이 같은 것을 쓴다.
  * 41단계부터 LLM 은 이 기계가 아니라 Claude API 에서 돈다 — "로컬" 이라고 쓰면 거짓이다. 임베딩은 로컬 Ollama(bge-m3)다.
  */
+// 이름표는 HTML 의 "Claude" 옆에 붙는다(44단계 — 전에는 "BM25" 였다. 검색 장치를 걷어냈다).
 const RUNTIME_LABEL = {
-  ready: "Claude API 준비됨",
-  unavailable: "Claude API 없음 · 기본 검색",
+  ready: "준비됨",
+  unavailable: "없음 · 문장은 못 읽고 색 코드만",
   unknown: "확인 중",
 };
 
-export async function refreshRuntime(attempt = 0, onStage) {
+/** 상단 상태 배지. 44단계부터 볼 것은 Claude 하나다 — 임베딩 · Ollama 상태는 없다. */
+export async function refreshRuntime() {
   const dot = document.getElementById("runtime-dot");
   const where = document.getElementById("runtime-where");
   const pill = document.getElementById("runtime");
@@ -943,18 +945,10 @@ export async function refreshRuntime(attempt = 0, onStage) {
     return; // 상태는 부가 정보다. 못 읽어도 화면은 그대로 쓴다.
   }
 
-  if (typeof data.stage === "number" && onStage) onStage(data.stage);
-
   const { state = "unknown", detail = "" } = data.llm ?? {};
-  const embed = data.embed ?? {};
   dot.dataset.state = state;
   where.textContent = RUNTIME_LABEL[state] ?? RUNTIME_LABEL.unknown;
-  // 임베딩은 따로 죽을 수 있다(키가 하나만 있을 때). 제목에 적어 "왜 3단계가 안 되나" 를 알 수 있게 한다.
-  const embedLine = embed.state === "ready" ? "임베딩 준비됨" : embed.state === "unavailable" ? "임베딩 없음" : "";
-  pill.title = [detail, embed.detail ?? "", embedLine].filter(Boolean).join(" · ");
-
-  // 임베딩은 기동 직후 코퍼스를 벡터로 만드는 동안 unknown 이다. 끝나면 사다리가 올라가야 하므로 잠시 다시 본다.
-  if (embed.state === "unknown" && attempt < 20) setTimeout(() => refreshRuntime(attempt + 1, onStage), 1500);
+  pill.title = detail;
 }
 
 /*

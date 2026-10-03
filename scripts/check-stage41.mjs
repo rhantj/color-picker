@@ -124,6 +124,7 @@ const finishIds = () => JSON.parse(read("data/finishes.json")).finishes.map((f) 
 const kindOf = (body) => {
   const props = body?.output_config?.format?.schema?.properties ?? {};
   if (props.intent) return "rewrite";
+  if (props.usage && props.base) return "intent"; // 44단계 — 문장 → 의도(42단계 호출부)
   if (props.ids) return "structure";
   if (props.assignments) return "finish";
   if (props.parts) return "describe";
@@ -178,9 +179,9 @@ const GATES = {
     });
     try {
       await withServer(4411, { ...stub.env, EMBED_PREPARE: "0" }, async (api) => {
-        const s = (await api(`/api/search?q=${encodeURIComponent(LOW_Q)}`)).json;
-        if (s?.rewrite?.model !== "claude-haiku-4-5") bad.push(`재작성 모델이 ${s?.rewrite?.model} (claude-haiku-4-5 여야)`);
-        if (JSON.stringify(s?.rewrite?.terms) !== JSON.stringify(["봄", "파스텔"])) bad.push(`재작성어가 스텁 답과 다르다: ${JSON.stringify(s?.rewrite?.terms)}`);
+        // 44단계 — 재작성(`/api/search`)을 걷어냈다. 넷째 호출부는 문장 → 의도(42단계)다. 의도 답은 S42 · S43 게이트가 본다 —
+        // 여기서는 그 호출도 같은 규칙(모델 · 스키마 · 키 · user 자리)으로 나가는지만 본다.
+        await fetch(`http://127.0.0.1:4411/api/chat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: LOW_Q }) });
 
         const e = (await api(`/api/expand?seed=${encodeURIComponent(seedId())}&q=${encodeURIComponent("가을 카페 브랜딩")}`)).json;
         if (e?.selection?.from !== "llm") bad.push(`구조 선택 from=${e?.selection?.from} (llm 이어야)`);
@@ -191,7 +192,7 @@ const GATES = {
       });
 
       const kinds = stub.messages.map((m) => kindOf(m.body));
-      for (const k of ["rewrite", "structure", "finish", "describe"]) if (!kinds.includes(k)) bad.push(`${k} 호출이 가짜 Claude 에 안 왔다 (${kinds.join(",")})`);
+      for (const k of ["intent", "structure", "finish", "describe"]) if (!kinds.includes(k)) bad.push(`${k} 호출이 가짜 Claude 에 안 왔다 (${kinds.join(",")})`);
       for (const m of stub.messages) {
         const k = kindOf(m.body);
         if (m.body.model !== "claude-haiku-4-5") bad.push(`${k}: model=${m.body.model}`);

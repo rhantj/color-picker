@@ -9,13 +9,13 @@ S1-G1 코퍼스 16쌍이 필수 필드·헥스 형식을 만족하고, 면적 �
     CHECK: node scripts/check-stage1.mjs S1-G1
     EXPECT: S1_G1_OK
 
-S1-G2 대표 질의 5건의 1위가 기대 조합과 일치한다
+S1-G2 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 대표 질의 5건의 BM25 1위를 쟀다. (원래: 대표 질의 5건의 1위가 기대 조합과 일치한다)
     CHECK: node scripts/check-stage1.mjs S1-G2
-    EXPECT: S1_G2_OK
+    EXPECT: S1_G2_RETIRED
 
-S1-G3 어미·조사 조각만 겹치는 질의는 저신뢰로 판정된다 (양성 대조 포함)
+S1-G3 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — BM25 저신뢰 판정을 쟀다. (원래: 어미·조사 조각만 겹치는 질의는 저신뢰로 판정된다 (양성 대조 포함))
     CHECK: node scripts/check-stage1.mjs S1-G3
-    EXPECT: S1_G3_OK
+    EXPECT: S1_G3_RETIRED
 
 S1-G4 의존성은 `@anthropic-ai/sdk` 하나뿐이다 (41단계에서 "의존성 0" 을 바꿨다 — 대표 결정 · 스펙 Q1)
     CHECK: node scripts/check-stage1.mjs S1-G4
@@ -27,17 +27,17 @@ S2-G1 서버가 뜨고 `/` 가 홈 화면 HTML 을, `/app.css`·`/app.js` 를 20
     CHECK: node scripts/check-stage2.mjs S2-G1
     EXPECT: S2_G1_OK
 
-S2-G2 `/api/search` 가 1위·confident·stage·매칭 항을 담은 JSON 을 주고, 저신뢰 질의는 confident=false
+S2-G2 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — /api/search 응답 모양을 쟀다. (원래: `/api/search` 가 1위·confident·stage·매칭 항을 담은 JSON 을 주고, 저신뢰 질의는 confident=false)
     CHECK: node scripts/check-stage2.mjs S2-G2
-    EXPECT: S2_G2_OK
+    EXPECT: S2_G2_RETIRED
 
-S2-G3 API 가 면적 비율을 들고 나오지 않고(화면이 계산), 초안의 색 토큰이 스타일시트에 있다
+S2-G3 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — /api/search 가 면적을 안 내는지 쟀다(면적 규칙은 S13 · S42-G4 가 본다). (원래: API 가 면적 비율을 들고 나오지 않고(화면이 계산), 초안의 색 토큰이 스타일시트에 있다)
     CHECK: node scripts/check-stage2.mjs S2-G3
-    EXPECT: S2_G3_OK
+    EXPECT: S2_G3_RETIRED
 
-S2-G4 잘못된 입력과 경로 이탈이 막히고, 응답에 내부 경로가 새지 않는다 (정상 요청 양성 대조 포함)
+S2-G4 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — /api/search 입력 검증을 쟀다. (원래: 잘못된 입력과 경로 이탈이 막히고, 응답에 내부 경로가 새지 않는다 (정상 요청 양성 대조 포함))
     CHECK: node scripts/check-stage2.mjs S2-G4
-    EXPECT: S2_G4_OK
+    EXPECT: S2_G4_RETIRED
 
 S2-G5 스와치 위 헥스 라벨이 코퍼스 32색 전부에서 대비 4.5:1 을 넘는다 (중간 회색 포함)
     CHECK: node scripts/check-stage2.mjs S2-G5
@@ -57,41 +57,41 @@ S2-G8 폰트가 외부에 의존하지 않는다 — 세 화면에 외부 링크
 
 ## 3단계 — Ollama 수명주기 + 의도 분기·질의 재작성 (완료)
 
-S3-G1 Ollama 가 없어도 서버가 뜨고 홈 화면·검색이 그대로 동작한다
+S3-G1 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — Ollama 가 없을 때 검색이 도는지 쟀다. (원래: Ollama 가 없어도 서버가 뜨고 홈 화면·검색이 그대로 동작한다)
     CHECK: node scripts/check-stage3.mjs S3-G1
-    EXPECT: S3_G1_OK
+    EXPECT: S3_G1_RETIRED
 
-S3-G2 Ollama 가 죽어 있으면 자동으로 띄우고 준비될 때까지 기다린다
+S3-G2 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — Ollama 자동 기동을 쟀다(서버가 더는 Ollama 를 안 띄운다 — S44-G1). (원래: Ollama 가 죽어 있으면 자동으로 띄우고 준비될 때까지 기다린다)
     CHECK: node scripts/check-stage3.mjs S3-G2
-    EXPECT: S3_G2_OK
+    EXPECT: S3_G2_RETIRED
 
-S3-G3 이미 떠 있으면 새로 띄우지 않는다 (사용자가 띄운 인스턴스를 건드리지 않는다)
+S3-G3 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — Ollama 기동 실패 처리를 쟀다. (원래: 이미 떠 있으면 새로 띄우지 않는다 (사용자가 띄운 인스턴스를 건드리지 않는다))
     CHECK: node scripts/check-stage3.mjs S3-G3
-    EXPECT: S3_G3_OK
+    EXPECT: S3_G3_RETIRED
 
-S3-G4 동시 호출이 기동 시도를 공유한다 (프로세스가 여러 개 뜨지 않는다)
+S3-G4 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 우리가 띄운 Ollama 정리를 쟀다. (원래: 동시 호출이 기동 시도를 공유한다 (프로세스가 여러 개 뜨지 않는다))
     CHECK: node scripts/check-stage3.mjs S3-G4
-    EXPECT: S3_G4_OK
+    EXPECT: S3_G4_RETIRED
 
-S3-G5 사용자 입력이 프로세스 실행에 닿지 않는다 — 정적 스모크 + 요청을 퍼부어도 기동되지 않는 행위 검사
+S3-G5 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 상태 확인이 Ollama 를 안 띄우는지 쟀다. (원래: 사용자 입력이 프로세스 실행에 닿지 않는다 — 정적 스모크 + 요청을 퍼부어도 기동되지 않는 행위 검사)
     CHECK: node scripts/check-stage3.mjs S3-G5
-    EXPECT: S3_G5_OK
+    EXPECT: S3_G5_RETIRED
 
-S3-G6 ready 로 확정된 뒤 Ollama 가 죽으면 상태가 따라간다 (죽은 인스턴스를 준비됨으로 보고하지 않는다)
+S3-G6 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — Ollama 수명주기를 쟀다. (원래: ready 로 확정된 뒤 Ollama 가 죽으면 상태가 따라간다 (죽은 인스턴스를 준비됨으로 보고하지 않는다))
     CHECK: node scripts/check-stage3.mjs S3-G6
-    EXPECT: S3_G6_OK
+    EXPECT: S3_G6_RETIRED
 
 S3-G7 **41단계로 은퇴** — 진짜 LLM 이 진단 질의를 진단으로 보내는지 쟀다 — 41단계부터 LLM 은 Claude API 라 게이트가 돌 때마다 돈이 든다. 라우팅의 결정적 부분은 S3-G8·S39 가 본다. (원래: 진단 질의가 팔레트로 라우팅되지 않는다 — 1단계 경로와 LLM 경로 양쪽 + 팔레트 양성 대조)
     CHECK: node scripts/check-stage3.mjs S3-G7
     EXPECT: S3_G7_RETIRED
 
-S3-G8 전문 검색이 잡으면 LLM 을 아예 호출하지 않는다 (rewrite=null, 1단계, 왕복 1초 미만)
+S3-G8 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 검색 단계(1·2단계) 라우팅을 쟀다(진단 · 팔레트 가르기는 S44-G3 · S42-G10 이 본다). (원래: 전문 검색이 잡으면 LLM 을 아예 호출하지 않는다 (rewrite=null, 1단계, 왕복 1초 미만))
     CHECK: node scripts/check-stage3.mjs S3-G8
-    EXPECT: S3_G8_OK
+    EXPECT: S3_G8_RETIRED
 
-S3-G9 붙여 쓴 재작성어를 코퍼스 어휘로 되돌린다 — 모델에 의존하지 않는 결정적 검사
+S3-G9 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 재작성어의 붙여쓰기 복원(vocabulary)을 쟀다. (원래: 붙여 쓴 재작성어를 코퍼스 어휘로 되돌린다 — 모델에 의존하지 않는 결정적 검사)
     CHECK: node scripts/check-stage3.mjs S3-G9
-    EXPECT: S3_G9_OK
+    EXPECT: S3_G9_RETIRED
 
 S3-G10 **41단계로 은퇴** — LLM 워밍업을 쟀다 — 41단계부터 LLM 은 Claude API 라 GPU 에 올려 둘 모델이 없다(임베딩 워밍업은 S40-G1 이 본다). (원래: 서버 기동 후 모델 워밍업이 실제로 실행된다 (정의·import 만 있고 호출부가 없던 결함의 재발 방지))
     CHECK: node scripts/check-stage3.mjs S3-G10
@@ -141,9 +141,9 @@ S5-G3 범위 밖·소수·문자열·0·100 비율이 거부되고, 거부된 �
     CHECK: node scripts/check-stage5.mjs S5-G3
     EXPECT: S5_G3_OK
 
-S5-G4 화면 슬라이더 범위와 서버 허용 범위가 같은 상수에서 온다 (어긋나면 사용자가 움직인 값이 거부된다)
+S5-G4 **44단계로 은퇴** — 홈의 검색 결과 카드 · '배색 구조로 펼치기' 를 걷어냈다(추천은 문장 팔레트 3안이다) — 홈 카드의 비율 조정을 쟀다(저장 목록의 비율은 S5 나머지 · S18 이 본다). (원래: 화면 슬라이더 범위와 서버 허용 범위가 같은 상수에서 온다 (어긋나면 사용자가 움직인 값이 거부된다))
     CHECK: node scripts/check-stage5.mjs S5-G4
-    EXPECT: S5_G4_OK
+    EXPECT: S5_G4_RETIRED
 
 S5-G5 조정해 둔 비율이 재저장으로 사라지지 않는다 (명시한 비율이 이기고, 기본값 복귀 후에는 이어받지 않는다)
     CHECK: node scripts/check-stage5.mjs S5-G5
@@ -223,9 +223,9 @@ S8-G3 빈 메모나 공백만 있는 메모를 보내면 지운다 — 보존과
     CHECK: node scripts/check-stage8.mjs S8-G3
     EXPECT: S8_G3_OK
 
-S8-G4 홈 화면이 메모 입력을 만들고 저장 요청에 실어 보낸다 (정적 검사)
+S8-G4 **44단계로 은퇴** — 홈의 검색 결과 카드 · '배색 구조로 펼치기' 를 걷어냈다(추천은 문장 팔레트 3안이다) — 홈 카드의 저장 메모 입력을 쟀다(메모 편집은 S9 가 본다). (원래: 홈 화면이 메모 입력을 만들고 저장 요청에 실어 보낸다 (정적 검사))
     CHECK: node scripts/check-stage8.mjs S8-G4
-    EXPECT: S8_G4_OK
+    EXPECT: S8_G4_RETIRED
 
 S8-G5 실제 저장 경로로 넣은 메모가 CSS 주석과 JSON 양쪽 내보내기에 실린다
     CHECK: node scripts/check-stage8.mjs S8-G5
@@ -380,9 +380,9 @@ S12-G1 씨앗 풀 24쌍이 헥스·원명·조합번호를 갖추고, 전사본�
     CHECK: node scripts/check-stage12.mjs S12-G1
     EXPECT: S12_G1_OK
 
-S12-G2 씨앗 풀이 검색 색인에 들어가지 않는다 — 실제 검색기를 보고, 헥스로 검색해도 안 나온다 (양성 대조 둘)
+S12-G2 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 씨앗이 검색 색인에 안 들어가는지 쟀다(색인이 없다). (원래: 씨앗 풀이 검색 색인에 들어가지 않는다 — 실제 검색기를 보고, 헥스로 검색해도 안 나온다 (양성 대조 둘))
     CHECK: node scripts/check-stage12.mjs S12-G2
-    EXPECT: S12_G2_OK
+    EXPECT: S12_G2_RETIRED
 
 S12-G3 씨앗 풀이 코퍼스와 쌍도 색도 겹치지 않고, 강조 채도가 코퍼스 하한 위다 (무채색 씨앗 배제)
     CHECK: node scripts/check-stage12.mjs S12-G3
@@ -436,9 +436,9 @@ S13-G6 파생 스와치의 글자색이 파생색 1000개 전부에서 대비 4.
     CHECK: node scripts/check-stage13.mjs S13-G6
     EXPECT: S13_G6_OK
 
-S13-G7 화면이 파생 팔레트를 그리고 색마다 슬라이더를 붙인다 (정적 회귀 스모크)
+S13-G7 **44단계로 은퇴** — 홈의 검색 결과 카드 · '배색 구조로 펼치기' 를 걷어냈다(추천은 문장 팔레트 3안이다) — 홈이 /api/expand 로 파생 팔레트를 그리는지 쟀다. (원래: 화면이 파생 팔레트를 그리고 색마다 슬라이더를 붙인다 (정적 회귀 스모크))
     CHECK: node scripts/check-stage13.mjs S13-G7
-    EXPECT: S13_G7_OK
+    EXPECT: S13_G7_RETIRED
 
 ## 14단계 — LLM 이 배색 구조 다섯을 고른다 (11-B-2)
 
@@ -479,9 +479,9 @@ S14-G6 LLM 실패·시간 초과가 펼치기를 막지 않는다 (느린 모델
     CHECK: node scripts/check-stage14.mjs S14-G6
     EXPECT: S14_G6_OK
 
-S14-G7 화면이 고른 다섯을 먼저 그리고 나머지 셋은 접어 둔다 (정적 회귀 스모크)
+S14-G7 **44단계로 은퇴** — 홈의 검색 결과 카드 · '배색 구조로 펼치기' 를 걷어냈다(추천은 문장 팔레트 3안이다) — 펼치기가 고른 다섯을 먼저 그리는지 쟀다. (원래: 화면이 고른 다섯을 먼저 그리고 나머지 셋은 접어 둔다 (정적 회귀 스모크))
     CHECK: node scripts/check-stage14.mjs S14-G7
-    EXPECT: S14_G7_OK
+    EXPECT: S14_G7_RETIRED
 
 S14-G8 모델이 응답해도 쓸 수 있는 구조를 못 주면 "LLM 이 골랐다" 고 말하지 않는다 (양성 대조 둘)
     CHECK: node scripts/check-stage14.mjs S14-G8
@@ -567,17 +567,17 @@ S15-G12 어두운 모드 파생색에서도 스와치 글자색 대비가 4.5:1 
     CHECK: node scripts/check-stage15.mjs S15-G12
     EXPECT: S15_G12_OK
 
-S15-G13 토글이 이미 받아 둔 데이터로만 다시 그린다 — 네트워크·LLM 재호출 없음 (정적 검사)
+S15-G13 **44단계로 은퇴** — 홈의 검색 결과 카드 · '배색 구조로 펼치기' 를 걷어냈다(추천은 문장 팔레트 3안이다) — 펼치기의 모드 선택자를 쟀다. (원래: 토글이 이미 받아 둔 데이터로만 다시 그린다 — 네트워크·LLM 재호출 없음 (정적 검사))
     CHECK: node scripts/check-stage15.mjs S15-G13
-    EXPECT: S15_G13_OK
+    EXPECT: S15_G13_RETIRED
 
 S15-G14 요청 핸들러가 구조 카탈로그를 다시 읽지 않는다 — expandAll 이 캐시를 넘겨받는다 (정적 검사)
     CHECK: node scripts/check-stage15.mjs S15-G14
     EXPECT: S15_G14_OK
 
-S15-G15 모드 토글이 다시 그리기 **전에** 포커스를 자기에게 확정한다 (정적 검사)
+S15-G15 **44단계로 은퇴** — 홈의 검색 결과 카드 · '배색 구조로 펼치기' 를 걷어냈다(추천은 문장 팔레트 3안이다) — 펼치기 모드 토글의 포커스를 쟀다. (원래: 모드 토글이 다시 그리기 **전에** 포커스를 자기에게 확정한다 (정적 검사))
     CHECK: node scripts/check-stage15.mjs S15-G15
-    EXPECT: S15_G15_OK
+    EXPECT: S15_G15_RETIRED
 
 **어두운 모드를 화면에 내보내는 방식(G10~G13).** 엔진에만 있던 어두운 모드를 사용자 토글로
 꺼냈다. **모드를 서버에 보내지 않는다** — `/api/expand` 는 `q` 로 LLM 을 불러 여덟 중 다섯을
@@ -775,9 +775,9 @@ S17-G11 재질 배정을 조작하는 쿼리 파라미터가 없다 (mode 와 �
     CHECK: node scripts/check-stage17.mjs S17-G11
     EXPECT: S17_G11_OK
 
-S17-G12 화면이 재질 이름을 카탈로그에서 받아 그린다 — 코드에 이름을 안 박는다 (정적 검사)
+S17-G12 **44단계로 은퇴** — 홈의 검색 결과 카드 · '배색 구조로 펼치기' 를 걷어냈다(추천은 문장 팔레트 3안이다) — 펼치기 카드의 재질 표시를 쟀다. (원래: 화면이 재질 이름을 카탈로그에서 받아 그린다 — 코드에 이름을 안 박는다 (정적 검사))
     CHECK: node scripts/check-stage17.mjs S17-G12
-    EXPECT: S17_G12_OK
+    EXPECT: S17_G12_RETIRED
 
 ## 18단계 — 파생 팔레트 저장 (완료)
 
@@ -844,9 +844,9 @@ S18-G8 2색 저장 경로가 하나도 안 바뀐다 — 숫자 하나를 받던
     CHECK: node scripts/check-stage18.mjs S18-G8
     EXPECT: S18_G8_OK
 
-S18-G9 홈이 저장 버튼을 만들고 씨앗·구조·모드·비율만 보낸다 — 색을 안 보낸다 (정적 검사)
+S18-G9 **44단계로 은퇴** — 홈의 검색 결과 카드 · '배색 구조로 펼치기' 를 걷어냈다(추천은 문장 팔레트 3안이다) — 펼치기 카드의 저장 버튼을 쟀다(색 경로 · 문장 팔레트 저장은 S36 · S42-G11 이 본다). (원래: 홈이 저장 버튼을 만들고 씨앗·구조·모드·비율만 보낸다 — 색을 안 보낸다 (정적 검사))
     CHECK: node scripts/check-stage18.mjs S18-G9
-    EXPECT: S18_G9_OK
+    EXPECT: S18_G9_RETIRED
 
 S18-G10 저장 화면이 두 종류를 다르게 그리고, 필드가 빠져도 undefined 가 안 샌다 (순수 함수)
     CHECK: node scripts/check-stage18.mjs S18-G10
@@ -902,9 +902,9 @@ S19-G4 재저장이 배정을 이어받고 명시한 것이 이긴다 — 모드
     CHECK: node scripts/check-stage19.mjs S19-G4
     EXPECT: S19_G4_OK
 
-S19-G5 화면이 배정을 만들고 **실제로 요청에 싣는다** — 색은 여전히 안 보낸다 (정적 검사)
+S19-G5 **44단계로 은퇴** — 홈의 검색 결과 카드 · '배색 구조로 펼치기' 를 걷어냈다(추천은 문장 팔레트 3안이다) — 펼치기 저장이 재질을 싣는지 쟀다. (원래: 화면이 배정을 만들고 **실제로 요청에 싣는다** — 색은 여전히 안 보낸다 (정적 검사))
     CHECK: node scripts/check-stage19.mjs S19-G5
-    EXPECT: S19_G5_OK
+    EXPECT: S19_G5_RETIRED
 
 S19-G6 배정이 색을 오염시키지 않는다 — 색 주입 3가지에서 저장된 색이 재계산 그대로 (18단계 경계 회귀)
     CHECK: node scripts/check-stage19.mjs S19-G6
@@ -1279,9 +1279,9 @@ S21-G4 배정 상태가 redraw 밖에 있다 · 고칠 때 **실제로** 서버 
     CHECK: node scripts/check-stage21.mjs S21-G4
     EXPECT: S21_G4_OK
 
-S21-G5 저장 요청이 바꾼 배정을 싣고, 색은 여전히 안 보낸다 (S18-G1 경계 회귀)
+S21-G5 **44단계로 은퇴** — 홈의 검색 결과 카드 · '배색 구조로 펼치기' 를 걷어냈다(추천은 문장 팔레트 3안이다) — 펼치기 저장이 고친 재질을 싣는지 쟀다. (원래: 저장 요청이 바꾼 배정을 싣고, 색은 여전히 안 보낸다 (S18-G1 경계 회귀))
     CHECK: node scripts/check-stage21.mjs S21-G5
-    EXPECT: S21_G5_OK
+    EXPECT: S21_G5_RETIRED
 
 S21-G6 손으로 바꾼 재질이 저장에 그대로 남는다 — 저장소를 직접 불러 끝에서 끝까지 (양성 대조 포함)
     CHECK: node scripts/check-stage21.mjs S21-G6
@@ -1460,13 +1460,13 @@ S23-G3 토글이 갈 곳을 보이고 읽어 주는 말이 지금까지 담는�
     CHECK: node scripts/check-stage23.mjs S23-G3
     EXPECT: S23_G3_OK
 
-S23-G4 화면이 저장된 모드로 시작하고 토글이 갱신한다 · mode 는 여전히 카드마다 따로다
+S23-G4 **44단계로 은퇴** — 홈의 검색 결과 카드 · '배색 구조로 펼치기' 를 걷어냈다(추천은 문장 팔레트 3안이다) — 펼치기가 저장된 모드로 시작하는지 쟀다. (원래: 화면이 저장된 모드로 시작하고 토글이 갱신한다 · mode 는 여전히 카드마다 따로다)
     CHECK: node scripts/check-stage23.mjs S23-G4
-    EXPECT: S23_G4_OK
+    EXPECT: S23_G4_RETIRED
 
-S23-G5 조회 요청에 mode 가 안 붙는다 · 저장 요청에는 붙는다 (S15-G11 회귀 · 양성 대조)
+S23-G5 **44단계로 은퇴** — 홈의 검색 결과 카드 · '배색 구조로 펼치기' 를 걷어냈다(추천은 문장 팔레트 3안이다) — 펼치기 조회에 mode 가 안 붙는지 쟀다. (원래: 조회 요청에 mode 가 안 붙는다 · 저장 요청에는 붙는다 (S15-G11 회귀 · 양성 대조))
     CHECK: node scripts/check-stage23.mjs S23-G5
-    EXPECT: S23_G5_OK
+    EXPECT: S23_G5_RETIRED
 
 S23-G6 저장소를 만지는 자리가 ui.js 한 곳뿐이고 감싸여 있다 (화면 5개 확인)
     CHECK: node scripts/check-stage23.mjs S23-G6
@@ -1659,25 +1659,25 @@ S24-G6 기준선 개정 기록이 정직하다 — git 의 옛 기준선과 대�
 서식 문자(`\p{Cf}`)이지 질의를 거부하는 것이 아니다 — 폭 0 문자가 섞인 진짜 질의는 그것만
 빠진 채 그대로 간다.
 
-S25-G1 Ollama 가 죽어 있으면 확인한 뒤 "없다" 고 말한다 — 호출부 셋의 사유에 "아직 확인하지 않았다" 가 없고, 떠 있으면 ready 의 사유도 그 문구가 아니다 (양성 대조)
+S25-G1 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — Ollama 상태 사유를 쟀다. (원래: Ollama 가 죽어 있으면 확인한 뒤 "없다" 고 말한다 — 호출부 셋의 사유에 "아직 확인하지 않았다" 가 없고, 떠 있으면 ready 의 사유도 그 문구가 아니다 (양성 대조))
     CHECK: node scripts/check-stage25.mjs S25-G1
-    EXPECT: S25_G1_OK
+    EXPECT: S25_G1_RETIRED
 
-S25-G2 더 구체적인 사유를 덮어쓰지 않는다 — 기동 실패 사유가 TTL 이 지난 뒤의 재탐지에도 남는다
+S25-G2 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — Ollama 기동 실패 사유 보존을 쟀다. (원래: 더 구체적인 사유를 덮어쓰지 않는다 — 기동 실패 사유가 TTL 이 지난 뒤의 재탐지에도 남는다)
     CHECK: node scripts/check-stage25.mjs S25-G2
-    EXPECT: S25_G2_OK
+    EXPECT: S25_G2_RETIRED
 
-S25-G3 폭 0 문자만 있는 질의는 세 경로(구조 선택 · 재질 배정 · `/api/search`) 어디서도 모델을 안 부른다 · 진짜 질의는 부른다 (양성 대조)
+S25-G3 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — /api/search 를 포함한 세 경로의 폭 0 문자 질의를 쟀다(채팅 · 구조 · 재질 경로는 S44-G8 이 본다). (원래: 폭 0 문자만 있는 질의는 세 경로(구조 선택 · 재질 배정 · `/api/search`) 어디서도 모델을 안 부른다 · 진짜 질의는 부른다 (양성 대조))
     CHECK: node scripts/check-stage25.mjs S25-G3
-    EXPECT: S25_G3_OK
+    EXPECT: S25_G3_RETIRED
 
-S25-G4 3단계 게이트 10개가 그대로 통과한다 — `refresh()` 를 건드렸으므로 수명주기 회귀를 함께 본다
+S25-G4 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 3단계(Ollama) 게이트 회귀를 쟀다(그 게이트가 전부 은퇴했다). (원래: 3단계 게이트 10개가 그대로 통과한다 — `refresh()` 를 건드렸으므로 수명주기 회귀를 함께 본다)
     CHECK: node scripts/check-stage25.mjs S25-G4
-    EXPECT: S25_G4_OK
+    EXPECT: S25_G4_RETIRED
 
-S25-G5 ready 의 사유도 안 덮어쓴다 — 우리가 띄운 Ollama 의 "자동 기동함" 이 TTL 이 지난 뒤의 재확인에도 남는다 (실제 기동 · S3-G2 와 같은 전제)
+S25-G5 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 우리가 띄운 Ollama 의 사유 보존을 쟀다. (원래: ready 의 사유도 안 덮어쓴다 — 우리가 띄운 Ollama 의 "자동 기동함" 이 TTL 이 지난 뒤의 재확인에도 남는다 (실제 기동 · S3-G2 와 같은 전제))
     CHECK: node scripts/check-stage25.mjs S25-G5
-    EXPECT: S25_G5_OK
+    EXPECT: S25_G5_RETIRED
 
 ### 알려진 한계 (25단계)
 
@@ -1712,29 +1712,29 @@ LLM 까지 안 내려간 것이다. 그래서 3단계를 붙이면서 그 거짓
 
 설계: `docs/superpowers/specs/2026-09-13-hybrid-search-design.md` · 계획: `docs/superpowers/plans/2026-09-13-hybrid-search.md`
 
-S26-G1 실측 질의 23건에서 정답이 7 보다 늘고, 거짓 확신 9건이 1단계에 안 남는다 · 두 방법이 같은 답이면 1단계 그대로 (양성 대조) · 실제 bge-m3 필요
+S26-G1 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 결합 검색(BM25 + bge-m3) 정확도를 쟀다. (원래: 실측 질의 23건에서 정답이 7 보다 늘고, 거짓 확신 9건이 1단계에 안 남는다 · 두 방법이 같은 답이면 1단계 그대로 (양성 대조) · 실제 bge-m3 필요)
     CHECK: node scripts/check-stage26.mjs S26-G1
-    EXPECT: S26_G1_OK
+    EXPECT: S26_G1_RETIRED
 
-S26-G2 정확 매칭 회귀 — `S1-G2` 다섯 건이 여전히 1단계·같은 답이고 LLM 을 안 부른다
+S26-G2 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — BM25 정확 매칭 회귀를 쟀다. (원래: 정확 매칭 회귀 — `S1-G2` 다섯 건이 여전히 1단계·같은 답이고 LLM 을 안 부른다)
     CHECK: node scripts/check-stage26.mjs S26-G2
-    EXPECT: S26_G2_OK
+    EXPECT: S26_G2_RETIRED
 
-S26-G3 임베딩이 없으면(모델 없음 · 죽은 호스트) 1·2단계가 그대로 돌고 상태가 `unavailable` 로 정직하다 (양성 대조: 있으면 `ready`)
+S26-G3 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 임베딩이 없을 때 상태를 쟀다. (원래: 임베딩이 없으면(모델 없음 · 죽은 호스트) 1·2단계가 그대로 돌고 상태가 `unavailable` 로 정직하다 (양성 대조: 있으면 `ready`))
     CHECK: node scripts/check-stage26.mjs S26-G3
-    EXPECT: S26_G3_OK
+    EXPECT: S26_G3_RETIRED
 
-S26-G4 **어절 둘 이상** 확신 검색이 느린 임베딩(3초)에 안 끌린다 — 1초 안에 1단계로 답한다 (양성 대조: 저신뢰 질의는 기다린다). 40단계에서 질의를 어절 하나 확신("병원 앱인데 …")에서 어절 셋("느와르 …")으로 옮겼다
+S26-G4 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 확신 검색이 느린 임베딩에 안 끌리는지 쟀다. (원래: **어절 둘 이상** 확신 검색이 느린 임베딩(3초)에 안 끌린다 — 1초 안에 1단계로 답한다 (양성 대조: 저신뢰 질의는 기다린다). 40단계에서 질의를 어절 하나 확신("병원 앱인데 …")에서 어절 셋("느와르 …")으로 옮겼다)
     CHECK: node scripts/check-stage26.mjs S26-G4
-    EXPECT: S26_G4_OK
+    EXPECT: S26_G4_RETIRED
 
-S26-G5 `hybrid.js` 가 스텁 벡터로 결정적이다 — 동의 판정 · RRF 결합 · 문턱 · 라우팅 (감시 값 사본)
+S26-G5 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — hybrid.js 결합 판정을 쟀다. (원래: `hybrid.js` 가 스텁 벡터로 결정적이다 — 동의 판정 · RRF 결합 · 문턱 · 라우팅 (감시 값 사본))
     CHECK: node scripts/check-stage26.mjs S26-G5
-    EXPECT: S26_G5_OK
+    EXPECT: S26_G5_RETIRED
 
-S26-G6 루프백 밖에 바인딩하면 `hybridError` 원문이 안 샌다 (루프백 양성 대조)
+S26-G6 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — hybridError 원문 경계를 쟀다. (원래: 루프백 밖에 바인딩하면 `hybridError` 원문이 안 샌다 (루프백 양성 대조))
     CHECK: node scripts/check-stage26.mjs S26-G6
-    EXPECT: S26_G6_OK
+    EXPECT: S26_G6_RETIRED
 
 S26-G7 기록 — LLM 횟수가 `usedLlm` 기준 · 턴 기록이 stage 3 을 받는다 (3단계 배지·사다리 검사는 31단계에서 뺐다)
     CHECK: node scripts/check-stage26.mjs S26-G7
@@ -1786,33 +1786,33 @@ S26-G7 기록 — LLM 횟수가 `usedLlm` 기준 · 턴 기록이 stage 3 을 �
 
 설계: `docs/superpowers/specs/2026-09-13-on-demand-corpus-design.md` · 계획: `docs/superpowers/plans/2026-09-13-on-demand-corpus.md`
 
-S27-G1 팔레트 한 건의 요약을 고쳐 저장하면 다음 검색이 재시작 없이 새 내용으로 잡히고 `corpus.version` 이 1 오른다 (안 바꾸면 그대로 · 양성 대조)
+S27-G1 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 코퍼스를 고치면 다음 검색이 새 내용을 잡는지 쟀다(재적재는 S44-G6 이 채팅 · 상태로 본다). (원래: 팔레트 한 건의 요약을 고쳐 저장하면 다음 검색이 재시작 없이 새 내용으로 잡히고 `corpus.version` 이 1 오른다 (안 바꾸면 그대로 · 양성 대조))
     CHECK: node scripts/check-stage27.mjs S27-G1
-    EXPECT: S27_G1_OK
+    EXPECT: S27_G1_RETIRED
 
-S27-G2 바뀐 문서 하나만 다시 임베딩된다 — `/api/embed` 입력이 34건에서 1건으로
+S27-G2 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 바뀐 문서만 다시 임베딩되는지 쟀다. (원래: 바뀐 문서 하나만 다시 임베딩된다 — `/api/embed` 입력이 34건에서 1건으로)
     CHECK: node scripts/check-stage27.mjs S27-G2
-    EXPECT: S27_G2_OK
+    EXPECT: S27_G2_RETIRED
 
-S27-G3 재시작해도 캐시가 살아 임베딩 입력이 0건이다 · 모델명이 바뀌면 34건 전부 다시 만든다
+S27-G3 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 임베딩 캐시를 쟀다. (원래: 재시작해도 캐시가 살아 임베딩 입력이 0건이다 · 모델명이 바뀌면 34건 전부 다시 만든다)
     CHECK: node scripts/check-stage27.mjs S27-G3
-    EXPECT: S27_G3_OK
+    EXPECT: S27_G3_RETIRED
 
-S27-G4 깨진 JSON 을 저장해도 옛 코퍼스로 계속 답하고 `corpus.error` 에 사유가 남는다 · 고치면 회복한다
+S27-G4 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 깨진 코퍼스에서 옛 것으로 검색하는지 쟀다(S44-G6 이 채팅 · 상태로 본다). (원래: 깨진 JSON 을 저장해도 옛 코퍼스로 계속 답하고 `corpus.error` 에 사유가 남는다 · 고치면 회복한다)
     CHECK: node scripts/check-stage27.mjs S27-G4
-    EXPECT: S27_G4_OK
+    EXPECT: S27_G4_RETIRED
 
-S27-G5 문서를 지우면 재임베딩이 끝나기 전(옛 벡터 창)에도 그 id 가 결과에 안 나온다
+S27-G5 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 옛 벡터 창의 지운 문서를 쟀다. (원래: 문서를 지우면 재임베딩이 끝나기 전(옛 벡터 창)에도 그 id 가 결과에 안 나온다)
     CHECK: node scripts/check-stage27.mjs S27-G5
-    EXPECT: S27_G5_OK
+    EXPECT: S27_G5_RETIRED
 
-S27-G6 캐시 파일이 깨져도 기동하고 옆으로 치운 뒤 새로 만든다 · 문서를 바꿔도 캐시 항목 수가 문서 수를 넘지 않는다
+S27-G6 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 임베딩 캐시 파일 손상을 쟀다. (원래: 캐시 파일이 깨져도 기동하고 옆으로 치운 뒤 새로 만든다 · 문서를 바꿔도 캐시 항목 수가 문서 수를 넘지 않는다)
     CHECK: node scripts/check-stage27.mjs S27-G6
-    EXPECT: S27_G6_OK
+    EXPECT: S27_G6_RETIRED
 
-S27-G7 `/api/status` 에 `corpus` 가 있고 `stage` 가 4 다 · 루프백 밖에서 경로·사유 원문이 안 샌다 · `TONEFIRST_CORPUS_DIR` 이 실제로 쓰인다
+S27-G7 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — /api/status 의 stage 4 를 쟀다(상태 경계는 S44-G6 이 본다). (원래: `/api/status` 에 `corpus` 가 있고 `stage` 가 4 다 · 루프백 밖에서 경로·사유 원문이 안 샌다 · `TONEFIRST_CORPUS_DIR` 이 실제로 쓰인다)
     CHECK: node scripts/check-stage27.mjs S27-G7
-    EXPECT: S27_G7_OK
+    EXPECT: S27_G7_RETIRED
 
 ### 알려진 한계 (27단계)
 
@@ -1853,21 +1853,21 @@ S27-G7 `/api/status` 에 `corpus` 가 있고 `stage` 가 4 다 · 루프백 밖�
 스파이크 `[실측]`: 어긋난 BM25 순위의 가중치를 1 → 0.5 → 0 으로 바꾸면 정답 12 → 12 → **14**/18.
 0 에서 E1 두 건이 고쳐지고 잃는 것이 없다. 재작성 뒤의 결합은 새 증거라 BM25 순위를 그대로 쓴다.
 
-S28-G1 실측 23건에서 정답이 14 이상이고 E1 두 건이 맞으며, 거짓 확신 0 · 정확 매칭 5건 1단계 유지 (실제 bge-m3)
+S28-G1 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 실제 bge-m3 결합 정확도를 쟀다. (원래: 실측 23건에서 정답이 14 이상이고 E1 두 건이 맞으며, 거짓 확신 0 · 정확 매칭 5건 1단계 유지 (실제 bge-m3))
     CHECK: node scripts/check-stage28.mjs S28-G1
-    EXPECT: S28_G1_OK
+    EXPECT: S28_G1_RETIRED
 
-S28-G2 `fuse` 의 BM25 가중치 — 0 이면 코사인 순위만 남고, 1 이면 26단계와 같다 · 상수 둘(가중치 · 어절 문턱)이 사본과 같다 (스텁 벡터로 결정적)
+S28-G2 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — fuse 의 BM25 가중치를 쟀다. (원래: `fuse` 의 BM25 가중치 — 0 이면 코사인 순위만 남고, 1 이면 26단계와 같다 · 상수 둘(가중치 · 어절 문턱)이 사본과 같다 (스텁 벡터로 결정적))
     CHECK: node scripts/check-stage28.mjs S28-G2
-    EXPECT: S28_G2_OK
+    EXPECT: S28_G2_RETIRED
 
-S28-G3 26단계 게이트 7개가 그대로 통과한다
+S28-G3 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 26단계 게이트 회귀를 쟀다(그 게이트가 은퇴했다). (원래: 26단계 게이트 7개가 그대로 통과한다)
     CHECK: node scripts/check-stage28.mjs S28-G3
-    EXPECT: S28_G3_OK
+    EXPECT: S28_G3_RETIRED
 
-S28-G4 옛 벡터 창(재임베딩 전)에서 어절 하나로 새로 잡힌 문서는 "어긋남" 이 아니라 "아직 모름" 이다 — BM25 답이 살아 있다
+S28-G4 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 옛 벡터 창의 BM25 답을 쟀다. (원래: 옛 벡터 창(재임베딩 전)에서 어절 하나로 새로 잡힌 문서는 "어긋남" 이 아니라 "아직 모름" 이다 — BM25 답이 살아 있다)
     CHECK: node scripts/check-stage28.mjs S28-G4
-    EXPECT: S28_G4_OK
+    EXPECT: S28_G4_RETIRED
 
 ### 알려진 한계 (28단계)
 
@@ -1896,17 +1896,17 @@ S28-G4 옛 벡터 창(재임베딩 전)에서 어절 하나로 새로 잡힌 문
 처방은 코퍼스다 — 실제로 쓰는 말투("죽어 보인다" · "숨이 막혀요")를 `dx-flat-value` · `dx-stifling` 의 별칭에 넣는다.
 코드는 안 바꾼다.
 
-S29-G1 "화면이 죽어 보여요" 는 `dx-flat-value`, "숨이 막혀요 화면이" 는 `dx-stifling` 을 1단계에서 확신한다 (Ollama 없이 결정적)
+S29-G1 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 별칭이 BM25 1단계에서 확신되는지 쟀다(별칭 진단은 S44-G3 이 라우터로 본다). (원래: "화면이 죽어 보여요" 는 `dx-flat-value`, "숨이 막혀요 화면이" 는 `dx-stifling` 을 1단계에서 확신한다 (Ollama 없이 결정적))
     CHECK: node scripts/check-stage29.mjs S29-G1
-    EXPECT: S29_G1_OK
+    EXPECT: S29_G1_RETIRED
 
 S29-G2 더한 별칭이 사본과 같고 코퍼스 전체에서 유일하다 — `S4-G6`(별칭 유일성) · `S1-G1`(코퍼스 무결성) 그대로 통과
     CHECK: node scripts/check-stage29.mjs S29-G2
     EXPECT: S29_G2_OK
 
-S29-G3 실측 23건 정답이 16 이상이고 어휘 부재 2건이 맞는다 · 28단계 G1 의 조건(E1 · 거짓 확신 0 · 정확 매칭)도 그대로 (실제 bge-m3)
+S29-G3 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 실제 bge-m3 정답 수를 쟀다. (원래: 실측 23건 정답이 16 이상이고 어휘 부재 2건이 맞는다 · 28단계 G1 의 조건(E1 · 거짓 확신 0 · 정확 매칭)도 그대로 (실제 bge-m3))
     CHECK: node scripts/check-stage29.mjs S29-G3
-    EXPECT: S29_G3_OK
+    EXPECT: S29_G3_RETIRED
 
 ### 알려진 한계 (29단계)
 
@@ -1929,21 +1929,21 @@ S29-G3 실측 23건 정답이 16 이상이고 어휘 부재 2건이 맞는다 ·
 확신 경로의 예산은 700ms 라 그 한 번이 "제때 답하지 않았다" 로 떨어져 3단계를 건너뛴다. 채팅 모델은 `rewrite.js`
 가 `keep_alive: "30m"` 을 보내 같은 문제가 없었다. 처방: 임베딩 요청에도 같은 `keep_alive` 를 보낸다.
 
-S30-G1 모든 `/api/embed` 요청(코퍼스 준비 · 질의)에 `keep_alive` 가 사본과 같은 값으로 실린다 (스텁 Ollama · 결정적)
+S30-G1 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 임베딩 요청의 keep_alive 를 쟀다. (원래: 모든 `/api/embed` 요청(코퍼스 준비 · 질의)에 `keep_alive` 가 사본과 같은 값으로 실린다 (스텁 Ollama · 결정적))
     CHECK: node scripts/check-stage30.mjs S30-G1
-    EXPECT: S30_G1_OK
+    EXPECT: S30_G1_RETIRED
 
-S30-G2 모델을 내린 상태에서 서버 준비가 다시 올리면 Ollama `/api/ps` 의 `bge-m3` 만료 시각이 25분 이상 남아 있다 (실제 Ollama)
+S30-G2 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 실제 Ollama 의 모델 만료 시각을 쟀다. (원래: 모델을 내린 상태에서 서버 준비가 다시 올리면 Ollama `/api/ps` 의 `bge-m3` 만료 시각이 25분 이상 남아 있다 (실제 Ollama))
     CHECK: node scripts/check-stage30.mjs S30-G2
-    EXPECT: S30_G2_OK
+    EXPECT: S30_G2_RETIRED
 
-S30-G3 원인의 양성 대조 — 콜드 재적재가 웜의 3배 이상이고, 내린 뒤에도 서버 준비를 거치면 확신 경로 질의 5건이 예산(700ms) 안에 임베딩된다 (실제 bge-m3 · 처방이 아니라 원인을 잰다)
+S30-G3 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 콜드 재적재 지연을 쟀다. (원래: 원인의 양성 대조 — 콜드 재적재가 웜의 3배 이상이고, 내린 뒤에도 서버 준비를 거치면 확신 경로 질의 5건이 예산(700ms) 안에 임베딩된다 (실제 bge-m3 · 처방이 아니라 원인을 잰다))
     CHECK: node scripts/check-stage30.mjs S30-G3
-    EXPECT: S30_G3_OK
+    EXPECT: S30_G3_RETIRED
 
-S30-G4 26단계 게이트 7개가 그대로 통과한다
+S30-G4 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 26단계 게이트 회귀를 쟀다(그 게이트가 은퇴했다). (원래: 26단계 게이트 7개가 그대로 통과한다)
     CHECK: node scripts/check-stage30.mjs S30-G4
-    EXPECT: S30_G4_OK
+    EXPECT: S30_G4_RETIRED
 
 ### 알려진 한계 (30단계)
 
@@ -2030,9 +2030,9 @@ S33-G1 화면 원본(세 화면 · app.js · ui.js · history.js · saved.js)과
     CHECK: node scripts/check-stage33.mjs S33-G1
     EXPECT: S33_G1_OK
 
-S33-G2 서버가 내주는 진단 결과(`/api/search?q=답답해요`)의 증상·`axis`·처방·상세와 홈 HTML 에 "축" 이 없다("수축" 제외)
+S33-G2 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — /api/search 진단 결과의 "축" 낱말을 쟀다(채팅 진단 답은 S44-G3 이 본다). (원래: 서버가 내주는 진단 결과(`/api/search?q=답답해요`)의 증상·`axis`·처방·상세와 홈 HTML 에 "축" 이 없다("수축" 제외))
     CHECK: node scripts/check-stage33.mjs S33-G2
-    EXPECT: S33_G2_OK
+    EXPECT: S33_G2_RETIRED
 
 S33-G3 코퍼스·진단 회귀 — S1 4개 · S4-G6 · S10 7개 · S29-G1·G2 그대로 통과
     CHECK: node scripts/check-stage33.mjs S33-G3
@@ -2079,9 +2079,9 @@ S34-G6 Ollama 없이 `/api/character` 가 돈다 — 폴백 파서 · 배색 쌍
     CHECK: node scripts/check-stage34.mjs S34-G6
     EXPECT: S34_G6_OK
 
-S34-G7 스텁 Ollama 가 헥스·엉뚱한 부위를 실어 보내도 응답에 안 닿는다 · 모델이 준 인상이 검색에 쓰여 배색 쌍이 그 인상의 답과 같다(`parse.from: "llm"`)
+S34-G7 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 캐릭터 배색 쌍이 검색 1위인지 쟀다(파서가 목록에서 고르는 것은 S44-G4 가 본다). (원래: 스텁 Ollama 가 헥스·엉뚱한 부위를 실어 보내도 응답에 안 닿는다 · 모델이 준 인상이 검색에 쓰여 배색 쌍이 그 인상의 답과 같다(`parse.from: "llm"`))
     CHECK: node scripts/check-stage34.mjs S34-G7
-    EXPECT: S34_G7_OK
+    EXPECT: S34_G7_RETIRED
 
 S34-G8 저장 왕복 — 본문의 가짜 색을 무시하고 재계산 · 종족 재질이 기본으로 실림 · `/api/saved` 에 6색 파생 항목 · unreal/unity 에 6역할(로봇 피부 metallic 1) · CSS/JSON 은 건너뜀 · `savedFields` 가 "캐릭터"
     CHECK: node scripts/check-stage34.mjs S34-G8
@@ -2253,29 +2253,29 @@ S39-G10 회귀 — S2(8)·S4(7)·S22(6)·S31(3)·S34(10)·S35(6)·S36(5) 검사�
   → 종족 낱말이 어절로(조사·"님" 까지) 서 있으면 추천·캐릭터를 **되묻는다**(LLM 없이, 추천이 첫 후보 — 안 묻는 마지막 턴에 40단계 전과 같게).
   "사람"·"인간"(일상어)·"기사"·"마법사"(뉴스 기사 · 설치 마법사)는 혼자서는 안 친다 `[판단]`. 되물음에 "추천으로"·칩 이름을 글로 쳐도 칩과 같다.
 
-S40-G1 기동 워밍업 — 캐시가 찬 채 재시작하면(워밍업 켬) 가짜 Ollama 에 임베딩 요청이 정확히 1건 · 입력은 `EMBED_WARMUP_TEXT` 한 줄(코퍼스 재임베딩 0) · 자동 기동을 켜도 Ollama 에 LLM 요청(`/api/generate`·`/api/chat`)이 안 간다(41단계 — LLM 은 Claude API) · `OLLAMA_WARMUP=0` 이면 0건(S27-G3 그대로)
+S40-G1 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 기동 때 임베딩 워밍업을 쟀다. (원래: 기동 워밍업 — 캐시가 찬 채 재시작하면(워밍업 켬) 가짜 Ollama 에 임베딩 요청이 정확히 1건 · 입력은 `EMBED_WARMUP_TEXT` 한 줄(코퍼스 재임베딩 0) · 자동 기동을 켜도 Ollama 에 LLM 요청(`/api/generate`·`/api/chat`)이 안 간다(41단계 — LLM 은 Claude API) · `OLLAMA_WARMUP=0` 이면 0건(S27-G3 그대로))
     CHECK: node scripts/check-stage40.mjs S40-G1
-    EXPECT: S40_G1_OK
+    EXPECT: S40_G1_RETIRED
 
-S40-G2 짧은 예산이 요청을 안 끊는다 — 임베딩 1500ms 지연에서 어절 둘 이상 확신 질의("느와르 포스터 만들건데 고급스러운 빨강")가 1초 안에 1단계 pair-15 · `hybridError` 있음 · 그 임베딩 요청은 가짜 Ollama 에서 **끝까지 응답**된다(끊김 0)
+S40-G2 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 짧은 임베딩 예산이 요청을 안 끊는지 쟀다. (원래: 짧은 예산이 요청을 안 끊는다 — 임베딩 1500ms 지연에서 어절 둘 이상 확신 질의("느와르 포스터 만들건데 고급스러운 빨강")가 1초 안에 1단계 pair-15 · `hybridError` 있음 · 그 임베딩 요청은 가짜 Ollama 에서 **끝까지 응답**된다(끊김 0))
     CHECK: node scripts/check-stage40.mjs S40-G2
-    EXPECT: S40_G2_OK
+    EXPECT: S40_G2_RETIRED
 
-S40-G3 어절 하나 확신은 기다린다 — 1500ms 지연에서 "병원 앱인데 차갑지 않게"(어절 하나)는 1400ms 이상 기다리고 `hybridError` 없음 · `EMBED_TIMEOUT_MS=2000` 에 3000ms 지연이면 2초 남짓에 BM25 답(pair-10)과 `hybridError`(죽은 임베딩에서 1단계 유지 · S26-G3 과 같은 뜻)
+S40-G3 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 어절 하나 BM25 확신이 임베딩을 기다리는지 쟀다. (원래: 어절 하나 확신은 기다린다 — 1500ms 지연에서 "병원 앱인데 차갑지 않게"(어절 하나)는 1400ms 이상 기다리고 `hybridError` 없음 · `EMBED_TIMEOUT_MS=2000` 에 3000ms 지연이면 2초 남짓에 BM25 답(pair-10)과 `hybridError`(죽은 임베딩에서 1단계 유지 · S26-G3 과 같은 뜻))
     CHECK: node scripts/check-stage40.mjs S40-G3
-    EXPECT: S40_G3_OK
+    EXPECT: S40_G3_RETIRED
 
-S40-G4 기록 — `/api/search` 응답에 `embed: {elapsedMs, budgetMs}` · `/api/chat` 검색 턴의 `traces.jsonl` 줄에 자식 `embed`(inputs `budgetMs`, outputs `ok`·`skipped`·`elapsedMs`·`error`)가 있고 지연 때 `ok:false`+사유, 정상 때 `ok:true` · Ollama 가 죽은 턴도 `ok:false · skipped:true`+사유 · 가짜 LangSmith 에 그 런이 `run_type: "embedding"` 으로 간다
+S40-G4 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 임베딩 런 기록(embed)을 쟀다. (원래: 기록 — `/api/search` 응답에 `embed: {elapsedMs, budgetMs}` · `/api/chat` 검색 턴의 `traces.jsonl` 줄에 자식 `embed`(inputs `budgetMs`, outputs `ok`·`skipped`·`elapsedMs`·`error`)가 있고 지연 때 `ok:false`+사유, 정상 때 `ok:true` · Ollama 가 죽은 턴도 `ok:false · skipped:true`+사유 · 가짜 LangSmith 에 그 런이 `run_type: "embedding"` 으로 간다)
     CHECK: node scripts/check-stage40.mjs S40-G4
-    EXPECT: S40_G4_OK
+    EXPECT: S40_G4_RETIRED
 
-S40-G5 튀어나옴 — `hybrid.js` 의 `prominence`·`PROMINENCE_MIN` 이 사본(0.12)과 같다 · 평평한 코사인은 BM25 증거가 없을 때 확신 안 함 · 같은 코사인이라도 BM25 증거가 있으면 지금처럼 확신 · 뾰족한 코사인은 확신 · 결정적(순수)
+S40-G5 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — hybrid.js 의 튀어나옴 판정을 쟀다. (원래: 튀어나옴 — `hybrid.js` 의 `prominence`·`PROMINENCE_MIN` 이 사본(0.12)과 같다 · 평평한 코사인은 BM25 증거가 없을 때 확신 안 함 · 같은 코사인이라도 BM25 증거가 있으면 지금처럼 확신 · 뾰족한 코사인은 확신 · 결정적(순수))
     CHECK: node scripts/check-stage40.mjs S40-G5
-    EXPECT: S40_G5_OK
+    EXPECT: S40_G5_RETIRED
 
-S40-G6 실제 bge-m3 — 인사·잡담 6건("안녕" "hello" "안녕하세요" "ㅋㅋㅋ" "오늘 날씨 좋다" "뭔가 이상해")이 `rewrite=0` 에서 확신 안 함 · 어휘 없는 정상 4건("과일 과육처럼 신선하고 혈기 넘치는" "파스텔톤 유아용품 브랜드" "올리브색" "코랄")은 확신 유지 · 26단계 23건 정답 21 이상(2026-09-27 실측 21) · 캐릭터 인상 "밝고 명랑한" "창백하고 슬픈" 은 `judgeProminence:false` 로 확신 유지 · `computeCharacter` 가 그 옵션으로 부른다
+S40-G6 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 실제 bge-m3 에서 잡담이 확신 안 되는지 쟀다. (원래: 실제 bge-m3 — 인사·잡담 6건("안녕" "hello" "안녕하세요" "ㅋㅋㅋ" "오늘 날씨 좋다" "뭔가 이상해")이 `rewrite=0` 에서 확신 안 함 · 어휘 없는 정상 4건("과일 과육처럼 신선하고 혈기 넘치는" "파스텔톤 유아용품 브랜드" "올리브색" "코랄")은 확신 유지 · 26단계 23건 정답 21 이상(2026-09-27 실측 21) · 캐릭터 인상 "밝고 명랑한" "창백하고 슬픈" 은 `judgeProminence:false` 로 확신 유지 · `computeCharacter` 가 그 옵션으로 부른다)
     CHECK: node scripts/check-stage40.mjs S40-G6
-    EXPECT: S40_G6_OK
+    EXPECT: S40_G6_RETIRED
 
 S40-G7 라우터 종족 낱말 — 고정 입력표: "금속 로봇 경비병"·"트롤 전사"·"유령 소년, 창백하고 슬픈"·"로봇에 어울리는 색"·"로봇한테 입힐 색"·"로봇이야"·"공주님 캐릭터" → [palette, character] · "사람 많은 카페 느낌"·"기계적인 느낌의 대시보드"·"뉴스 기사 썸네일 배경"·"설치 마법사 화면" → [palette] · "사람들이 편안하게 느끼는 색" → [diagnosis] · "검 든 기사 색 짜줘"·"빨간 머리 도적" → [character] (39단계 그대로)
     CHECK: node scripts/check-stage40.mjs S40-G7
@@ -2301,25 +2301,25 @@ S40-G9 회귀 — S3(10)·S22(6)·S26(7)·S27(7)·S28(4)·S29(3)·S30(4)·S34(10
 **옛 게이트의 가짜 Ollama 는 그대로 쓴다.** `scripts/lib/ollama-shim.mjs` 가 서버의 Claude 요청을 가짜 Ollama `/api/chat`
 형식으로 번역한다. 그 파일은 게이트가 띄운 프로세스에서 **Claude 키를 비운다** — 셸에 진짜 키가 있어도 게이트는 유료 API 를 안 부른다.
 
-S41-G1 LLM 이 Ollama 를 안 부른다 — 네 호출부에 `${BASE}/api/`·`/api/chat`·`ollama.js`·`pickModel` 이 없고 전부 `llm.js` 를 거친다 · 어디에도 `/api/generate`(LLM 워밍업)가 없다 · 임베딩은 여전히 `/api/embed`
+S41-G1 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 네 호출부가 Ollama 를 안 부르고 임베딩만 /api/embed 로 가는지 쟀다(Ollama 가 어디에도 없는 것은 S44-G1 이 본다). (원래: LLM 이 Ollama 를 안 부른다 — 네 호출부에 `${BASE}/api/`·`/api/chat`·`ollama.js`·`pickModel` 이 없고 전부 `llm.js` 를 거친다 · 어디에도 `/api/generate`(LLM 워밍업)가 없다 · 임베딩은 여전히 `/api/embed`)
     CHECK: node scripts/check-stage41.mjs S41-G1
-    EXPECT: S41_G1_OK
+    EXPECT: S41_G1_RETIRED
 
-S41-G2 네 호출부가 가짜 Claude 에 `model: claude-haiku-4-5` · JSON 스키마(`output_config.format`) · 키 헤더를 담아 보내고, 사용자 문장은 user 자리에만 있다. 답은 기존 파서가 그대로 읽는다(재작성어 · 구조 순서 · 캐릭터 from=llm)
+S41-G2 네 호출부가 가짜 Claude 에 `model: claude-haiku-4-5` · JSON 스키마(`output_config.format`) · 키 헤더를 담아 보내고, 사용자 문장은 user 자리에만 있다. 답은 기존 파서가 그대로 읽는다(구조 순서 · 캐릭터 from=llm). **44단계에서 재작성 호출부를 걷어내 넷째 호출부를 문장 → 의도로 바꿨다**
     CHECK: node scripts/check-stage41.mjs S41-G2
     EXPECT: S41_G2_OK
 
-S41-G3 임베딩은 로컬 Ollama bge-m3 로 간다 — 가짜 Ollama 에 코퍼스·질의 요청이 모델 bge-m3 로 오고, 외부 임베딩 API(`/v1/embeddings`)는 0번 · `src/` 코드에 voyage 가 없다
+S41-G3 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 임베딩이 로컬 bge-m3 로 가는지 쟀다. (원래: 임베딩은 로컬 Ollama bge-m3 로 간다 — 가짜 Ollama 에 코퍼스·질의 요청이 모델 bge-m3 로 오고, 외부 임베딩 API(`/v1/embeddings`)는 0번 · `src/` 코드에 voyage 가 없다)
     CHECK: node scripts/check-stage41.mjs S41-G3
-    EXPECT: S41_G3_OK
+    EXPECT: S41_G3_RETIRED
 
-S41-G4 Claude 키가 없으면 LLM 없이 돌고 죽지 않는다(검색 200 · 캐릭터 폴백) · 사유가 키 없음을 말한다 · 루프백 밖에서는 `llm` 이 state 만 내고 사유 원문이 안 나간다
+S41-G4 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 키 없을 때 검색이 도는지 쟀다(키 없는 동작은 S44-G7 이 본다). (원래: Claude 키가 없으면 LLM 없이 돌고 죽지 않는다(검색 200 · 캐릭터 폴백) · 사유가 키 없음을 말한다 · 루프백 밖에서는 `llm` 이 state 만 내고 사유 원문이 안 나간다)
     CHECK: node scripts/check-stage41.mjs S41-G4
-    EXPECT: S41_G4_OK
+    EXPECT: S41_G4_RETIRED
 
-S41-G5 기준값을 잰 모델(`THRESHOLDS_MEASURED_ON` = bge-m3)이 아닌 임베딩으로는 확신하지 않는다 · 같은 벡터로 bge-m3 면 확신한다(양성 대조)
+S41-G5 **44단계로 은퇴** — 검색 장치(BM25 · 임베딩 · 재작성 · /api/search)를 걷어냈다 — 임베딩 기준값의 모델 일치를 쟀다. (원래: 기준값을 잰 모델(`THRESHOLDS_MEASURED_ON` = bge-m3)이 아닌 임베딩으로는 확신하지 않는다 · 같은 벡터로 bge-m3 면 확신한다(양성 대조))
     CHECK: node scripts/check-stage41.mjs S41-G5
-    EXPECT: S41_G5_OK
+    EXPECT: S41_G5_RETIRED
 
 S41-G6 화면이 LLM 을 "로컬 · Ollama" 라고 부르지 않는다 — 세 HTML 의 기본 문구 · `ui.js` 상태 문구 · `/api/status` 의 `llm`
     CHECK: node scripts/check-stage41.mjs S41-G6
@@ -2379,7 +2379,7 @@ S42-G9 3안 — 유채색 바탕이면 세 안이 나오고 서로 다르다(3�
     CHECK: node scripts/check-stage42.mjs S42-G9
     EXPECT: S42_G9_OK
 
-S42-G10 경로 — 추천이 의도를 한 번 묻고 엔진 계산 그대로 `generated` 3안을 낸다(재작성은 안 부름) · 진단으로 읽히면 · 의도가 아닌 답이면 · 키가 없으면 옛 검색으로(과도기) · 색과 무관하면 되묻는다 · 사용자 문장은 user 자리에만
+S42-G10 경로 — 추천이 의도를 한 번 묻고 엔진 계산 그대로 `generated` 3안을 낸다(재작성은 안 부름) · 진단으로 읽히면 Claude 가 고른 진단 id 로 진단표 · 진단 별칭 문장을 Claude 가 무관으로 읽으면 별칭 진단 · 의도가 아닌 답이나 키 없음이면 "못 읽었다"(`unavailable`), 키 없어도 별칭 진단은 돈다 · 색과 무관하면 되묻는다 · 사용자 문장은 user 자리에만 (44단계에서 과도기 옛 검색 폴백을 이 동작으로 바꿨다)
     CHECK: node scripts/check-stage42.mjs S42-G10
     EXPECT: S42_G10_OK
 
@@ -2434,3 +2434,48 @@ S43-G9 조작된 기록 — 뼈대 없는 의도는 안 싣고, 헥스 · 모르
 S43-G10 기록 · 트레이스 · 화면 — 턴에 의도가 남는다 · 트레이스에 `previous:true` · `basis:refine` · 화면은 고른 안 번호만 보내고(의도는 안 보냄) 새 답에서 옛 고르개를 잠근다 · 칩 · "다른 결" 접기 · 접은 격자를 숨기는 CSS(`.expand__grid[hidden]`)
     CHECK: node scripts/check-stage43.mjs S43-G10
     EXPECT: S43_G10_OK
+
+## 44단계 — 검색 장치 걷어내기 (BM25 실험 종료 · 대표 결정 2026-10-02)
+
+설계: `docs/superpowers/specs/2026-10-02-intent-palette-design.md` 4절. BM25 · 로컬 Ollama 임베딩 · 질의 재작성 · `/api/search` 와 홈의 검색 결과 카드 ·
+"배색 구조로 펼치기" 를 걷어내고 옛 게이트 66개를 은퇴시켰다(`scripts/lib/retired.mjs` 의 `RETIRED_44` — 위 각 항목에 이유). 남은 보장은 아래가 다시 쓴다. 게이트 10개를 일부러 망가뜨려 확인했다(19건 중 18건 — 살아남은 하나는 **등가 변형**: 캐릭터 파서의 배색 쌍 목록 검사를 빼도 서버가 코퍼스에 없는 id 를 못 찾아 기본 쌍으로 물러선다 · 이중 방어).
+
+S44-G1 검색 장치가 없다 — `src/` 에 bm25 · hybrid · embed · ollama · pipeline · rewrite · vocabulary · stopwords · tokenize 가 없고 아무도 안 부른다 · 서버 · 화면 코드에 Ollama 포트 · `/api/embed` · bge-m3 · 프로세스 띄우기 · `OLLAMA_` 가 없다 · 검색 CLI 없음 · `/api/search` 404 · 기동 기록에 Ollama · 임베딩이 없다
+    CHECK: node scripts/check-stage44.mjs S44-G1
+    EXPECT: S44_G1_OK
+
+S44-G2 의도의 진단 칸 — 스키마는 지금 진단표 id 의 enum(또는 null) · required · 넘긴 목록을 쓴다 · 시스템 프롬프트에 id 와 증상 · 같은 코퍼스면 같은 문자열 · 검증은 모양만(대문자 · 경로 · 배열 · 숫자 · 긴 값 버림) · 저장 키에 안 닿는다
+    CHECK: node scripts/check-stage44.mjs S44-G2
+    EXPECT: S44_G2_OK
+
+S44-G3 진단 경로 — Claude 가 고른 진단이 맨 앞(from llm) · 연결 조합이 실린다 · 검색 점수 흔적 없음 · 진단 답과 홈에 "축" 없음("수축" 제외) · 진단표에 없는 id 면 되묻는다
+    CHECK: node scripts/check-stage44.mjs S44-G3
+    EXPECT: S44_G3_OK
+
+S44-G4 캐릭터 배색 쌍 — 파서 스키마 · 보낸 요청에 16쌍 enum · 프롬프트에 id 와 이름 · 목록 안이면 그 쌍(from llm), 목록 밖 · null · `__proto__` 면 기본 쌍(from fallback) · 검색 흔적(route · confident) 없음
+    CHECK: node scripts/check-stage44.mjs S44-G4
+    EXPECT: S44_G4_OK
+
+S44-G5 못 읽음 — 모델 답이 의도가 아니면 추천은 `unavailable` 이고 색을 싣지 않는다 · 기록은 topKind 없음 · usedLlm false · 화면은 색 코드를 권하고 다른 요청을 안 부른다
+    CHECK: node scripts/check-stage44.mjs S44-G5
+    EXPECT: S44_G5_OK
+
+S44-G6 코퍼스 다시 읽기(27단계 보장) — 별칭을 더해 저장하면 재시작 없이 채팅 진단이 잡고 version 이 1 오른다 · 깨진 JSON 이면 옛 코퍼스로 답하고 사유를 남긴다 · 깨진 코퍼스로는 "기동 실패" 한 줄로 안 뜬다(스택 트레이스 없음) · 루프백 밖에서는 사유 원문과 llm 상세를 숨긴다
+    CHECK: node scripts/check-stage44.mjs S44-G6
+    EXPECT: S44_G6_OK
+
+S44-G7 키 없음 — `/api/status` 에 stage · embed · ollama 가 없다 · 추천은 못 읽음 · 증상 낱말은 별칭 진단 · 색 코드 · 캐릭터(기본 쌍)는 돈다
+    CHECK: node scripts/check-stage44.mjs S44-G7
+    EXPECT: S44_G7_OK
+
+S44-G8 보이지 않는 문자만 있는 질의 — 채팅 400 · 펼치기 구조 · 재질 고르기도 모델을 안 쓴다 · 모델 호출 0 · 섞인 진짜 질의는 그 문자만 빠진 채 간다(양성 대조)
+    CHECK: node scripts/check-stage44.mjs S44-G8
+    EXPECT: S44_G8_OK
+
+S44-G9 화면 · 문서 — 세 화면의 상태 배지가 BM25 가 아니다 · "몇 단계" 없음 · 화면 코드에 임베딩 · 검색 결과 카드 · 펼치기 · `/api/search` 흔적 없음 · 내역은 Claude/규칙 · README 가 실험 종료를 말하고 Ollama 를 띄운다고 안 한다
+    CHECK: node scripts/check-stage44.mjs S44-G9
+    EXPECT: S44_G9_OK
+
+S44-G10 은퇴 기록 — 44단계로 은퇴한 게이트(66개)가 GATES.md 에 "44단계로 은퇴" · `_RETIRED` · 제 스크립트로 적혀 있고, 실제로 돌리면 `_RETIRED` 를 찍는다
+    CHECK: node scripts/check-stage44.mjs S44-G10
+    EXPECT: S44_G10_OK

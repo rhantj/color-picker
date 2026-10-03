@@ -5,6 +5,8 @@
 // **이 파일은 구현보다 먼저 쓰였다.** G1·G2 가 실패하는 것을 확인한 뒤에 src 를 고쳤다. G3 은 회귀다.
 
 // 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
+// 44단계 — 걷어낸 기능을 지키던 게이트는 은퇴(scripts/lib/retired.mjs). 맨 앞에서 불러야 다른 불러오기 전에 끝난다.
+import "./lib/retired.mjs";
 import "./lib/ollama-shim.mjs";
 import { spawn } from "node:child_process";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

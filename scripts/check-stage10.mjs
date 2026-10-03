@@ -197,9 +197,15 @@ const gates = {
       });
 
       for (const [label, dx] of [["연결되는", linked], ["연결 안 되는", unlinked]]) {
-        const res = await fetch(`${base}/api/search?q=${encodeURIComponent(dx.symptom)}&rewrite=0`);
-        const data = await res.json();
-        const hit = data.diagnostics?.find((x) => x.id === dx.id);
+        // 44단계 — `/api/search` 를 걷어냈다. 진단 답은 채팅이 낸다: 키가 없으면(이 게이트는 비운다) 라우터 별칭으로 진단표를
+        // id 로 찾는다. 별칭 하나가 캐릭터 낱말과 겹쳐 되물을 수 있어, 그 진단이 답에 나오는 별칭을 찾을 때까지 차례로 보낸다.
+        let hit = null;
+        for (const alias of dx.aliases ?? []) {
+          const res = await fetch(`${base}/api/chat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: alias }) });
+          const data = (await res.json())?.turn?.payload;
+          hit = data?.diagnostics?.find((x) => x.id === dx.id) ?? null;
+          if (hit) break;
+        }
         if (!hit) {
           bad.push(`${label} 진단 ${dx.id} 를 증상으로 못 찾았다 — 검사 전제가 깨졌다`);
           continue;

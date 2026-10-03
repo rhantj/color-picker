@@ -5,6 +5,7 @@
 
 import { LlmError, chatJson, refresh } from "./llm.js";
 import { BASES, CONTRASTS, HUES, KINDS, TEMPERATURES, TONES, USAGES, parseIntent } from "./compose.js";
+import { loadDiagnostics } from "./diagnostics.js";
 
 // 재작성(rewrite.js)과 같은 예산 `[판단]`. 41단계 실측으로 Claude 호출 하나가 1.6~2.7초였다.
 const TIMEOUT_MS = Number(process.env.INTENT_TIMEOUT_MS ?? 10000);
@@ -25,6 +26,7 @@ const SYSTEM = `너는 한국어 문장을 읽고 색 팔레트의 "의도"만 �
 - contrast: 차분하고 은은하면 "low", 또렷하고 강렬하면 "high", 아니면 "medium".
 - avoid: 사용자가 빼 달라고 한 색상. 없으면 [].
 - reading: 문장을 어떻게 읽었는지 한국어 한 줄(40자 안팎). 사용자에게 그대로 보인다. 색 코드를 쓰지 않는다.
+- diagnosis: kind 가 "diagnosis" 일 때만, 아래 진단 목록에서 가장 맞는 id. 맞는 것이 없거나 kind 가 다르면 null.
 
 색상 낱말: red 빨강 · orange 주황 · yellow 노랑 · yellow-green 연두 · green 초록 · teal 청록 · cyan 하늘 · blue 파랑 · indigo 남색 · purple 보라 · magenta 자홍 · pink 분홍 · neutral 무채색.
 갈색·베이지·카키 같은 색은 색상과 톤으로 나눠 쓴다 — 갈색은 orange + dark·deep·dull, 베이지는 orange + light-grayish·pale, 카키는 yellow-green + dull·grayish, 네이비는 indigo + dark.
@@ -39,8 +41,31 @@ const SYSTEM = `너는 한국어 문장을 읽고 색 팔레트의 "의도"만 �
 - 전혀 다른 것을 새로 찾는 말이면 basis 는 "new" 이고 직전 의도를 무시한다.
 - <previous_intent> 가 없으면 basis 는 늘 "new".`;
 
-/** 구조화 출력 스키마. 모양만 강제한다 — 값의 뜻(범위·겹침·뺄 색과의 충돌)은 parseIntent 가 본다. */
-export const INTENT_SCHEMA = Object.freeze({
+/**
+ * 시스템 프롬프트 = 고정 규칙 + 진단 목록(44단계). 목록은 코퍼스(data/diagnostics.json)에서 오고 사용자 문장 · 대화 기록은 안 섞인다.
+ * 코퍼스가 바뀌지 않는 한 늘 같은 문자열이다.
+ */
+export function systemPrompt(diagnostics) {
+  const list = diagnostics.map((d) => `- ${d.id}: ${d.symptom} (${(d.aliases ?? []).slice(0, 4).join(", ")})`).join("\n");
+  return `${SYSTEM}\n\n진단 목록(diagnosis 칸에 쓸 수 있는 id):\n${list}`;
+}
+
+/**
+ * 구조화 출력 스키마. 모양만 강제한다 — 값의 뜻(범위·겹침·뺄 색과의 충돌)은 parseIntent 가, 진단 id 가 지금 코퍼스에 있는지는 서버가 본다.
+ * 진단 id 는 enum 이다 — 목록 밖 답을 못 하게 묶는다(44단계).
+ */
+export function intentSchema(diagnosisIds) {
+  return {
+    ...BASE_SCHEMA,
+    properties: {
+      ...BASE_SCHEMA.properties,
+      diagnosis: diagnosisIds.length ? { anyOf: [{ type: "string", enum: [...diagnosisIds] }, { type: "null" }] } : { type: "null" },
+    },
+    required: [...BASE_SCHEMA.required, "diagnosis"],
+  };
+}
+
+const BASE_SCHEMA = Object.freeze({
   type: "object",
   properties: {
     kind: { type: "string", enum: [...KINDS] },
@@ -77,6 +102,21 @@ export const INTENT_SCHEMA = Object.freeze({
 });
 
 /**
+ * 기동 때의 진단 목록으로 만든 스키마 — 게이트가 모양을 본다. 서버는 요청마다 지금 코퍼스로 `intentSchema` 를 만든다.
+ * **읽기 실패로 던지지 않는다.** 이 파일은 server.js 가 코퍼스를 검사하기 전에 불러온다 — 여기서 던지면 깨진 코퍼스가
+ * "기동 실패: …" 한 줄 대신 스택 트레이스로 죽는다(44단계 S44-G6 이 잡았다). 코퍼스 검사는 server.js 의 몫이다.
+ */
+export const INTENT_SCHEMA = intentSchema(diagnosisIdsOrEmpty());
+
+function diagnosisIdsOrEmpty() {
+  try {
+    return loadDiagnostics().map((d) => d.id);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * 사용자 메시지. 직전 의도가 없으면 문장 그대로(42단계와 같다). 있으면 **표시한 두 블록** — 직전 의도는 검증을 거친 것만,
  * 색에 닿는 칸만 싣는다. 시스템 프롬프트는 늘 같다 — 사용자 문장도 저장 자료도 거기 섞지 않는다(llm.js 규칙 3).
  */
@@ -93,11 +133,12 @@ ${text}
 
 /**
  * @param {string} text
- * @param {{ previous?: object | null }} [options] 직전 의도 — **parseIntent 를 거친 것**이어야 한다. 없으면 새로 읽는다
+ * @param {{ previous?: object | null, diagnostics?: object[] }} [options] 직전 의도 — **parseIntent 를 거친 것**이어야 한다. 없으면 새로 읽는다.
+ *   diagnostics — 지금 코퍼스의 진단 목록(서버가 넘긴다). 안 주면 파일에서 읽는다
  * @returns {Promise<{intent: object, model: string, elapsedMs: number} | {error: string, model?: string}>}
  * 던지지 않는다.
  */
-export async function readIntent(text, { previous = null } = {}) {
+export async function readIntent(text, { previous = null, diagnostics = loadDiagnostics() } = {}) {
   const state = await refresh();
   if (state.state !== "ready") return { error: `Claude 를 쓸 수 없다 (${state.detail})` };
   const { model } = state;
@@ -106,7 +147,7 @@ export async function readIntent(text, { previous = null } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const raw = await chatJson({ system: SYSTEM, user: intentMessage(text, previous), schema: INTENT_SCHEMA, timeoutMs: TIMEOUT_MS, signal: controller.signal });
+    const raw = await chatJson({ system: systemPrompt(diagnostics), user: intentMessage(text, previous), schema: intentSchema(diagnostics.map((d) => d.id)), timeoutMs: TIMEOUT_MS, signal: controller.signal });
     const intent = parseIntent(raw);
     if (!intent) return { error: "모델 응답을 해석하지 못했다", model };
     // 고칠 것이 없는데 "고친다" 고 하면 그 말을 안 믿는다 — 칩을 비교할 짝이 없다.

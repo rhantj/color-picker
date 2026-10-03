@@ -5,7 +5,9 @@
 // 41단계 — 서버가 Claude·Voyage API 를 부르게 되면서, 게이트의 가짜 Ollama 를 그 API 로 보이게 한다. 키도 비운다(유료 호출 차단).
 import "./lib/ollama-shim.mjs";
 import { readFileSync } from "node:fs";
-import { createSearcher, loadPalettes } from "../src/palettes.js";
+// 44단계 — 검색기(createSearcher)를 걷어냈다. 그것을 쓰던 S1-G2 · G3 은 은퇴(scripts/lib/retired.mjs).
+import "./lib/retired.mjs";
+import { loadPalettes } from "../src/palettes.js";
 
 const out = (line = "") => process.stdout.write(Buffer.from(line + "\n", "utf8"));
 

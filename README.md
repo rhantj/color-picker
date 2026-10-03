@@ -4,8 +4,8 @@
 바꾸고, 색은 OKLCH 엔진이 계산한다 — **Claude 는 헥스를 만들지 않는다**(42단계 · `docs/superpowers/specs/2026-10-02-intent-palette-design.md`).
 
 처음에는 `docs/com/rag-is-simpler-than-you-think.md` 의 주장 — *BM25 + 질의 재작성이면 대부분 충분하고 벡터DB는 과잉이다* — 을
-시험하려고 만든 실험 사이트였다. **그 실험은 2026-10-02 에 끝냈다**(대표 결정). 검색 장치(BM25 · 로컬 Ollama 임베딩)는 진단 · 캐릭터 경로와
-Claude 를 못 쓸 때의 과도기 폴백으로만 남아 있고 44단계에서 걷어낸다.
+시험하려고 만든 실험 사이트였다. **그 실험은 2026-10-02 에 끝냈다**(대표 결정). 44단계에서 검색 장치(BM25 · 로컬 Ollama 임베딩 ·
+질의 재작성 · `/api/search`)를 전부 걷어냈다 — 진단도 캐릭터의 배색 쌍도 Claude 가 목록에서 고른다.
 
 ## 돌리기
 
@@ -15,25 +15,26 @@ node --env-file-if-exists=.env server.js
 ```
 
 `http://127.0.0.1:4173`. 의존성은 **`@anthropic-ai/sdk` 하나**다(41단계 — 그 전에는 0개였다). Node 24, ESM.
-`.env` 는 없어도 된다 — 키가 없으면 LLM·임베딩 없이 전문 검색(1단계)으로 돈다. `.env.example` 을 `.env` 로 복사해
-`ANTHROPIC_API_KEY`(와 LangSmith 키)를 넣는다. **추천 문장 · 저신뢰 질의 · 캐릭터 문장 · 펼치기 질문이 Anthropic 으로 나간다.** 키가 없으면 추천은 옛 검색으로 물러선다(44단계 전까지).
-임베딩은 로컬 Ollama(bge-m3)라 서버가 켜질 때 Ollama 를 띄운다(`OLLAMA_AUTOSTART=0` 이면 안 띄움).
+`.env.example` 을 `.env` 로 복사해 `ANTHROPIC_API_KEY`(와 LangSmith 키)를 넣는다. **추천 · 진단 문장 · 캐릭터 문장 · 펼치기 질문이 Anthropic 으로 나간다.**
+`.env` 가 없어도 서버는 뜬다 — 그때는 **추천 문장을 못 읽는다고 말하고**, 색 코드 · 색 이름 · 증상 낱말("탁해요")로 찾는 진단 · 캐릭터(기본 배색 쌍)만 돈다.
+Ollama 는 더 쓰지 않는다(44단계).
 
 ## 화면
 
 | 경로 | 무엇 |
 |---|---|
-| `/` | **채팅창 하나.** 문장을 쓰면 서버가 어휘표만으로 네 경로 중 하나로 가른다 — **추천**(문장 → Claude 가 읽은 의도 → 팔레트 3안: 충실 · 부드럽게 · 대담하게. UI 쓰임새면 바탕 · 면 · 본문 · 주색 · 강조 역할과 작은 화면 미리보기. 이어서 "좀 더 따뜻하게" 처럼 쓰면 **고른 안을 기준으로** 직전 의도를 고치고 바뀐 칸을 칩으로 보인다 — 43단계), **진단**(증상 → 원인과 처방), **캐릭터**(외형 묘사 → 부위 여섯의 색과 재질), **색**(`#E07A5F`·"테라코타" → 배색사전 짝 셋과 배색 구조 여덟). 캐릭터와 진단으로 함께 읽히거나("도적 상의가 탁해") 정보가 모자라면 **한 번만 되묻는다.** 대화는 사용자 턴 10개까지, 넘으면 새 대화. "색으로 봐줘" 처럼 말하면 직전 질문을 그 경로로 다시 푼다. 카드의 저장·펼치기·비율·재질은 전과 같다 |
-| `/history` | 질문과 각 질문이 몇 단계에서 끝났는지. 이어서·다시 묻기 |
+| `/` | **채팅창 하나.** 문장을 쓰면 서버가 어휘표만으로 네 경로 중 하나로 가른다 — **추천**(문장 → Claude 가 읽은 의도 → 팔레트 3안: 충실 · 부드럽게 · 대담하게. UI 쓰임새면 바탕 · 면 · 본문 · 주색 · 강조 역할과 작은 화면 미리보기. 이어서 "좀 더 따뜻하게" 처럼 쓰면 **고른 안을 기준으로** 직전 의도를 고치고 바뀐 칸을 칩으로 보인다 — 43단계), **진단**(증상 → 원인과 처방), **캐릭터**(외형 묘사 → 부위 여섯의 색과 재질), **색**(`#E07A5F`·"테라코타" → 배색사전 짝 셋과 배색 구조 여덟). 캐릭터와 진단으로 함께 읽히거나("도적 상의가 탁해") 정보가 모자라면 **한 번만 되묻는다.** 대화는 사용자 턴 10개까지, 넘으면 새 대화. "색으로 봐줘" 처럼 말하면 직전 질문을 그 경로로 다시 푼다. 카드의 저장 · 비율 · 재질은 전과 같다(검색 결과 카드와 그 "배색 구조로 펼치기" 는 44단계에서 걷어냈다) |
+| `/history` | 질문과 각 질문을 Claude 가 읽었는지("Claude" · "규칙"). 이어서·다시 묻기 |
 | `/saved` | 저장한 조합과 **파생 팔레트**. 비율 재조정(다색 포함), 메모 편집·삭제. **내보내기는 코퍼스 조합만** — 파생은 형식이 달라 아직 안 된다 |
 
 ## 어떻게 도는가
 
 ```
 문장 → 라우터(어휘표) ┬ 추천 → Claude 한 번(의도) → OKLCH 엔진 → 3안        (42단계)
-                     │        └ 진단으로 읽힘 · Claude 를 못 씀 → 아래 옛 검색(과도기)
-                     ├ 진단 → 팔레트·진단 BM25 + 임베딩 → (저신뢰면) LLM 재작성 → 진단표
-                     ├ 캐릭터 → Claude 파서 → 부위별 색
+                     │        ├ 진단으로 읽힘 → Claude 가 진단 목록에서 고른 id → 진단표          (44단계)
+                     │        └ Claude 를 못 씀 → "못 읽었다" (지어내지 않는다)
+                     ├ 진단(증상 낱말) → 같은 의도 호출 · Claude 를 못 쓰면 별칭 id 로 진단표
+                     ├ 캐릭터 → Claude 파서(부위 색 낱말 · 16쌍 중 배색 쌍) → 부위별 색
                      └ 색 → 배색사전 짝 · 구조 8가지
 ```
 
@@ -45,7 +46,8 @@ OKLCH 좌표로 계산한다. 같은 의도는 늘 같은 색이다. UI 쓰임�
 역할마다 재질(무광·광택·메탈릭·발광)을 배정한다. 두 호출은 나란히 나간다.
 고르는 것은 구조 id 와 재질 id 뿐이고 **헥스는 LLM 이 만들지 않는다** — 씨앗 색의 HSL 연산으로만 나온다.
 
-(41단계까지의 측정: 대부분의 검색 질의가 1단계에서 끝났다 — 문서가 말한 "60% 는 전문 검색 + 재작성에서 종료" 와 같은 방향.)
+(실험이 끝나기 전 41단계까지의 측정: 대부분의 검색 질의가 BM25 1단계에서 끝났다 — 문서가 말한 "60% 는 전문 검색 + 재작성에서 종료" 와 같은 방향.
+그래도 "차분한데 포인트는 강렬하게" 같은 조건 둘을 담을 그릇이 없어 42 · 43 · 44단계에서 의도 → 엔진으로 바꿨다.)
 
 ## 코퍼스
 
@@ -54,10 +56,10 @@ OKLCH 좌표로 계산한다. 같은 의도는 늘 같은 색이다. UI 쓰임�
 | `data/palettes.json` | 배색 16쌍 | 와다 산조 『배색사전』 |
 | `data/diagnostics.json` | 진단 18건 (증상 → 축 → 처방) | color-design 스킬 본문. 항목마다 `source` 표기 |
 | `data/structures.json` | 배색 구조 8가지 (이름 · 원리 · 출처) | color-design 스킬 본문. 항목마다 `source` 표기 |
-| `data/seeds.json` | 씨앗 24쌍 (헥스 · 원명만) | 배색사전 원서의 공개 전사본. **해설이 없어 검색 색인에 넣지 않는다** — 씨앗 전용 |
+| `data/seeds.json` | 씨앗 24쌍 (헥스 · 원명만) | 배색사전 원서의 공개 전사본. **해설이 없어** 씨앗 전용 |
 | `data/finishes.json` | 재질 4가지 (이름 · 원리 · 출처) | color-design 스킬 `references/light.md`. 항목마다 `source` 표기 |
 
-씨앗은 **40쌍**이다 — 해설까지 달린 코퍼스 16쌍과, 헥스만 있는 씨앗 풀 24쌍. 검색은 16쌍만 하고,
+씨앗은 **40쌍**이다 — 해설까지 달린 코퍼스 16쌍과, 헥스만 있는 씨앗 풀 24쌍. 짝 · 배색 쌍 · 진단 연결은 16쌍만 쓰고,
 배색 구조 확장은 40쌍 전부에 한다.
 
 **원전에 없는 것은 코퍼스에 넣지 않는다.** 면적 비율이 그래서 `public/ratio.js` 의 규칙으로 빠져
@@ -69,31 +71,29 @@ OKLCH 좌표로 계산한다. 같은 의도는 늘 같은 색이다. UI 쓰임�
 
 | 자리 | 파일 |
 |---|---|
-| 검색 | `src/tokenize.js`(어절+2-gram) · `src/bm25.js` · `src/stopwords.js` · `src/vocabulary.js` |
 | 코퍼스 | `src/palettes.js` · `src/diagnostics.js` · `data/*.json` |
-| LLM | `src/llm.js`(Claude API 호출 한 곳 · 구조화 출력) · `src/quota.js`(IP 당 호출 한도) · `src/rewrite.js`(의도+재작성) · `src/structure.js`(구조 선택) · `src/finish.js`(재질 배정) · `src/query.js`(빈 질의 판정 — 서식 문자를 지운다) |
+| LLM | `src/llm.js`(Claude API 호출 한 곳 · 구조화 출력) · `src/quota.js`(IP 당 호출 한도) · `src/structure.js`(구조 선택) · `src/finish.js`(재질 배정) · `src/query.js`(빈 질의 판정 — 서식 문자를 지운다) |
 | 대화 | `src/route.js`(어휘표 라우터 · 순수) · `src/chat.js`(되묻기 상태 기계) · `src/trace.js`(`var/traces.jsonl` + LangSmith REST) |
-| 임베딩 | `src/ollama.js`(로컬 Ollama 수명주기 — 임베딩용) · `src/embed.js`(bge-m3 벡터 · 준비 · 유사도 · **내용 해시 캐시** → `var/embeddings.json`) · `src/hybrid.js`(RRF 결합 · 동의 · 문턱, 순수 함수) |
 | 코퍼스 자리 | `src/corpus-paths.js`(`TONEFIRST_CORPUS_DIR` 오버라이드 한 곳). 파이프라인이 요청 때 2초 TTL 로 파일 시각을 보고 바뀌었으면 다시 읽는다(27단계) |
 | 문장 → 색 | `src/intent.js`(Claude 가 의도를 읽는다 · 스키마에 헥스 칸 없음) · `src/compose.js`(의도 검증 · 낱말표 · OKLCH 엔진 · 3안 — 수치는 여기 한 곳) · `src/oklch.js`(OKLab 변환 · 화면 안 처리) |
 | 색 파생 | `src/expand.js`(씨앗 2색 → 배색 구조 8가지. HSL 연산만, LLM 안 닿음) · `src/seeds.js`(씨앗 풀 적재) · `src/from-color.js`(색 하나 → 배색사전 짝 · 구조 8가지. 입력 해석과 거리 함수) |
 | 재질 | `src/material.js`(역할색 → PBR 머티리얼. 수치는 여기 한 곳) · `data/finishes.json`(재질 4개, 문자열만) |
-| 흐름 | `src/pipeline.js`(단계 승급) |
+| 코퍼스 홀더 | `src/corpus.js`(배색 16쌍 · 진단 18건을 들고, 파일이 바뀌면 요청 때 다시 읽는다 — 27단계 동작을 44단계에서 검색 밖으로 옮김) |
 | 저장 | `src/store.js` → `var/*.json` |
 | 내보내기 | `src/export.js` |
 | 서버 | `server.js` |
 | 면적 | `public/ratio.js`(2색 규칙 · 3색 이상 균등 · 엔진이 준 면적 · 슬라이더 재배분) |
 | 게이트 러너 | `scripts/run-gates.mjs`(GATES.md 전부 · 같은 검사기는 순서대로 · 접두어로 거르기) |
 | 화면 | `public/` |
-| 게이트 | `GATES.md` + `scripts/check-stage{1..43}.mjs` |
+| 게이트 | `GATES.md` + `scripts/check-stage{1..44}.mjs` |
 
-## 게이트 298개 (은퇴 2)
+## 게이트 308개 (은퇴 68)
 
 ```bash
 node scripts/check-stage1.mjs S1-G1
 ```
 
-`GATES.md` 에 298개가 전부 있고(41단계로 은퇴한 2개는 `_RETIRED` 를 찍는다) 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
+`GATES.md` 에 308개가 전부 있고(은퇴한 68개 — 41단계 2개 · 44단계 66개 — 는 이유와 함께 `_RETIRED` 를 찍는다. 44단계 은퇴는 검색 장치와 홈의 검색 결과 카드 · 펼치기를 걷어낸 탓이다 — `scripts/lib/retired.mjs`) 각 항목에 `CHECK:` / `EXPECT:` 가 붙어 있다.
 **게이트는 만들 때마다 일부러 망가뜨려 확인했다** — 통과하는 게이트보다 고장을 잡는 게이트가 목적이다.
 
 | 단계 | 수 | 무엇을 지키나 |
@@ -139,14 +139,15 @@ node scripts/check-stage1.mjs S1-G1
 | S41 | 9 | **LLM 을 Claude API 로 · 임베딩은 로컬 bge-m3 그대로** — LLM 이 Ollama 를 안 부름 · 요청 모양(모델·스키마·키) · 임베딩은 로컬로만 · 키 없으면 LLM 없이 · 안 잰 임베딩 모델로 확신 안 함 · Vercel 감지 · IP 당 호출 한도 · 은퇴 기록 |
 | S42 | 12 | **문장 → 의도 → 색** — 결정성 · 색을 지어내지 않음 · 의도 검증 · 색 수와 면적 · 뺄 색 · 포인트가 가장 선명 · UI 대비(WCAG) 전수 · 화면 안 · 3안이 다름 · 경로와 과도기 폴백 · 저장 재계산 · 기록 |
 | S43 | 10 | **대화로 다듬기** — basis 검증 · 바뀐 칸 칩 · 고른 안이 맨 앞 · 직전 의도의 자리(user 블록) · 다듬기 응답 · 고른 안 번호 검증 · 새 요청 · 같은 대화 안에서만 · 조작된 기록 · 기록 · 화면 |
+| S44 | 10 | **검색 장치 걷어내기** — 검색 모듈 · Ollama · `/api/search` 가 없다 · 의도의 진단 칸(진단표 enum) · Claude 가 고른 진단 · 캐릭터 배색 쌍(16쌍 enum) · 못 읽음은 지어내지 않음 · 코퍼스 다시 읽기 · 키 없을 때 · 폭 0 문자 · 화면 · 문서 · 은퇴 기록 |
 
 ## 환경변수
 
 `PORT` `HOST` `ANTHROPIC_API_KEY` `CLAUDE_MODEL`(기본 `claude-haiku-4-5`) `LLM_MAX_RETRIES`(기본 1)
-`OLLAMA_HOST` `OLLAMA_BIN` `OLLAMA_AUTOSTART=0` `OLLAMA_WARMUP=0` `OLLAMA_EMBED_MODEL`(기본 `bge-m3`) `LLM_RATE_PER_MIN`(IP 당 1분 호출 한도, 기본 30) `LLM_RATE_GLOBAL_PER_MIN`(기본 200)
-`REWRITE_TIMEOUT_MS` `STRUCTURE_TIMEOUT_MS` `FINISH_TIMEOUT_MS` `DESCRIBE_TIMEOUT_MS`(기본 10초) `TONEFIRST_DATA_DIR`(Vercel 에서는 기본 `/tmp/tonefirst`)
-`EMBED_TIMEOUT_MS` `EMBED_PREPARE=0`(코퍼스 벡터화 건너뜀) — `VERCEL` 은 Vercel 이 넣는다(루프백으로 안 친다 · 저장 폴더 /tmp)
-`TONEFIRST_CORPUS_DIR`(검색 코퍼스 둘의 자리, 기본 `data/`) — 임베딩 캐시 `embeddings.json` 은 `TONEFIRST_DATA_DIR`(기본 `var/`) 에 남는다
+`LLM_RATE_PER_MIN`(IP 당 1분 호출 한도, 기본 30) `LLM_RATE_GLOBAL_PER_MIN`(기본 200)
+`INTENT_TIMEOUT_MS` `STRUCTURE_TIMEOUT_MS` `FINISH_TIMEOUT_MS` `DESCRIBE_TIMEOUT_MS`(기본 10초) `TONEFIRST_DATA_DIR`(Vercel 에서는 기본 `/tmp/tonefirst`)
+`VERCEL` 은 Vercel 이 넣는다(루프백으로 안 친다 · 저장 폴더 /tmp)
+`TONEFIRST_CORPUS_DIR`(코퍼스 둘의 자리, 기본 `data/`). Ollama · 임베딩 환경변수(`OLLAMA_*` · `EMBED_*` · `REWRITE_TIMEOUT_MS`)는 44단계에서 없어졌다
 
 ## 알려진 한계 (의도적)
 

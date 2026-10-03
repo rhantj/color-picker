@@ -1,18 +1,13 @@
 // 홈 화면 — 채팅창 하나(39단계). 렌더 조각은 ui.js 가 세 화면과 공유한다.
 
-import { api, applyModeButton, characterStructure, diagnosisCard, el, finishEditing, finishOverrides, modeStore, nextMode, paletteCard, refreshRuntime, sourceLine, structureCard, swatchView } from "./ui.js";
+import { api, applyModeButton, characterStructure, diagnosisCard, el, finishEditing, finishOverrides, modeStore, nextMode, refreshRuntime, sourceLine, structureCard, swatchView } from "./ui.js";
 
 const form = document.getElementById("search-form");
 const input = document.getElementById("q");
 const submit = form.querySelector(".searchbar__submit");
 const chatList = document.getElementById("chat");
 
-const INTENT_LABEL = { palette: "팔레트 탐색", diagnosis: "진단", other: "색과 무관" };
 const ROUTE_LABEL = { palette: "추천으로", diagnosis: "진단으로", character: "캐릭터로", color: "색으로" };
-
-// 서버의 LIMITS.noteChars 와 **같아야 한다.** 어긋나면 사용자는 다 썼다고 보는데 서버가 조용히
-// 잘라, 저장된 뒤에야 알게 된다. 홈은 한계값을 받아오지 않으므로 S8-G4 가 두 값을 대조한다.
-const NOTE_MAX = 200;
 
 // 한 번 보내면 그 뒤로는 같은 대화에 이어 붙인다. 새로고침하면 새 대화가 열린다 —
 // 대화의 경계를 사용자가 선언하게 만들지 않고 세션으로 잡는다.
@@ -24,327 +19,40 @@ const threadMeta = document.getElementById("thread-meta");
 
 /* ── 답 카드 ─────────────────────────────────────────────── */
 
-/**
- * 결과 카드 하나. 슬라이더로 조정한 비율을 들고 있다가 저장할 때 함께 보낸다 —
- * 비율은 코퍼스가 모르는 값이고 사용자의 판단이므로, 저장되는 것이 기본값이 아니라 조정한 값이어야 한다.
- */
-function resultCard(result, rank, featured, original) {
-  let ratio = null; // null 이면 서버가 규칙의 기본값을 쓴다
-
-  const box = el("div", "card__actions");
-  const button = el("button", "action action--primary", "조합 저장");
-  button.type = "button";
-  const feedback = el("span", "action__feedback");
-
-  // 메모는 저장할 때 함께 보낸다. 비어 있으면 아예 안 보내서, 앞서 적어 둔 메모가 남게 한다 —
-  // 빈 값을 보내는 것은 서버에서 "지우기" 로 읽히기 때문이다.
-  const memo = el("input", "action__memo");
-  memo.type = "text";
-  memo.maxLength = NOTE_MAX;
-  memo.placeholder = "메모 (선택) — 어디에 쓸 색인지";
-  memo.setAttribute("aria-label", `${result.name} 조합에 남길 메모`);
-
-  // 전송 중인지와 저장이 끝났는지를 버튼의 disabled 하나로 겸하면, 전송 중 입력이 버튼을 다시
-  // 열어 중복 전송이 된다. 상태를 따로 잡는다.
-  let pending = false;
-  // 전송 중에 사용자가 바꾼 것이 있는가. 전송 중에는 버튼을 안 열지만 **바뀐 사실은 남겨 둔다** —
-  // 그냥 버리면 전송된 값과 화면 값이 다른데 버튼은 "저장됨" 으로 잠긴 채 남아, 사용자가 한 번 더
-  // 건드리기 전에는 다시 저장할 방법이 없다.
-  let changedWhilePending = false;
-
-  // 버튼을 다시 여는 자리는 둘이다 — 메모 입력과 비율 변경. 한 곳에 모아 두 경로가 갈라지지
-  // 않게 한다. 실제로 한쪽에만 pending 가드가 있어 비율 쪽으로 중복 전송이 열려 있었다.
-  const reopen = (label) => {
-    if (pending) {
-      changedWhilePending = true;
-      return;
-    }
-    button.disabled = false;
-    button.textContent = label;
-    feedback.textContent = "";
-  };
-
-  const save = async () => {
-    pending = true;
-    changedWhilePending = false;
-    button.disabled = true;
-    const note = memo.value.trim();
-    try {
-      await api("/api/saved", {
-        paletteId: result.id,
-        fromQuery: original,
-        ...(ratio ? { ratio: ratio[0] } : {}),
-        ...(note ? { note } : {}),
-      });
-      button.textContent = "저장됨";
-      feedback.textContent = ratio
-        ? `${ratio[0]} : ${ratio[1]} 비율로 저장했습니다`
-        : "‘추천 받은 조합’ 에서 볼 수 있습니다";
-    } catch (err) {
-      feedback.textContent = err.message;
-      button.disabled = false;
-    } finally {
-      pending = false;
-      // 전송 중에 바뀐 것이 있으면 지금 연다. 이 시점에는 pending 이 끝나 중복 전송이 안 된다.
-      if (changedWhilePending) {
-        changedWhilePending = false;
-        reopen("바뀐 내용으로 저장");
-      }
-    }
-  };
-
-  // 저장한 뒤 메모를 고치면 다시 저장할 수 있어야 한다. 비율을 고쳤을 때와 같은 규칙이다.
-  memo.addEventListener("input", () => {
-    if (!pending && !button.disabled) return;
-    reopen("메모와 함께 저장");
-  });
-
-  button.addEventListener("click", save);
-  box.append(memo, button, feedback, expansionSection(result.id, original));
-
-  return paletteCard(result, rank, {
-    featured,
-    actions: box,
-    onRatio: (next) => {
-      // 값은 항상 받아 둔다. 전송 중이라고 여기서 버리면 사용자가 맞춘 비율이 사라진다 —
-      // 버튼을 여는 것만 미루고, 미뤘다는 사실은 reopen 이 기억한다.
-      ratio = next;
-      // 이미 저장한 뒤 비율을 바꿨다면 다시 저장할 수 있어야 한다.
-      reopen("이 비율로 저장");
-    },
-  });
-}
+const DIAGNOSIS_FROM = { llm: "Claude 가 진단표에서 골랐습니다", alias: "증상 낱말로 진단표에서 찾았습니다" };
 
 /**
- * 조합 하나를 배색 구조 여덟으로 펼치는 자리.
- *
- * **색을 보내지 않고 씨앗 id 만 보낸다.** 서버가 코퍼스·씨앗 풀에서 찾아 계산한다 —
- * 화면이 준 색을 서버가 믿지 않는 규칙(S4)과 같은 자리다.
- *
- * 접힌 상태로 시작한다. 여덟 장을 늘 펼쳐 두면 결과 하나가 화면을 통째로 먹는다.
- * 한 번 받아 온 것은 다시 받지 않는다 — 파생은 결정적이라(S11-G3) 같은 씨앗은 늘 같은 답이다.
+ * 진단 답(44단계). 진단표에서 **id 로** 찾은 항목이다 — 검색 점수가 없다. 어디서 골랐는지(Claude · 증상 낱말)는 한 줄로 밝힌다.
+ * 맞는 것이 없으면 채팅이 되묻기 때문에 여기 빈 목록이 오는 것은 마지막 턴(되묻지 않는 자리)뿐이다.
  */
-function expansionSection(seedId, query) {
-  const box = el("div", "expand");
-  const toggle = el("button", "expand__toggle", "배색 구조로 펼치기");
-  toggle.type = "button";
-  toggle.setAttribute("aria-expanded", "false");
-
-  const body = el("div", "expand__body");
-  body.hidden = true;
-
-  const note = el("p", "expand__note");
-  let loaded = false;
-  let pending = false;
-
-  /*
-   * **모드 상태는 여전히 이 영역 클로저 안에만 있다.** 카드마다 다른 모드로 나란히
-   * 비교할 수 있어야 하기 때문이다 — 전역으로 올리면 한 카드를 어둡게 하는 순간
-   * 나머지가 전부 따라 어두워진다.
-   *
-   * **바뀐 것은 시작값뿐이다(23단계).** 전에는 늘 밝은 모드로 시작해서 새로고침할 때마다
-   * 다시 눌러야 했다. 이제 **기본 모드 하나**를 기억하고 그것으로 시작한다.
-   * 그 뒤로는 카드마다 따로 토글할 수 있다 — 원래 결정의 값은 그대로 산다.
-   */
-  const modes = modeStore();
-  let mode = modes.read();
-  /*
-   * **손으로 바꾼 재질도 여기, redraw 밖에 둔다.** 모드 토글이 격자를 통째로 다시 그리므로
-   * 카드 안에 두면 어두운 모드로 바꾸는 순간 고친 것이 전부 사라진다 —
-   * 15단계에서 겪은 것과 같은 부류이고 `S21-G4` 가 이 자리를 검사한다.
-   */
-  const overrides = finishOverrides();
-  // 받아 둔 데이터로 다시 그리는 자리. 펼치기 전에는 그릴 것이 없어 null 이다.
-  let redraw = null;
-
-  toggle.addEventListener("click", async () => {
-    if (!body.hidden) {
-      body.hidden = true;
-      toggle.setAttribute("aria-expanded", "false");
-      toggle.textContent = "배색 구조로 펼치기";
-      return;
-    }
-
-    body.hidden = false;
-    toggle.setAttribute("aria-expanded", "true");
-    toggle.textContent = "접기";
-    if (loaded || pending) return;
-
-    pending = true;
-    note.textContent = "펼치는 중…";
-    body.replaceChildren(note);
-    try {
-      const q = (query ?? "").trim();
-      const data = await api(
-        `/api/expand?seed=${encodeURIComponent(seedId)}${q ? `&q=${encodeURIComponent(q)}` : ""}`,
-      );
-      const byId = new Map(data.structures.map((st) => [st.id, st]));
-      const chosen = (data.selection?.ids ?? []).map((id) => byId.get(id)).filter(Boolean);
-      const rest = data.structures.filter((st) => !data.selection?.ids?.includes(st.id));
-
-      // 무엇이 골랐는지는 화면에 적지 않는다(31단계 · 대표 지시). 서버 응답의 selection.from 은 그대로 온다.
-      note.replaceChildren();
-
-      // 재질 배정의 출처(finishes.from)도 화면에 적지 않는다(31단계). 되돌릴 자리는 고르개의 "(처음 값)" 이 알려 준다.
-      const fin = data.finishes;
-
-      // **토글은 이미 받아 둔 data 로만 다시 그린다 — 네트워크 0, 재계산 0.**
-      // 모드를 서버에 물으면 selectStructures 가 다시 돌아 같은 질의인데 보이는 다섯이 바뀐다.
-      // 서버가 두 모드를 한 번에 보내 주므로(S15-G10) 여기서는 어느 쪽을 그릴지만 고른다.
-      const modeBox = el("div", "expand__mode");
-      const modeBtn = el("button", "expand__mode-toggle");
-      modeBtn.type = "button";
-      /*
-       * **버튼 모양은 `applyModeButton` 한 곳에서 정한다.** 전에는 글자와 `aria-pressed` 를
-       * 만들 때와 누를 때 두 곳에 적었는데, 늘 밝은 모드로 시작했기에 그 둘이 우연히 맞았다.
-       * 저장된 모드로 시작하면 **어두운 모드에서 버튼이 거짓말을 한다** — 이미 어두운데
-       * 어둡게 보자고 하고, 눌린 상태가 아니라고 알린다.
-       */
-      applyModeButton(modeBtn, mode);
-      modeBtn.addEventListener("click", () => {
-        // 뒤집기와 저장이 한 동작이다 — 두 줄로 나누면 순서를 틀릴 수 있고, 그 고장은
-        // 새로고침해야 드러난다(리뷰가 재현). 마지막으로 고른 것이 다음번 기본이 된다.
-        mode = nextMode(modes, mode);
-        applyModeButton(modeBtn, mode);
-        // **다시 그리기 전에 포커스를 이 버튼으로 확정한다.** redraw 가 격자를 통째로 갈아서,
-        // 카드 안 비율 슬라이더에 포커스가 있었다면 그 요소가 DOM 에서 사라지고 포커스가 body 로
-        // 떨어진다(실측). Safari 는 마우스 클릭으로 button 에 포커스를 주지 않으므로 그 경로가
-        // 실제로 열려 있다 — 스크린리더에게는 포커스가 조용히 사라지는 것으로 보인다.
-        modeBtn.focus();
-        redraw?.();
-      });
-      modeBox.append(modeBtn);
-
-      const grid = el("div", "expand__grid");
-
-      // 빈 note 는 안 붙인다 — 비운 <p> 도 12px 여백을 남긴다(리뷰 지적). 실패 경로는 위에서 붙인 note 에 문장을 쓴다.
-      body.replaceChildren(modeBox, grid);
-
-      // 나머지는 지우지 않고 접어 둔다. 서버가 이미 계산해 둔 것이고, 고른 다섯이 마음에 안 들 때
-      // 사용자가 볼 자리가 있어야 한다.
-      let restGrid = null;
-      if (rest.length) {
-        const moreBox = el("div", "expand__more");
-        const more = el("button", "expand__more-toggle", `나머지 ${rest.length}가지 보기`);
-        more.type = "button";
-        more.setAttribute("aria-expanded", "false");
-        restGrid = el("div", "expand__grid");
-        restGrid.hidden = true;
-        more.addEventListener("click", () => {
-          restGrid.hidden = !restGrid.hidden;
-          more.setAttribute("aria-expanded", String(!restGrid.hidden));
-          more.textContent = restGrid.hidden ? `나머지 ${rest.length}가지 보기` : "나머지 접기";
-        });
-        moreBox.append(more, restGrid);
-        body.append(moreBox);
-      }
-
-      // 두 격자를 한 자리에서 다시 그린다. 접힘 상태(restGrid.hidden)는 replaceChildren 이
-      // 건드리지 않으므로 모드를 바꿔도 펼쳐 둔 나머지가 도로 접히지 않는다.
-      /*
-       * 카드마다 저장 버튼을 붙인다.
-       *
-       * **색을 안 보낸다.** 씨앗 id·구조 id·모드만 보내면 서버가 색을 다시 계산한다 —
-       * 파생은 결정적이라(S11-G3) 늘 같은 답이 나온다. `src/store.js` 규칙 4 가 그것을 적어 뒀고
-       * `S18-G1` 이 거짓 색을 실어 보내 확인한다.
-       *
-       * **지금 맞춘 비율은 보낸다.** 색은 코퍼스(또는 파생 규칙)가 아는 사실이지만 비율은
-       * 사용자의 판단이고, 그것을 안 보내면 슬라이더로 맞춘 것이 저장에서 사라진다.
-       */
-      /*
-       * **재질 배정도 함께 보낸다.** 색과 달리 서버가 다시 계산할 수 없다 — 인상을 읽어 정하는
-       * 것이라 재계산하면 사용자가 화면에서 본 것과 다른 재질이 나온다. 그래서 화면이 보내고
-       * 서버가 검증한다(`S19-G1`).
-       *
-       * **이 구조의 역할만 골라 보낸다.** 배정 표는 일곱 역할 전부를 담고 있지만 구조마다
-       * 쓰는 것이 다르다(3~4개). 통째로 보내면 서버가 어차피 거르지만, 화면이 무엇을 저장하는지
-       * 스스로 알고 보내는 편이 맞다.
-       */
-      const saveDerived = (st) => (shares) => {
-        // 손으로 바꾼 것이 있으면 그것이, 없으면 기본 배정이 실린다. 그 합치기는
-        // `forStructure` 한 곳에서 하고 화면이 다시 적지 않는다 — 두 곳에 적으면 갈라진다.
-        const finishes = overrides.forStructure(st, fin?.assignments);
-        return api("/api/saved/derived", { seedId, structureId: st.id, mode, shares, finishes });
-      };
-
-      /*
-       * **재질을 고쳐도 서버에 다시 묻지 않는다.** `/api/expand` 를 다시 부르면
-       * `selectStructures` 가 다시 돌아 같은 질의인데 **보이는 다섯이 바뀐다** —
-       * 모드 토글이 피한 것과 같은 함정이다(S15-G11).
-       *
-       * **다시 그리지도 않는다.** 처음에는 "고르개가 새 값으로 열려야 하니까" 다시 그렸는데,
-       * 그것이 두 가지를 망가뜨렸다(브라우저 실측):
-       *
-       *   1. **사용자가 맞춘 면적 비율이 초기화된다.** 55:25:20 으로 맞춰 놓고 재질을 바꾸면
-       *      34:33:33 으로 돌아간다. 이 사이트가 "면적이 색의 일부다" 라고 말해 온 것을
-       *      정면으로 배신한다.
-       *   2. **포커스가 body 로 떨어진다.** 방금 조작한 고르개가 DOM 에서 사라지기 때문이다.
-       *      모드 토글이 이미 겪고 `focus()` 로 막아 둔 바로 그 문제다.
-       *
-       * **애초에 다시 그릴 필요가 없었다.** 고르개는 사용자가 고른 값을 이미 스스로 보이고
-       * 있고, 이 카드에서 재질에 딸린 것은 그것 하나뿐이다 — 스와치·비율·"(기본 배정)" 표시는
-       * 전부 재질과 무관하다(표시는 **원래** 배정 기준이라 안 바뀐다).
-       *
-       * 담아 두기만 한다. 다음에 격자가 갈릴 때(모드 토글) `forStructure` 가 합쳐서 넘긴다.
-       */
-      const cardEditing = (st) => finishEditing(overrides, st, fin?.assignments);
-
-      redraw = () => {
-        const draw = (st) => structureCard(st, mode, fin, saveDerived(st), fin?.assignments ? cardEditing(st) : null);
-        grid.replaceChildren(...chosen.map(draw));
-        restGrid?.replaceChildren(...rest.map(draw));
-      };
-      redraw();
-      loaded = true;
-    } catch (err) {
-      // 실패를 삼키면 사용자는 빈 칸을 보고 구조가 없다고 읽는다.
-      note.textContent = `펼치지 못했습니다 — ${err.message}`;
-      body.replaceChildren(note);
-    } finally {
-      pending = false;
-    }
-  });
-
-  box.append(toggle, body);
-  return box;
-}
-
-/** 검색 답(추천·진단) 한 덩어리. 전의 renderStatus + render 를 합쳐 요소로 돌려준다. */
-function searchBlock(data, original) {
+function diagnosisBlock(data) {
   const box = el("div", "answer");
   const status = el("div", "status");
-  if (!data.confident) {
-    const hasAny = data.results.length > 0 || data.diagnostics.length > 0;
-    status.append(
-      el("span", "status__badge status__badge--warn", "못 잡음"),
-      el("span", "status__text", data.rewriteError ? `전문 검색이 못 잡았고 재작성도 실패했습니다 — ${data.rewriteError}` : hasAny ? "어절 전체로 겹친 항이 없습니다 — 아래 결과는 근거가 약하니 그대로 믿지 마세요." : "팔레트 코퍼스에도 진단표에도 걸리는 것이 없습니다."),
-    );
-  }
-  const count = data.route === "diagnosis" ? data.diagnostics.length : data.results.length;
-  const timing = [`BM25 ${data.elapsedMs}ms`];
-  if (data.hybrid) timing.push(`임베딩 ${data.hybrid.elapsedMs}ms · 코사인 ${data.hybrid.cosine}`);
-  status.append(el("span", "status__timing", `${timing.join(" · ")} · ${count}건`));
-  if (data.hybridError && data.confident) status.append(el("span", "status__timing", `임베딩은 못 썼습니다 — ${data.hybridError}`));
-  if (data.rewrite) {
-    const strip = el("div", "rewrite");
-    strip.append(el("span", "status__badge", "재작성"), el("span", "rewrite__label", `의도 ${INTENT_LABEL[data.rewrite.intent] ?? data.rewrite.intent} · 검색어`));
-    for (const term of data.rewrite.terms) strip.append(el("span", "rewrite__term", term));
-    strip.append(el("span", "rewrite__meta", `${data.rewrite.model} · ${data.rewrite.elapsedMs}ms`));
-    status.append(strip);
-  }
+  if (data.diagnostics.length) status.append(el("span", "status__text", DIAGNOSIS_FROM[data.from] ?? ""));
+  else status.append(el("span", "status__badge status__badge--warn", "못 잡음"), el("span", "status__text", "진단표에서 맞는 원인을 못 찾았습니다. 증상을 조금 더 적어 주세요."));
   box.append(status);
-
-  if (data.route === "diagnosis") {
-    box.append(el("h2", "results__title", "진단"), el("p", "results__note", "색 조합이 아니라 어느 원인을 의심할지가 답입니다"));
-    data.diagnostics.forEach((dx, i) => box.append(diagnosisCard(dx, i + 1)));
-    return box;
-  }
-  if (data.results.length) box.append(el("h2", "results__title", "추천 조합"), el("p", "results__note", "색상각과 톤 좌표를 따로 찍어 정렬했습니다"));
-  const [first, ...rest] = data.results;
-  if (first) box.append(resultCard(first, 1, true, original));
-  rest.forEach((r, i) => box.append(resultCard(r, i + 2, false, original)));
+  if (!data.diagnostics.length) return box;
+  box.append(el("h2", "results__title", "진단"), el("p", "results__note", "색 조합이 아니라 어느 원인을 의심할지가 답입니다"));
+  data.diagnostics.forEach((dx, i) => box.append(diagnosisCard(dx, i + 1)));
   return box;
 }
+
+/**
+ * 문장을 못 읽은 답(44단계). Claude 를 못 쓰면(키 없음 · 크레딧 · 시간 초과) 추천 문장은 읽을 길이 없다 — 검색으로 비슷한 것을
+ * 지어내던 폴백은 걷어냈다. 무엇이 되는지(색 코드 · 진단 낱말)를 대신 말한다.
+ */
+function unavailableBlock(data) {
+  const box = el("div", "answer");
+  const status = el("div", "status");
+  status.append(
+    el("span", "status__badge status__badge--warn", "못 읽음"),
+    el("span", "status__text", "지금은 문장을 읽을 수 없습니다(Claude 를 쓸 수 없음). #E07A5F 같은 색 코드나 “테라코타” 같은 색 이름은 바로 찾을 수 있습니다."),
+  );
+  if (data.reason) status.append(el("span", "status__timing", data.reason));
+  box.append(status);
+  return box;
+}
+
 
 /**
  * UI 쓰임새 팔레트의 작은 화면 미리보기(42단계). 역할 이름(바탕 · 면 · 본문 · 주색 · 강조 …)대로 색을 칠해
@@ -474,7 +182,7 @@ function characterBlock(data) {
   const box = el("div", "answer");
   const status = el("div", "status");
   status.append(el("span", "status__timing", `${data.elapsedMs}ms · 배색 쌍 ${data.palette.name}`));
-  if (data.palette.from === "fallback") status.append(el("span", "character__note", "인상을 못 읽어 기본 배색을 썼습니다"));
+  if (data.palette.from === "fallback") status.append(el("span", "character__note", "배색 쌍을 못 골라 기본 배색을 썼습니다"));
   for (const w of data.warnings ?? []) status.append(el("span", "character__note", w));
   box.append(status, el("h2", "results__title", "캐릭터 부위별 색"));
 
@@ -524,9 +232,9 @@ function colorBlock(data) {
 }
 
 const BLOCK_BY_ROUTE = {
-  // Claude 를 못 써서 옛 검색으로 물러선 답(42·43단계 과도기)은 kind 가 없다.
-  palette: (data, original) => (data.kind === "generated" ? generatedBlock(data) : searchBlock(data, original)),
-  diagnosis: (data, original) => searchBlock(data, original),
+  // Claude 를 못 써 문장을 못 읽은 답(44단계)은 kind: "unavailable" — 옛 검색 폴백은 걷어냈다.
+  palette: (data) => (data.kind === "generated" ? generatedBlock(data) : unavailableBlock(data)),
+  diagnosis: (data) => diagnosisBlock(data),
   character: (data) => characterBlock(data),
   color: (data) => colorBlock(data),
 };
@@ -624,7 +332,7 @@ function askItem(turn) {
 
 function answerItem(turn) {
   const head = el("p", "answer__route", `${ROUTE_LABEL[turn.route] ?? `${turn.route}으로`} 읽었습니다`);
-  const block = (BLOCK_BY_ROUTE[turn.route] ?? searchBlock)(turn.payload, turn.original);
+  const block = (BLOCK_BY_ROUTE[turn.route] ?? unavailableBlock)(turn.payload, turn.original);
   return agentItem(head, block);
 }
 
@@ -704,7 +412,7 @@ function showThread(conversation) {
   threadTitle.textContent = conversation.turns.at(-1)?.query ?? "(빈 대화)";
   // 26단계 전 턴에는 usedLlm 이 없다 — 그때는 2단계가 곧 그 자리였다(history.js 와 같은 보정).
   const usedLlm = conversation.turns.filter((t) => (t.usedLlm === undefined ? t.stage === 2 : t.usedLlm === true)).length;
-  threadMeta.textContent = `${conversation.turns.length}턴 · 재작성 ${usedLlm}회`; // 31단계: 무엇을 했는지(질문 재작성)로 적는다
+  threadMeta.textContent = `${conversation.turns.length}턴 · Claude ${usedLlm}회`; // 44단계: 재작성은 걷어냈다 — 문장을 Claude 가 읽은 턴 수
   document.getElementById("thread-open").href = `/history#${conversation.id}`;
   threadBox.hidden = false;
 }
@@ -759,4 +467,4 @@ ready.then((query) => {
   // 전혀 다른 질의의 답을 낸다(최종 리뷰 P1-3).
   send({ text: query, fresh: true });
 });
-refreshRuntime(0, () => {});
+refreshRuntime();
